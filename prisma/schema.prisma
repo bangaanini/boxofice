@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Movie {
+  id          String   @id @default(uuid())
+  sourceUrl   String   @unique
+  title       String
+  thumbnail   String?
+  description String?  @db.Text
+  rating      String?
+  quality     String?
+  inHome      Boolean  @default(false)
+  inPopular   Boolean  @default(false)
+  inNew       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@index([inHome, updatedAt])
+  @@index([inPopular, updatedAt])
+  @@index([inNew, updatedAt])
+}
+
+model User {
+  id           String        @id @default(uuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  passwordSalt String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     UserSession[]
+}
+
+model UserSession {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
