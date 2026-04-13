@@ -5,7 +5,10 @@ import { Play, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { prefetchCachedStream } from "@/lib/stream-cache-client";
+import {
+  getMovieStreamCacheKey,
+  prefetchCachedStream,
+} from "@/lib/stream-cache-client";
 
 type PlayButtonProps = {
   movieId: string;
@@ -19,7 +22,10 @@ export function PlayButton({ movieId }: PlayButtonProps) {
     router.prefetch(`/watch/${movieId}`);
 
     const scheduleWarmup = () => {
-      void prefetchCachedStream(movieId).catch(() => undefined);
+      void prefetchCachedStream({
+        cacheKey: getMovieStreamCacheKey(movieId),
+        movieId,
+      }).catch(() => undefined);
       void import("video.js").catch(() => undefined);
       void import("videojs-hls-quality-selector").catch(() => undefined);
     };

@@ -7,8 +7,11 @@ export type NormalizedMovieMetadata = {
   title: string;
   thumbnail?: string;
   description?: string;
+  duration?: string;
+  genre?: string;
   rating?: string;
   quality?: string;
+  year?: string;
 };
 
 export type MovieListResult = {
@@ -208,8 +211,11 @@ export function normalizeMovieMetadata(
     title,
     thumbnail: getString(value, ["thumbnail", "poster", "image", "cover"]),
     description: getString(value, ["description", "synopsis", "overview"]),
+    duration: getString(value, ["duration", "runtime"]),
+    genre: getString(value, ["genre", "genres"]),
     rating: getString(value, ["rating", "imdbRating", "score"]),
     quality: getString(value, ["quality", "resolution"]),
+    year: getString(value, ["year", "releaseYear"]),
   };
 }
 
@@ -356,6 +362,20 @@ export async function fetchPopular(page = 1): Promise<MovieListResult> {
 
 export async function fetchNew(page = 1): Promise<MovieListResult> {
   const response = await requestJson<unknown>(`/lk21/new?page=${page}`);
+  return normalizeMovieListResponse(response);
+}
+
+export async function fetchSearch(
+  query: string,
+  page = 1,
+): Promise<MovieListResult> {
+  const response = await requestJson<unknown>(
+    `/lk21/search?q=${encodeURIComponent(query)}&page=${page}`,
+    {
+      cache: "no-store",
+    },
+  );
+
   return normalizeMovieListResponse(response);
 }
 

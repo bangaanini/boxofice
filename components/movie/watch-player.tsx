@@ -6,6 +6,8 @@ import type Player from "video.js/dist/types/player";
 
 import { Button } from "@/components/ui/button";
 import {
+  getMovieStreamCacheKey,
+  getSourceStreamCacheKey,
   prefetchCachedStream,
   readCachedStream,
   type CachedStreamResponse,
@@ -18,8 +20,9 @@ type PlayerWithQualitySelector = Player & {
 };
 
 type WatchPlayerProps = {
-  movieId: string;
+  movieId?: string;
   poster?: string | null;
+  sourceUrl?: string;
 };
 
 type SeekFeedback = {
@@ -75,16 +78,23 @@ function unlockOrientationIfPossible() {
   screen.orientation?.unlock?.();
 }
 
-export function WatchPlayer({ movieId, poster }: WatchPlayerProps) {
+export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
+  const streamCacheKey = React.useMemo(() => {
+    if (sourceUrl) {
+      return getSourceStreamCacheKey(sourceUrl);
+    }
+
+    return movieId ? getMovieStreamCacheKey(movieId) : null;
+  }, [movieId, sourceUrl]);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const playerRef = React.useRef<PlayerWithQualitySelector | null>(null);
   const lastTapRef = React.useRef<{ time: number; x: number } | null>(null);
   const [stream, setStream] = React.useState<CachedStreamResponse | null>(() =>
-    readCachedStream(movieId),
+    streamCacheKey ? readCachedStream(streamCacheKey) : null,
   );
   const [error, setError] = React.useState<string | null>(null);
   const [selectedSourceUrl, setSelectedSourceUrl] = React.useState<string | null>(
-    readCachedStream(movieId)?.sources[0]?.url ?? null,
+    streamCacheKey ? readCachedStream(streamCacheKey)?.sources[0]?.url ?? null : null,
   );
   const [seekFeedback, setSeekFeedback] = React.useState<SeekFeedback | null>(
     null,
@@ -97,7 +107,12 @@ export function WatchPlayer({ movieId, poster }: WatchPlayerProps) {
     async function loadStream() {
       setError(null);
 
-      const cached = readCachedStream(movieId);
+      if (!streamCacheKey || (!movieId && !sourceUrl)) {
+        setError("Sumber video belum valid.");
+        return;
+      }
+
+      const cached = readCachedStream(streamCacheKey);
 
       if (cached) {
         setStream(cached);
@@ -108,7 +123,11 @@ export function WatchPlayer({ movieId, poster }: WatchPlayerProps) {
       setStream(null);
 
       try {
-        const payload = await prefetchCachedStream(movieId);
+        const payload = await prefetchCachedStream({
+          cacheKey: streamCacheKey,
+          movieId,
+          sourceUrl,
+        });
 
         if (controller.signal.aborted) {
           return;
@@ -134,7 +153,7 @@ export function WatchPlayer({ movieId, poster }: WatchPlayerProps) {
     return () => {
       controller.abort();
     };
-  }, [movieId, retryCount]);
+  }, [movieId, retryCount, sourceUrl, streamCacheKey]);
 
   const sources = React.useMemo(() => stream?.sources ?? [], [stream]);
   const selectedSource =

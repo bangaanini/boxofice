@@ -22,8 +22,14 @@ const STREAM_CACHE_TTL_MS = 10 * 60 * 1000;
 const STREAM_CACHE_PREFIX = "boxofice:stream:";
 const memoryCache = new Map<string, StreamCacheEntry>();
 
-function cacheKey(movieId: string) {
-  return `${STREAM_CACHE_PREFIX}${movieId}`;
+type StreamLookup = {
+  cacheKey: string;
+  movieId?: string;
+  sourceUrl?: string;
+};
+
+function storageKey(key: string) {
+  return `${STREAM_CACHE_PREFIX}${key}`;
 }
 
 function isCacheEntryValid(
@@ -32,13 +38,13 @@ function isCacheEntryValid(
   return Boolean(entry && entry.expiresAt > Date.now() && entry.value.sources.length);
 }
 
-function readSessionCache(movieId: string) {
+function readSessionCache(key: string) {
   if (typeof window === "undefined") {
     return null;
   }
 
   try {
-    const raw = window.sessionStorage.getItem(cacheKey(movieId));
+    const raw = window.sessionStorage.getItem(storageKey(key));
 
     if (!raw) {
       return null;
@@ -47,7 +53,7 @@ function readSessionCache(movieId: string) {
     const parsed = JSON.parse(raw) as StreamCacheEntry;
 
     if (!isCacheEntryValid(parsed)) {
-      window.sessionStorage.removeItem(cacheKey(movieId));
+      window.sessionStorage.removeItem(storageKey(key));
       return null;
     }
 
@@ -57,29 +63,37 @@ function readSessionCache(movieId: string) {
   }
 }
 
-function writeSessionCache(movieId: string, entry: StreamCacheEntry) {
+function writeSessionCache(key: string, entry: StreamCacheEntry) {
   if (typeof window === "undefined") {
     return;
   }
 
   try {
-    window.sessionStorage.setItem(cacheKey(movieId), JSON.stringify(entry));
+    window.sessionStorage.setItem(storageKey(key), JSON.stringify(entry));
   } catch {
     // Ignore storage errors; memory cache still helps within this tab session.
   }
 }
 
-export function readCachedStream(movieId: string) {
-  const memoryEntry = memoryCache.get(movieId);
+export function getMovieStreamCacheKey(movieId: string) {
+  return `movie:${movieId}`;
+}
+
+export function getSourceStreamCacheKey(sourceUrl: string) {
+  return `source:${sourceUrl}`;
+}
+
+export function readCachedStream(key: string) {
+  const memoryEntry = memoryCache.get(key);
 
   if (isCacheEntryValid(memoryEntry)) {
     return memoryEntry.value;
   }
 
-  const sessionEntry = readSessionCache(movieId);
+  const sessionEntry = readSessionCache(key);
 
   if (sessionEntry) {
-    memoryCache.set(movieId, sessionEntry);
+    memoryCache.set(key, sessionEntry);
     return sessionEntry.value;
   }
 
@@ -87,7 +101,7 @@ export function readCachedStream(movieId: string) {
 }
 
 export function writeCachedStream(
-  movieId: string,
+  key: string,
   value: CachedStreamResponse,
   ttlMs = STREAM_CACHE_TTL_MS,
 ) {
@@ -100,30 +114,40 @@ export function writeCachedStream(
     value,
   };
 
-  memoryCache.set(movieId, entry);
-  writeSessionCache(movieId, entry);
+  memoryCache.set(key, entry);
+  writeSessionCache(key, entry);
 }
 
-export async function prefetchCachedStream(movieId: string) {
-  const cached = readCachedStream(movieId);
+export async function prefetchCachedStream(lookup: StreamLookup) {
+  const cached = readCachedStream(lookup.cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  const response = await fetch(`/api/stream?id=${encodeURIComponent(movieId)}`);
+  const params = new URLSearchParams();
+
+  if (lookup.sourceUrl) {
+    params.set("sourceUrl", lookup.sourceUrl);
+  } else if (lookup.movieId) {
+    params.set("id", lookup.movieId);
+  } else {
+    throw new Error("Sumber video belum valid.");
+  }
+
+  const response = await fetch(`/api/stream?${params.toString()}`);
 
   if (!response.ok) {
-    throw new Error(`Player request failed with ${response.status}`);
+    throw new Error(`Video belum bisa dibuka (${response.status}).`);
   }
 
   const payload = (await response.json()) as CachedStreamResponse;
 
   if (!payload.sources.length) {
-    throw new Error("No playable HLS source was returned.");
+    throw new Error("Sumber video belum tersedia.");
   }
 
-  writeCachedStream(movieId, payload);
+  writeCachedStream(lookup.cacheKey, payload);
 
   return payload;
 }
