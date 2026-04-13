@@ -5,18 +5,13 @@ import { RefreshCw } from "lucide-react";
 import type Player from "video.js/dist/types/player";
 
 import { Button } from "@/components/ui/button";
+import {
+  prefetchCachedStream,
+  readCachedStream,
+  type CachedStreamResponse,
+  type CachedStreamSource,
+} from "@/lib/stream-cache-client";
 import { cn } from "@/lib/utils";
-
-type StreamSource = {
-  url: string;
-  label: string;
-  quality?: string;
-  type?: string;
-};
-
-type StreamResponse = {
-  sources: StreamSource[];
-};
 
 type PlayerWithQualitySelector = Player & {
   hlsQualitySelector?: (options?: { displayCurrentQuality?: boolean }) => void;
@@ -27,14 +22,14 @@ type WatchPlayerProps = {
   poster?: string | null;
 };
 
-function isHlsSource(source: StreamSource) {
+function isHlsSource(source: CachedStreamSource) {
   return (
     source.type === "application/x-mpegURL" ||
     decodeURIComponent(source.url).toLowerCase().includes(".m3u8")
   );
 }
 
-function toVideoJsSource(source: StreamSource) {
+function toVideoJsSource(source: CachedStreamSource) {
   const type = source.type ?? (isHlsSource(source) ? "application/x-mpegURL" : "video/mp4");
 
   return {
@@ -49,10 +44,12 @@ function toVideoJsSource(source: StreamSource) {
 export function WatchPlayer({ movieId, poster }: WatchPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const playerRef = React.useRef<PlayerWithQualitySelector | null>(null);
-  const [stream, setStream] = React.useState<StreamResponse | null>(null);
+  const [stream, setStream] = React.useState<CachedStreamResponse | null>(() =>
+    readCachedStream(movieId),
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [selectedSourceUrl, setSelectedSourceUrl] = React.useState<string | null>(
-    null,
+    readCachedStream(movieId)?.sources[0]?.url ?? null,
   );
   const [retryCount, setRetryCount] = React.useState(0);
 
@@ -61,21 +58,22 @@ export function WatchPlayer({ movieId, poster }: WatchPlayerProps) {
 
     async function loadStream() {
       setError(null);
+
+      const cached = readCachedStream(movieId);
+
+      if (cached) {
+        setStream(cached);
+        setSelectedSourceUrl((current) => current ?? cached.sources[0]?.url ?? null);
+        return;
+      }
+
       setStream(null);
 
       try {
-        const response = await fetch(`/api/stream?id=${encodeURIComponent(movieId)}`, {
-          signal: controller.signal,
-        });
+        const payload = await prefetchCachedStream(movieId);
 
-        if (!response.ok) {
-          throw new Error(`Player request failed with ${response.status}`);
-        }
-
-        const payload = (await response.json()) as StreamResponse;
-
-        if (!payload.sources.length) {
-          throw new Error("No playable HLS source was returned.");
+        if (controller.signal.aborted) {
+          return;
         }
 
         setStream(payload);
@@ -148,7 +146,7 @@ export function WatchPlayer({ movieId, poster }: WatchPlayerProps) {
     };
   }, [poster, selectedSource, sources]);
 
-  function selectSource(source: StreamSource) {
+  function selectSource(source: CachedStreamSource) {
     if (!playerRef.current) {
       setSelectedSourceUrl(source.url);
       return;
