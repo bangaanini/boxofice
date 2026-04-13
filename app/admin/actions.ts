@@ -25,11 +25,16 @@ export async function syncMoviesFromAdmin(formData: FormData) {
     const summary = await syncMovieFeed(target, { pages });
     const params = new URLSearchParams({
       active: String(summary.active),
+      created: String(summary.created),
       deactivated: String(summary.deactivated),
+      duplicateSkipped: String(summary.duplicateSkipped),
+      existing: String(summary.existing),
       fetched: String(summary.fetched),
       pages: String(pages),
       sync: summary.errors.length ? "partial" : "ok",
       target,
+      unchanged: String(summary.unchanged),
+      updated: String(summary.updated),
       upserted: String(summary.upserted),
     });
 

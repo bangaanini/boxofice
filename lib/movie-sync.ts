@@ -1,14 +1,46 @@
-import { fetchHome, fetchNew, fetchPopular, type MovieListResult } from "@/lib/movie-api";
+import {
+  fetchHome,
+  fetchNew,
+  fetchPopular,
+  type MovieListResult,
+} from "@/lib/movie-api";
 import { prisma } from "@/lib/prisma";
 
 export type MovieFeedTarget = "home" | "popular" | "new";
 export const DEFAULT_SYNC_PAGES = 3;
 export const MAX_SYNC_PAGES = 20;
 
+type FeedDbField = "inHome" | "inPopular" | "inNew";
+
+type ExistingSyncedMovie = {
+  sourceUrl: string;
+  title: string;
+  thumbnail: string | null;
+  description: string | null;
+  rating: string | null;
+  quality: string | null;
+  inHome: boolean;
+  inPopular: boolean;
+  inNew: boolean;
+};
+
+type MovieMetadataData = {
+  title: string;
+  thumbnail: string | null;
+  description: string | null;
+  rating: string | null;
+  quality: string | null;
+};
+
 export type FeedSyncSummary = {
   target: MovieFeedTarget;
   fetched: number;
+  created: number;
+  existing: number;
+  updated: number;
+  unchanged: number;
   upserted: number;
+  duplicateSkipped: number;
   deactivated: number;
   active: number;
   errors: string[];
@@ -16,7 +48,12 @@ export type FeedSyncSummary = {
 
 export type CombinedSyncSummary = {
   totalFetched: number;
+  totalCreated: number;
+  totalExisting: number;
+  totalUpdated: number;
+  totalUnchanged: number;
   totalUpserted: number;
+  totalDuplicateSkipped: number;
   totalDeactivated: number;
   pages: number;
   targets: Record<MovieFeedTarget, FeedSyncSummary>;
@@ -25,7 +62,7 @@ export type CombinedSyncSummary = {
 const FEED_CONFIG: Record<
   MovieFeedTarget,
   {
-    dbField: "inHome" | "inPopular" | "inNew";
+    dbField: FeedDbField;
     fetcher: (page?: number) => Promise<MovieListResult>;
   }
 > = {
@@ -68,6 +105,7 @@ async function fetchFeedPages(
 ) {
   const moviesBySource = new Map<string, MovieListResult["movies"][number]>();
   let fetched = 0;
+  let duplicateSkipped = 0;
   let totalPages = pages;
 
   for (let page = 1; page <= pages; page += 1) {
@@ -79,6 +117,10 @@ async function fetchFeedPages(
     }
 
     for (const movie of result.movies) {
+      if (moviesBySource.has(movie.sourceUrl)) {
+        duplicateSkipped += 1;
+      }
+
       moviesBySource.set(movie.sourceUrl, movie);
     }
 
@@ -88,9 +130,37 @@ async function fetchFeedPages(
   }
 
   return {
+    duplicateSkipped,
     fetched,
     moviesBySource,
   };
+}
+
+function normalizeMovieData(
+  movie: MovieListResult["movies"][number],
+): MovieMetadataData {
+  return {
+    title: movie.title,
+    thumbnail: movie.thumbnail ?? null,
+    description: movie.description ?? null,
+    rating: movie.rating ?? null,
+    quality: movie.quality ?? null,
+  };
+}
+
+function hasMovieChanged(
+  existing: ExistingSyncedMovie,
+  nextData: MovieMetadataData,
+  dbField: FeedDbField,
+) {
+  return (
+    existing.title !== nextData.title ||
+    existing.thumbnail !== nextData.thumbnail ||
+    existing.description !== nextData.description ||
+    existing.rating !== nextData.rating ||
+    existing.quality !== nextData.quality ||
+    existing[dbField] !== true
+  );
 }
 
 export async function syncMovieFeed(
@@ -105,42 +175,79 @@ export async function syncMovieFeed(
   const summary: FeedSyncSummary = {
     target,
     fetched: feed.fetched,
+    created: 0,
+    existing: 0,
+    updated: 0,
+    unchanged: 0,
     upserted: 0,
+    duplicateSkipped: feed.duplicateSkipped,
     deactivated: 0,
     active: sourceUrls.length,
     errors: [],
   };
+  const existingMovies = await prisma.movie.findMany({
+    where: {
+      sourceUrl: {
+        in: sourceUrls,
+      },
+    },
+    select: {
+      sourceUrl: true,
+      title: true,
+      thumbnail: true,
+      description: true,
+      rating: true,
+      quality: true,
+      inHome: true,
+      inPopular: true,
+      inNew: true,
+    },
+  });
+  const existingBySource = new Map(
+    existingMovies.map((movie) => [
+      movie.sourceUrl,
+      movie as ExistingSyncedMovie,
+    ]),
+  );
 
   for (const movie of moviesBySource.values()) {
     try {
-      const feedFlag = { [config.dbField]: true } as Record<
-        typeof config.dbField,
-        boolean
-      >;
+      const nextData = normalizeMovieData(movie);
+      const feedFlag = { [config.dbField]: true } as Record<FeedDbField, true>;
+      const existing = existingBySource.get(movie.sourceUrl);
 
-      await prisma.movie.upsert({
+      if (!existing) {
+        await prisma.movie.create({
+          data: {
+            sourceUrl: movie.sourceUrl,
+            ...nextData,
+            ...feedFlag,
+          },
+        });
+
+        summary.created += 1;
+        summary.upserted += 1;
+        continue;
+      }
+
+      summary.existing += 1;
+
+      if (!hasMovieChanged(existing, nextData, config.dbField)) {
+        summary.unchanged += 1;
+        continue;
+      }
+
+      await prisma.movie.update({
         where: {
           sourceUrl: movie.sourceUrl,
         },
-        create: {
-          sourceUrl: movie.sourceUrl,
-          title: movie.title,
-          thumbnail: movie.thumbnail,
-          description: movie.description,
-          rating: movie.rating,
-          quality: movie.quality,
-          ...feedFlag,
-        },
-        update: {
-          title: movie.title,
-          thumbnail: movie.thumbnail,
-          description: movie.description,
-          rating: movie.rating,
-          quality: movie.quality,
+        data: {
+          ...nextData,
           ...feedFlag,
         },
       });
 
+      summary.updated += 1;
       summary.upserted += 1;
     } catch (error) {
       summary.errors.push(
@@ -183,8 +290,16 @@ export async function syncAllMovieFeeds(
 
   return {
     pages,
+    totalCreated: home.created + popular.created + latest.created,
+    totalExisting: home.existing + popular.existing + latest.existing,
     totalFetched: home.fetched + popular.fetched + latest.fetched,
+    totalUpdated: home.updated + popular.updated + latest.updated,
+    totalUnchanged: home.unchanged + popular.unchanged + latest.unchanged,
     totalUpserted: home.upserted + popular.upserted + latest.upserted,
+    totalDuplicateSkipped:
+      home.duplicateSkipped +
+      popular.duplicateSkipped +
+      latest.duplicateSkipped,
     totalDeactivated:
       home.deactivated + popular.deactivated + latest.deactivated,
     targets: {

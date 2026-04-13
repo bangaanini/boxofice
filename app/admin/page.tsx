@@ -28,12 +28,17 @@ async function getAdminDashboardData() {
 type AdminPageProps = {
   searchParams: Promise<{
     active?: string;
+    created?: string;
     deactivated?: string;
+    duplicateSkipped?: string;
+    existing?: string;
     fetched?: string;
     message?: string;
     pages?: string;
     sync?: string;
     target?: string;
+    unchanged?: string;
+    updated?: string;
     upserted?: string;
   }>;
 };
@@ -95,12 +100,44 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 {params.message ?? "upstream tidak merespons"}
               </span>
             ) : (
-              <span>
-                Sync {params.target ?? "feed"} {params.pages ?? DEFAULT_SYNC_PAGES} page selesai. Fetched{" "}
-                {params.fetched ?? "0"}, upserted {params.upserted ?? "0"},
-                aktif {params.active ?? "0"}, dinonaktifkan{" "}
-                {params.deactivated ?? "0"}.
-              </span>
+              <div className="space-y-3">
+                <p className="font-semibold text-white">
+                  Sync {params.target ?? "feed"}{" "}
+                  {params.pages ?? DEFAULT_SYNC_PAGES} page selesai.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Judul baru:{" "}
+                    <strong className="text-white">
+                      {params.created ?? "0"}
+                    </strong>
+                  </span>
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Sudah ada:{" "}
+                    <strong className="text-white">
+                      {params.existing ?? "0"}
+                    </strong>
+                  </span>
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Diperbarui:{" "}
+                    <strong className="text-white">
+                      {params.updated ?? "0"}
+                    </strong>
+                  </span>
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Tanpa perubahan:{" "}
+                    <strong className="text-white">
+                      {params.unchanged ?? "0"}
+                    </strong>
+                  </span>
+                </div>
+                <p className="text-xs leading-5 text-neutral-400">
+                  Diambil dari API: {params.fetched ?? "0"} item. Aktif di feed:{" "}
+                  {params.active ?? "0"}. Dinonaktifkan dari feed:{" "}
+                  {params.deactivated ?? "0"}. Duplikat dari response yang
+                  dilewati: {params.duplicateSkipped ?? "0"}.
+                </p>
+              </div>
             )}
           </div>
         ) : null}
