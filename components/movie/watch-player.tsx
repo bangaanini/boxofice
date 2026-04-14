@@ -278,10 +278,18 @@ export function WatchPlayer({
         return resumeTime;
       }
 
+      if (video.duration <= 0) {
+        return resumeTime;
+      }
+
       return Math.min(resumeTime, Math.max(video.duration - 1, 0));
     }
 
     function applyResumeSeek() {
+      if (hls !== null) {
+        return true;
+      }
+
       if (!hasResumeTarget || disposed) {
         return true;
       }
@@ -312,7 +320,11 @@ export function WatchPlayer({
         return;
       }
 
-      if (hasResumeTarget && Math.abs(video.currentTime - getResumeTargetTime()) > 2) {
+      if (
+        hls === null &&
+        hasResumeTarget &&
+        Math.abs(video.currentTime - getResumeTargetTime()) > 2
+      ) {
         return;
       }
 
@@ -362,25 +374,14 @@ export function WatchPlayer({
 
       if (Hls.isSupported()) {
         hls = new Hls({
-          autoStartLoad: !hasResumeTarget,
           backBufferLength: 60,
           enableWorker: true,
           maxBufferLength: 45,
           startPosition: hasResumeTarget ? resumeTime : -1,
         });
         hlsRef.current = hls;
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          hls?.loadSource(mediaUrl);
-        });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (hasResumeTarget) {
-            hls?.startLoad(resumeTime);
-          }
-
-          runResumeStep();
-          scheduleResumeStep(120);
-          scheduleResumeStep(450);
-          scheduleResumeStep(1100);
+          playWhenResumeReady();
         });
         hls.on(Hls.Events.LEVEL_LOADED, () => {
           runResumeStep();
@@ -396,6 +397,7 @@ export function WatchPlayer({
             moveToNextPlayableSource(activeSource.url);
           }
         });
+        hls.loadSource(mediaUrl);
         hls.attachMedia(video);
         return;
       }
