@@ -198,7 +198,7 @@ export function VideoPlayer({ sourceUrl, poster, title }: VideoPlayerProps) {
     );
   }
 
-  if (!hasDirectSources && stream?.iframe) {
+  if (stream?.iframe) {
     return (
       <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
         <iframe

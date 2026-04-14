@@ -75,6 +75,21 @@ function unlockOrientationIfPossible() {
   screen.orientation?.unlock?.();
 }
 
+function EmbeddedIframePlayer({ src }: { src: string }) {
+  return (
+    <div className="relative aspect-video w-full overflow-hidden bg-black ring-1 ring-white/10 sm:rounded-md">
+      <iframe
+        src={src}
+        title="Pemutar video"
+        className="h-full w-full bg-black"
+        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+        allowFullScreen
+        referrerPolicy="origin-when-cross-origin"
+      />
+    </div>
+  );
+}
+
 export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
   const streamCacheKey = React.useMemo(() => {
     if (sourceUrl) {
@@ -160,7 +175,11 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
     sources[0] ??
     null;
 
-  const fallbackPlayerUrl = React.useMemo(
+  const iframePlayerUrl = React.useMemo(
+    () => stream?.iframe ?? null,
+    [stream],
+  );
+  const externalPlayerUrl = React.useMemo(
     () => stream?.iframe ?? stream?.resolvedFrom ?? stream?.originalUrl ?? null,
     [stream],
   );
@@ -376,6 +395,10 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
   }
 
   if (error) {
+    if (iframePlayerUrl) {
+      return <EmbeddedIframePlayer src={iframePlayerUrl} />;
+    }
+
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-md bg-neutral-950 px-6 text-center ring-1 ring-white/10">
         <p className="text-2xl font-semibold text-white">Video belum siap</p>
@@ -386,10 +409,10 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
           <RotateCw className="size-4" />
           Coba lagi
         </Button>
-        {fallbackPlayerUrl ? (
+        {externalPlayerUrl ? (
           <Button asChild variant="secondary">
             <a
-              href={fallbackPlayerUrl}
+              href={externalPlayerUrl}
               target="_blank"
               rel="noreferrer"
             >
@@ -402,6 +425,10 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
     );
   }
 
+  if (iframePlayerUrl) {
+    return <EmbeddedIframePlayer src={iframePlayerUrl} />;
+  }
+
   if (stream && !sources.length) {
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-md bg-neutral-950 px-6 text-center ring-1 ring-white/10">
@@ -412,10 +439,10 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
           Link video dari upstream untuk judul ini belum cocok untuk pemutar
           internal. Kamu tetap bisa mencoba player cadangan.
         </p>
-        {fallbackPlayerUrl ? (
+        {externalPlayerUrl ? (
           <Button asChild>
             <a
-              href={fallbackPlayerUrl}
+              href={externalPlayerUrl}
               target="_blank"
               rel="noreferrer"
             >
