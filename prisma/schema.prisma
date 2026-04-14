@@ -29,6 +29,8 @@ model Movie {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   streamCache    MovieStreamCache?
+  favorites      UserFavorite[]
+  watchHistories WatchHistory[]
 
   @@index([updatedAt])
   @@index([inHome, updatedAt])
@@ -63,6 +65,8 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   sessions     UserSession[]
+  favorites    UserFavorite[]
+  watchHistory WatchHistory[]
 }
 
 model UserSession {
@@ -75,4 +79,35 @@ model UserSession {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model UserFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  movieId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+  @@index([userId, createdAt])
+  @@index([movieId])
+}
+
+model WatchHistory {
+  id              String   @id @default(uuid())
+  userId          String
+  movieId         String
+  progressSeconds Int      @default(0)
+  durationSeconds Int?
+  completed       Boolean  @default(false)
+  lastWatchedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie           Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+  @@index([userId, lastWatchedAt])
+  @@index([movieId])
 }

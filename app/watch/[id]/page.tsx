@@ -7,6 +7,7 @@ import { WatchPlayer } from "@/components/movie/watch-player";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserSession } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,8 @@ type WatchPageProps = {
 };
 
 async function getWatchData(id: string) {
-  const [movie, recommendations] = await Promise.all([
+  const user = await getCurrentUserSession();
+  const [movie, recommendations, history] = await Promise.all([
     prisma.movie.findUnique({
       where: { id },
       select: {
@@ -47,13 +49,26 @@ async function getWatchData(id: string) {
         quality: true,
       },
     }),
+    user
+      ? prisma.watchHistory.findUnique({
+          where: {
+            userId_movieId: {
+              movieId: id,
+              userId: user.id,
+            },
+          },
+          select: {
+            progressSeconds: true,
+          },
+        })
+      : null,
   ]);
 
   if (!movie) {
     return null;
   }
 
-  return { movie, recommendations };
+  return { history, movie, recommendations };
 }
 
 export default async function WatchPage({ params }: WatchPageProps) {
@@ -64,7 +79,7 @@ export default async function WatchPage({ params }: WatchPageProps) {
     notFound();
   }
 
-  const { movie, recommendations } = data;
+  const { history, movie, recommendations } = data;
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -100,7 +115,11 @@ export default async function WatchPage({ params }: WatchPageProps) {
 
           <div className="grid gap-5 sm:gap-7 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-4 sm:space-y-5">
-              <WatchPlayer movieId={movie.id} poster={movie.thumbnail} />
+              <WatchPlayer
+                initialProgressSeconds={history?.progressSeconds ?? 0}
+                movieId={movie.id}
+                poster={movie.thumbnail}
+              />
 
               <div className="space-y-3 px-4 sm:px-0">
                 <div className="flex flex-wrap items-center gap-3">

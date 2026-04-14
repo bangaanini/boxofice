@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type WatchPlayerProps = {
+  initialProgressSeconds?: number;
   movieId?: string;
   poster?: string | null;
   sourceUrl?: string;
@@ -65,7 +66,12 @@ function unlockOrientationIfPossible() {
   screen.orientation?.unlock?.();
 }
 
-export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
+export function WatchPlayer({
+  initialProgressSeconds = 0,
+  movieId,
+  poster,
+  sourceUrl,
+}: WatchPlayerProps) {
   const streamCacheKey = React.useMemo(() => {
     if (sourceUrl) {
       return getSourceStreamCacheKey(sourceUrl);
@@ -80,6 +86,8 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
     time: number;
     shouldPlay: boolean;
   } | null>(null);
+  const initialResumeAppliedRef = React.useRef(false);
+  const lastProgressReportRef = React.useRef(0);
   const [stream, setStream] = React.useState<CachedStreamResponse | null>(() =>
     streamCacheKey ? readCachedStream(streamCacheKey) : null,
   );
@@ -183,8 +191,16 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
     const video = videoRef.current;
     let disposed = false;
     let hls: Hls | null = null;
-    const resumeSnapshot = resumeSnapshotRef.current;
+    const resumeSnapshot =
+      resumeSnapshotRef.current ??
+      (!initialResumeAppliedRef.current && initialProgressSeconds > 3
+        ? {
+            shouldPlay: false,
+            time: initialProgressSeconds,
+          }
+        : null);
     resumeSnapshotRef.current = null;
+    initialResumeAppliedRef.current = true;
     const mediaUrl = toMediaSourceUrl(selectedSource);
 
     function resumePlayback() {
@@ -271,7 +287,83 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
       video.load();
       unlockOrientationIfPossible();
     };
-  }, [moveToNextPlayableSource, poster, selectedSource, sources]);
+  }, [
+    initialProgressSeconds,
+    moveToNextPlayableSource,
+    poster,
+    selectedSource,
+    sources,
+  ]);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+
+    if (!video || !movieId) {
+      return;
+    }
+
+    const currentVideo = video;
+
+    function reportProgress(force = false) {
+      const progressSeconds = Math.trunc(currentVideo.currentTime || 0);
+      const duration = Number.isFinite(currentVideo.duration)
+        ? Math.trunc(currentVideo.duration)
+        : 0;
+      const now = Date.now();
+
+      if (!force && now - lastProgressReportRef.current < 15000) {
+        return;
+      }
+
+      if (!force && progressSeconds < 5) {
+        return;
+      }
+
+      lastProgressReportRef.current = now;
+
+      const payload = JSON.stringify({
+        completed: currentVideo.ended,
+        durationSeconds: duration,
+        movieId,
+        progressSeconds,
+      });
+
+      if (force && navigator.sendBeacon) {
+        navigator.sendBeacon(
+          "/api/watch-history",
+          new Blob([payload], { type: "application/json" }),
+        );
+        return;
+      }
+
+      void fetch("/api/watch-history", {
+        body: payload,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        keepalive: force,
+        method: "POST",
+      }).catch(() => undefined);
+    }
+
+    const handleTimeUpdate = () => reportProgress(false);
+    const handlePause = () => reportProgress(true);
+    const handleEnded = () => reportProgress(true);
+    const handlePageHide = () => reportProgress(true);
+
+    currentVideo.addEventListener("timeupdate", handleTimeUpdate);
+    currentVideo.addEventListener("pause", handlePause);
+    currentVideo.addEventListener("ended", handleEnded);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      reportProgress(true);
+      currentVideo.removeEventListener("timeupdate", handleTimeUpdate);
+      currentVideo.removeEventListener("pause", handlePause);
+      currentVideo.removeEventListener("ended", handleEnded);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [movieId, sources.length]);
 
   React.useEffect(() => {
     function handleFullscreenChange() {
