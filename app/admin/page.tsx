@@ -41,6 +41,35 @@ type AdminPageProps = {
     skippedUnsupported?: string;
     sync?: string;
     target?: string;
+    totalCreated?: string;
+    totalDuplicateSkipped?: string;
+    totalErrors?: string;
+    totalExisting?: string;
+    totalFetched?: string;
+    totalSkippedUnsupported?: string;
+    totalUnchanged?: string;
+    totalUpdated?: string;
+    homeCreated?: string;
+    homeErrors?: string;
+    homeExisting?: string;
+    homeFetched?: string;
+    homeSkippedUnsupported?: string;
+    homeUnchanged?: string;
+    homeUpdated?: string;
+    popularCreated?: string;
+    popularErrors?: string;
+    popularExisting?: string;
+    popularFetched?: string;
+    popularSkippedUnsupported?: string;
+    popularUnchanged?: string;
+    popularUpdated?: string;
+    newCreated?: string;
+    newErrors?: string;
+    newExisting?: string;
+    newFetched?: string;
+    newSkippedUnsupported?: string;
+    newUnchanged?: string;
+    newUpdated?: string;
     unchanged?: string;
     updated?: string;
     upserted?: string;
@@ -48,10 +77,47 @@ type AdminPageProps = {
 };
 
 const FEED_BUTTONS = [
+  { label: "Sync All", target: "all" },
   { label: "Sync Home", target: "home" },
   { label: "Sync Populer", target: "popular" },
   { label: "Sync New", target: "new" },
 ] as const;
+
+function FeedReportRow({
+  label,
+  created,
+  existing,
+  updated,
+  unchanged,
+  skippedUnsupported,
+  fetched,
+  errors,
+}: {
+  label: string;
+  created?: string;
+  existing?: string;
+  updated?: string;
+  unchanged?: string;
+  skippedUnsupported?: string;
+  fetched?: string;
+  errors?: string;
+}) {
+  return (
+    <div className="rounded-md border border-white/10 bg-black/25 p-3">
+      <p className="text-sm font-semibold text-white">{label}</p>
+      <p className="mt-2 text-xs leading-6 text-neutral-300">
+        Baru: <strong>{created ?? "0"}</strong> · Sudah ada:{" "}
+        <strong>{existing ?? "0"}</strong> · Update:{" "}
+        <strong>{updated ?? "0"}</strong> · Tetap:{" "}
+        <strong>{unchanged ?? "0"}</strong>
+      </p>
+      <p className="text-xs leading-6 text-neutral-400">
+        Fetched: {fetched ?? "0"} · Unsupported:{" "}
+        {skippedUnsupported ?? "0"} · Error: {errors ?? "0"}
+      </p>
+    </div>
+  );
+}
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const params = await searchParams;
@@ -103,6 +169,85 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 Sync {params.target ?? "feed"} gagal:{" "}
                 {params.message ?? "upstream tidak merespons"}
               </span>
+            ) : params.target === "all" ? (
+              <div className="space-y-3">
+                <p className="font-semibold text-white">
+                  Sync semua endpoint page {params.page ?? DEFAULT_SYNC_PAGE}{" "}
+                  {params.sync === "partial"
+                    ? "selesai sebagian."
+                    : "selesai."}
+                </p>
+                {params.sync === "partial" ? (
+                  <p className="rounded-md border border-yellow-400/20 bg-yellow-500/10 px-3 py-2 text-xs leading-5 text-yellow-100">
+                    Ada endpoint yang belum selesai sempurna. Error pertama:{" "}
+                    {params.message ?? "upstream tidak merespons"}
+                  </p>
+                ) : null}
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Total judul baru:{" "}
+                    <strong className="text-white">
+                      {params.totalCreated ?? "0"}
+                    </strong>
+                  </span>
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Total judul lama:{" "}
+                    <strong className="text-white">
+                      {params.totalExisting ?? "0"}
+                    </strong>
+                  </span>
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Total update:{" "}
+                    <strong className="text-white">
+                      {params.totalUpdated ?? "0"}
+                    </strong>
+                  </span>
+                  <span className="rounded-md bg-black/30 px-3 py-2">
+                    Total tanpa perubahan:{" "}
+                    <strong className="text-white">
+                      {params.totalUnchanged ?? "0"}
+                    </strong>
+                  </span>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <FeedReportRow
+                    label="Sync home"
+                    created={params.homeCreated}
+                    existing={params.homeExisting}
+                    updated={params.homeUpdated}
+                    unchanged={params.homeUnchanged}
+                    skippedUnsupported={params.homeSkippedUnsupported}
+                    fetched={params.homeFetched}
+                    errors={params.homeErrors}
+                  />
+                  <FeedReportRow
+                    label="Sync populer"
+                    created={params.popularCreated}
+                    existing={params.popularExisting}
+                    updated={params.popularUpdated}
+                    unchanged={params.popularUnchanged}
+                    skippedUnsupported={params.popularSkippedUnsupported}
+                    fetched={params.popularFetched}
+                    errors={params.popularErrors}
+                  />
+                  <FeedReportRow
+                    label="Sync new"
+                    created={params.newCreated}
+                    existing={params.newExisting}
+                    updated={params.newUpdated}
+                    unchanged={params.newUnchanged}
+                    skippedUnsupported={params.newSkippedUnsupported}
+                    fetched={params.newFetched}
+                    errors={params.newErrors}
+                  />
+                </div>
+                <p className="text-xs leading-5 text-neutral-400">
+                  Total fetched: {params.totalFetched ?? "0"} item. Total
+                  unsupported: {params.totalSkippedUnsupported ?? "0"}. Total
+                  duplikat dilewati: {params.totalDuplicateSkipped ?? "0"}. Total
+                  error: {params.totalErrors ?? "0"}.
+                </p>
+              </div>
             ) : (
               <div className="space-y-3">
                 <p className="font-semibold text-white">
@@ -209,7 +354,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {FEED_BUTTONS.map((item) => (
                 <SyncSubmitButton
                   key={item.target}
