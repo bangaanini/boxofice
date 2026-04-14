@@ -16,6 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 
 type WatchPlayerProps = {
+  autoPlay?: boolean;
+  defaultQuality?: string;
   initialProgressSeconds?: number;
   movieId?: string;
   poster?: string | null;
@@ -52,6 +54,41 @@ function toMediaSourceUrl(source: CachedStreamSource) {
   return `/api/hls?url=${encodeURIComponent(source.url)}`;
 }
 
+function normalizeQuality(value: string | undefined) {
+  return value?.toLowerCase().replace(/\s+/g, "").replace(/p$/, "");
+}
+
+function chooseDefaultSource(
+  sources: CachedStreamSource[],
+  defaultQuality: string | undefined,
+) {
+  if (!sources.length) {
+    return null;
+  }
+
+  const preferredQuality = normalizeQuality(defaultQuality);
+
+  if (preferredQuality) {
+    const preferredSource = sources.find((source) => {
+      const label = normalizeQuality(source.label);
+      const quality = normalizeQuality(source.quality);
+
+      return (
+        label === preferredQuality ||
+        quality === preferredQuality ||
+        label?.includes(preferredQuality) ||
+        quality?.includes(preferredQuality)
+      );
+    });
+
+    if (preferredSource) {
+      return preferredSource;
+    }
+  }
+
+  return sources[0];
+}
+
 async function lockLandscapeIfPossible() {
   const orientation = screen.orientation as ScreenOrientationWithLock | undefined;
 
@@ -67,6 +104,8 @@ function unlockOrientationIfPossible() {
 }
 
 export function WatchPlayer({
+  autoPlay = false,
+  defaultQuality,
   initialProgressSeconds = 0,
   movieId,
   poster,
@@ -93,7 +132,12 @@ export function WatchPlayer({
   );
   const [error, setError] = React.useState<string | null>(null);
   const [selectedSourceUrl, setSelectedSourceUrl] = React.useState<string | null>(
-    streamCacheKey ? readCachedStream(streamCacheKey)?.sources[0]?.url ?? null : null,
+    streamCacheKey
+      ? chooseDefaultSource(
+          readCachedStream(streamCacheKey)?.sources ?? [],
+          defaultQuality,
+        )?.url ?? null
+      : null,
   );
   const [seekFeedback, setSeekFeedback] = React.useState<SeekFeedback | null>(
     null,
@@ -117,7 +161,12 @@ export function WatchPlayer({
 
       if (cached) {
         setStream(cached);
-        setSelectedSourceUrl((current) => current ?? cached.sources[0]?.url ?? null);
+        setSelectedSourceUrl(
+          (current) =>
+            current ??
+            chooseDefaultSource(cached.sources, defaultQuality)?.url ??
+            null,
+        );
         return;
       }
 
@@ -135,7 +184,9 @@ export function WatchPlayer({
         }
 
         setStream(payload);
-        setSelectedSourceUrl(payload.sources[0]?.url ?? null);
+        setSelectedSourceUrl(
+          chooseDefaultSource(payload.sources, defaultQuality)?.url ?? null,
+        );
       } catch (loadError) {
         if (controller.signal.aborted) {
           return;
@@ -154,12 +205,12 @@ export function WatchPlayer({
     return () => {
       controller.abort();
     };
-  }, [movieId, retryCount, sourceUrl, streamCacheKey]);
+  }, [defaultQuality, movieId, retryCount, sourceUrl, streamCacheKey]);
 
   const sources = React.useMemo(() => stream?.sources ?? [], [stream]);
   const selectedSource =
     sources.find((source) => source.url === selectedSourceUrl) ??
-    sources[0] ??
+    chooseDefaultSource(sources, defaultQuality) ??
     null;
 
   const moveToNextPlayableSource = React.useCallback(
@@ -189,19 +240,20 @@ export function WatchPlayer({
     }
 
     const video = videoRef.current;
+    const activeSource = selectedSource;
     let disposed = false;
     let hls: Hls | null = null;
     const resumeSnapshot =
       resumeSnapshotRef.current ??
-      (!initialResumeAppliedRef.current && initialProgressSeconds > 3
+      (!initialResumeAppliedRef.current
         ? {
-            shouldPlay: false,
-            time: initialProgressSeconds,
+            shouldPlay: autoPlay,
+            time: initialProgressSeconds > 3 ? initialProgressSeconds : 0,
           }
         : null);
     resumeSnapshotRef.current = null;
     initialResumeAppliedRef.current = true;
-    const mediaUrl = toMediaSourceUrl(selectedSource);
+    const mediaUrl = toMediaSourceUrl(activeSource);
 
     function resumePlayback() {
       if (!resumeSnapshot || disposed) {
@@ -219,7 +271,7 @@ export function WatchPlayer({
 
     function handleNativeError() {
       if (!disposed) {
-        moveToNextPlayableSource(selectedSource.url);
+        moveToNextPlayableSource(activeSource.url);
       }
     }
 
@@ -230,7 +282,7 @@ export function WatchPlayer({
       video.poster = poster ?? "";
       video.addEventListener("error", handleNativeError);
 
-      if (!isHlsSource(selectedSource)) {
+      if (!isHlsSource(activeSource)) {
         video.src = mediaUrl;
         video.addEventListener("loadedmetadata", resumePlayback, { once: true });
         video.load();
@@ -257,7 +309,7 @@ export function WatchPlayer({
           if (data.fatal) {
             hls?.destroy();
             hlsRef.current = null;
-            moveToNextPlayableSource(selectedSource.url);
+            moveToNextPlayableSource(activeSource.url);
           }
         });
         return;
@@ -273,7 +325,7 @@ export function WatchPlayer({
         return;
       }
 
-      moveToNextPlayableSource(selectedSource.url);
+      moveToNextPlayableSource(activeSource.url);
     }
 
     void setupPlayer();
@@ -288,6 +340,8 @@ export function WatchPlayer({
       unlockOrientationIfPossible();
     };
   }, [
+    autoPlay,
+    defaultQuality,
     initialProgressSeconds,
     moveToNextPlayableSource,
     poster,
@@ -536,49 +590,27 @@ export function WatchPlayer({
   }
 
   return (
-    <div className="space-y-3">
-      <div
-        onDoubleClick={handleDoubleClick}
-        onTouchEnd={handleTouchEnd}
-        className="relative aspect-video overflow-hidden bg-black ring-1 ring-white/10 sm:rounded-md"
-      >
-        <video
-          ref={videoRef}
-          className="h-full w-full bg-black"
-          poster={poster ?? undefined}
-          playsInline
-          controls
-        />
-        {seekFeedback ? (
-          <div
-            key={seekFeedback.key}
-            className={cn(
-              "pointer-events-none absolute inset-y-0 flex w-1/2 items-center justify-center bg-black/15 text-white",
-              seekFeedback.direction === "backward" ? "left-0" : "right-0",
-            )}
-          >
-            <div className="flex size-20 animate-ping items-center justify-center rounded-full bg-white/10" />
-            <div className="absolute flex items-center gap-2 rounded-full bg-black/55 px-4 py-2 text-sm font-semibold backdrop-blur">
-              {seekFeedback.direction === "backward" ? (
-                <RotateCcw className="size-5" />
-              ) : (
-                <RotateCw className="size-5" />
-              )}
-              {seekFeedback.direction === "backward" ? "-10 detik" : "+10 detik"}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
+    <div
+      onDoubleClick={handleDoubleClick}
+      onTouchEnd={handleTouchEnd}
+      className="relative aspect-video overflow-hidden bg-black ring-1 ring-white/10 sm:rounded-md"
+    >
+      <video
+        ref={videoRef}
+        className="h-full w-full bg-black"
+        poster={poster ?? undefined}
+        playsInline
+        controls
+      />
       {sources.length > 1 ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="absolute right-2 top-2 z-20 flex max-w-[calc(100%-1rem)] gap-1 overflow-x-auto rounded-md bg-black/65 p-1 backdrop-blur">
           {sources.map((source) => (
             <button
               key={source.url}
               type="button"
               onClick={() => selectSource(source)}
               className={cn(
-                "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
+                "shrink-0 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-sm",
                 source.url === selectedSource?.url
                   ? "border-white bg-white text-neutral-950"
                   : "border-white/15 bg-neutral-900 text-neutral-100 hover:bg-neutral-800",
@@ -587,6 +619,25 @@ export function WatchPlayer({
               {source.label}
             </button>
           ))}
+        </div>
+      ) : null}
+      {seekFeedback ? (
+        <div
+          key={seekFeedback.key}
+          className={cn(
+            "pointer-events-none absolute inset-y-0 flex w-1/2 items-center justify-center bg-black/15 text-white",
+            seekFeedback.direction === "backward" ? "left-0" : "right-0",
+          )}
+        >
+          <div className="flex size-20 animate-ping items-center justify-center rounded-full bg-white/10" />
+          <div className="absolute flex items-center gap-2 rounded-full bg-black/55 px-4 py-2 text-sm font-semibold backdrop-blur">
+            {seekFeedback.direction === "backward" ? (
+              <RotateCcw className="size-5" />
+            ) : (
+              <RotateCw className="size-5" />
+            )}
+            {seekFeedback.direction === "backward" ? "-10 detik" : "+10 detik"}
+          </div>
         </div>
       ) : null}
     </div>

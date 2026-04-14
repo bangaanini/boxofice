@@ -1,12 +1,12 @@
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Calendar, Clapperboard, Star, Users } from "lucide-react";
+import { Calendar, Clapperboard, Star, Users } from "lucide-react";
 
-import { MovieActionButtons } from "@/components/movie/movie-action-buttons";
-import { PlayButton } from "@/components/movie/play-button";
+import { DetailWatchActions } from "@/components/movie/detail-watch-actions";
+import { MovieCardLink } from "@/components/movie/movie-card-link";
+import { SynopsisAccordion } from "@/components/movie/synopsis-accordion";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { getRelatedMovies, type MovieCard } from "@/lib/movie-feeds";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserSession } from "@/lib/user-auth";
 
@@ -69,6 +69,32 @@ function MovieCredits({
   );
 }
 
+function RelatedMoviesSection({ movies }: { movies: MovieCard[] }) {
+  if (!movies.length) {
+    return null;
+  }
+
+  return (
+    <section className="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-8 sm:pb-12 sm:pt-8 lg:px-10">
+      <div className="mb-3 flex items-center justify-between gap-4 sm:mb-4">
+        <h2 className="text-xl font-bold text-white sm:text-2xl">
+          Film serupa
+        </h2>
+      </div>
+
+      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-3 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        {movies.map((movie) => (
+          <MovieCardLink
+            key={movie.id}
+            movie={movie}
+            className="w-[132px] shrink-0 sm:w-[180px] sm:hover:-translate-y-1"
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default async function MoviePage({ params }: MoviePageProps) {
   const { id } = await params;
   const [movie, user] = await Promise.all([
@@ -78,6 +104,9 @@ export default async function MoviePage({ params }: MoviePageProps) {
         description: true,
         genre: true,
         id: true,
+        inHome: true,
+        inNew: true,
+        inPopular: true,
         quality: true,
         rating: true,
         releaseDate: true,
@@ -96,19 +125,29 @@ export default async function MoviePage({ params }: MoviePageProps) {
     notFound();
   }
 
-  const favorite = user
-    ? await prisma.userFavorite.findUnique({
-        where: {
-          userId_movieId: {
-            movieId: movie.id,
-            userId: user.id,
+  const [favorite, relatedMovies] = await Promise.all([
+    user
+      ? prisma.userFavorite.findUnique({
+          where: {
+            userId_movieId: {
+              movieId: movie.id,
+              userId: user.id,
+            },
           },
-        },
-        select: {
-          id: true,
-        },
-      })
-    : null;
+          select: {
+            id: true,
+          },
+        })
+      : Promise.resolve(null),
+    getRelatedMovies({
+      currentMovieId: movie.id,
+      genre: movie.genre,
+      inHome: movie.inHome,
+      inNew: movie.inNew,
+      inPopular: movie.inPopular,
+      limit: 14,
+    }),
+  ]);
 
   const poster = movie.thumbnail;
   const fallbackSynopsis =
@@ -133,19 +172,8 @@ export default async function MoviePage({ params }: MoviePageProps) {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.1)_0%,#000_62%,#000_100%)] sm:bg-[linear-gradient(90deg,#000_0%,rgba(0,0,0,0.86)_32%,rgba(0,0,0,0.48)_68%,rgba(0,0,0,0.9)_100%)]" />
 
         <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col px-4 pb-6 pt-3 sm:min-h-screen sm:px-8 sm:py-6 lg:px-10">
-          <Button
-            asChild
-            variant="ghost"
-            className="w-fit bg-black/25 backdrop-blur sm:bg-transparent"
-          >
-            <Link href="/" prefetch>
-              <ArrowLeft className="size-4" />
-              Kembali
-            </Link>
-          </Button>
-
-          <div className="grid flex-1 gap-5 pt-4 sm:items-center sm:gap-10 sm:py-10 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="relative mx-auto w-full max-w-[340px] sm:hidden">
+          <div className="grid flex-1 gap-4 pt-2 sm:items-center sm:gap-10 sm:py-10 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="relative mx-auto w-full max-w-[315px] sm:hidden">
               <div className="relative aspect-[2/3] overflow-hidden rounded-md bg-neutral-950 shadow-2xl shadow-black/70 ring-1 ring-white/15">
                 {poster ? (
                   <Image
@@ -153,7 +181,7 @@ export default async function MoviePage({ params }: MoviePageProps) {
                     alt={`${movie.title} poster`}
                     fill
                     unoptimized
-                    sizes="(max-width: 640px) 88vw, 340px"
+                    sizes="(max-width: 640px) 82vw, 315px"
                     className="object-contain"
                     priority
                   />
@@ -165,7 +193,7 @@ export default async function MoviePage({ params }: MoviePageProps) {
               </div>
             </div>
 
-            <div className="max-w-3xl space-y-4 sm:space-y-7">
+            <div className="max-w-3xl space-y-3 sm:space-y-7">
               <div className="flex flex-wrap items-center gap-3">
                 {movie.quality ? (
                   <Badge className="border-red-300/30 bg-red-600 text-white">
@@ -193,9 +221,6 @@ export default async function MoviePage({ params }: MoviePageProps) {
               </div>
 
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase text-red-400 sm:mb-3 sm:text-sm">
-                  Siap ditonton
-                </p>
                 <h1 className="max-w-4xl text-3xl font-black leading-tight text-white sm:text-6xl sm:leading-none lg:text-7xl">
                   {movie.title}
                 </h1>
@@ -207,30 +232,14 @@ export default async function MoviePage({ params }: MoviePageProps) {
                 </p>
               ) : null}
 
-              <p className="line-clamp-5 max-w-3xl text-sm leading-6 text-neutral-200 sm:line-clamp-none sm:text-lg sm:leading-8">
-                {fallbackSynopsis}
-              </p>
+              <DetailWatchActions
+                initialSaved={Boolean(favorite)}
+                movieId={movie.id}
+                poster={poster}
+                title={movie.title}
+              />
 
-              <div className="grid gap-2 sm:flex sm:flex-wrap sm:gap-3">
-                <div className="sm:w-auto">
-                  <PlayButton movieId={movie.id} />
-                </div>
-                <MovieActionButtons
-                  initialSaved={Boolean(favorite)}
-                  movieId={movie.id}
-                  title={movie.title}
-                />
-                <Button
-                  asChild
-                  size="lg"
-                  variant="secondary"
-                  className="hidden h-12 border border-white/10 bg-white/10 px-7 text-white hover:bg-white/15 sm:inline-flex"
-                >
-                  <Link href="/" prefetch>
-                    Jelajahi lagi
-                  </Link>
-                </Button>
-              </div>
+              <SynopsisAccordion text={fallbackSynopsis} />
 
               <MovieCredits actors={movie.actors} directors={movie.directors} />
             </div>
@@ -259,6 +268,8 @@ export default async function MoviePage({ params }: MoviePageProps) {
           </div>
         </div>
       </section>
+
+      <RelatedMoviesSection movies={relatedMovies} />
     </main>
   );
 }

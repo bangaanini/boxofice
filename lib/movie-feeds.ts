@@ -14,6 +14,15 @@ export type BackdropMovie = {
   title: string;
 };
 
+export type RelatedMovieInput = {
+  currentMovieId: string;
+  genre?: string | null;
+  inHome?: boolean;
+  inNew?: boolean;
+  inPopular?: boolean;
+  limit?: number;
+};
+
 export type FeedSlug = "home" | "populer" | "new";
 
 type FeedDefinition = {
@@ -136,6 +145,83 @@ export async function getHomepageMovieData(limit = 18): Promise<HomepageData> {
       popularMovies: [],
       totalMovies: 0,
     };
+  }
+}
+
+export async function getRelatedMovies({
+  currentMovieId,
+  genre,
+  inHome,
+  inNew,
+  inPopular,
+  limit = 12,
+}: RelatedMovieInput): Promise<MovieCard[]> {
+  const genreTerms =
+    genre
+      ?.split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, 3) ?? [];
+  const relatedConditions = [
+    ...genreTerms.map((value) => ({
+      genre: {
+        contains: value,
+      },
+    })),
+    ...(inPopular ? [{ inPopular: true }] : []),
+    ...(inNew ? [{ inNew: true }] : []),
+    ...(inHome ? [{ inHome: true }] : []),
+  ];
+
+  try {
+    const movies = await prisma.movie.findMany({
+      where: {
+        id: {
+          not: currentMovieId,
+        },
+        ...(relatedConditions.length ? { OR: relatedConditions } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        quality: true,
+        rating: true,
+        thumbnail: true,
+        title: true,
+      },
+    });
+
+    if (movies.length >= Math.min(limit, 6)) {
+      return movies;
+    }
+
+    const fallbackMovies = await prisma.movie.findMany({
+      where: {
+        id: {
+          not: currentMovieId,
+        },
+        NOT: {
+          id: {
+            in: movies.map((movie) => movie.id),
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: limit - movies.length,
+      select: {
+        id: true,
+        quality: true,
+        rating: true,
+        thumbnail: true,
+        title: true,
+      },
+    });
+
+    return [...movies, ...fallbackMovies];
+  } catch (error) {
+    console.error("Failed to load related movies", error);
+    return [];
   }
 }
 
