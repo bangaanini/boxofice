@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, RotateCcw, RotateCw } from "lucide-react";
+import { RotateCcw, RotateCw } from "lucide-react";
 import type Player from "video.js/dist/types/player";
 
 import { Button } from "@/components/ui/button";
@@ -73,21 +73,6 @@ async function lockLandscapeIfPossible() {
 
 function unlockOrientationIfPossible() {
   screen.orientation?.unlock?.();
-}
-
-function EmbeddedIframePlayer({ src }: { src: string }) {
-  return (
-    <div className="relative aspect-video w-full overflow-hidden bg-black ring-1 ring-white/10 sm:rounded-md">
-      <iframe
-        src={src}
-        title="Pemutar video"
-        className="h-full w-full bg-black"
-        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-        allowFullScreen
-        referrerPolicy="origin-when-cross-origin"
-      />
-    </div>
-  );
 }
 
 export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
@@ -174,15 +159,6 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
     sources.find((source) => source.url === selectedSourceUrl) ??
     sources[0] ??
     null;
-
-  const iframePlayerUrl = React.useMemo(
-    () => stream?.iframe ?? null,
-    [stream],
-  );
-  const externalPlayerUrl = React.useMemo(
-    () => stream?.iframe ?? stream?.resolvedFrom ?? stream?.originalUrl ?? null,
-    [stream],
-  );
 
   const moveToNextPlayableSource = React.useCallback(
     (failedUrl: string) => {
@@ -395,10 +371,6 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
   }
 
   if (error) {
-    if (iframePlayerUrl) {
-      return <EmbeddedIframePlayer src={iframePlayerUrl} />;
-    }
-
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-md bg-neutral-950 px-6 text-center ring-1 ring-white/10">
         <p className="text-2xl font-semibold text-white">Video belum siap</p>
@@ -409,53 +381,25 @@ export function WatchPlayer({ movieId, poster, sourceUrl }: WatchPlayerProps) {
           <RotateCw className="size-4" />
           Coba lagi
         </Button>
-        {externalPlayerUrl ? (
-          <Button asChild variant="secondary">
-            <a
-              href={externalPlayerUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <ExternalLink className="size-4" />
-              Buka player cadangan
-            </a>
-          </Button>
-        ) : null}
       </div>
     );
-  }
-
-  if (iframePlayerUrl) {
-    return <EmbeddedIframePlayer src={iframePlayerUrl} />;
   }
 
   if (stream && !sources.length) {
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-md bg-neutral-950 px-6 text-center ring-1 ring-white/10">
         <p className="text-2xl font-semibold text-white">
-          Source langsung belum tersedia
+          Belum tersedia untuk internal player
         </p>
         <p className="max-w-md text-sm leading-6 text-neutral-400">
-          Link video dari upstream untuk judul ini belum cocok untuk pemutar
-          internal. Kamu tetap bisa mencoba player cadangan.
+          Sumber video dari upstream untuk judul ini belum cocok diputar tanpa
+          iframe. Judul seperti ini akan disaring dari katalog setelah sync
+          berikutnya.
         </p>
-        {externalPlayerUrl ? (
-          <Button asChild>
-            <a
-              href={externalPlayerUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <ExternalLink className="size-4" />
-              Buka player cadangan
-            </a>
-          </Button>
-        ) : (
-          <Button onClick={() => setRetryCount((value) => value + 1)}>
-            <RotateCw className="size-4" />
-            Coba lagi
-          </Button>
-        )}
+        <Button onClick={() => setRetryCount((value) => value + 1)}>
+          <RotateCw className="size-4" />
+          Coba lagi
+        </Button>
       </div>
     );
   }

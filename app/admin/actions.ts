@@ -33,6 +33,7 @@ export async function syncMoviesFromAdmin(formData: FormData) {
       fetched: String(summary.fetched),
       message: summary.errors[0] ?? "",
       page: String(page),
+      skippedUnsupported: String(summary.skippedUnsupported),
       sync: summary.errors.length ? "partial" : "ok",
       target,
       unchanged: String(summary.unchanged),

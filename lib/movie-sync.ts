@@ -1,6 +1,7 @@
 import {
   fetchHome,
   fetchNew,
+  fetchPlayableStream,
   fetchPopular,
   type MovieListResult,
 } from "@/lib/movie-api";
@@ -53,6 +54,7 @@ export type FeedSyncSummary = {
   unchanged: number;
   upserted: number;
   duplicateSkipped: number;
+  skippedUnsupported: number;
   deactivated: number;
   hadFetchErrors: boolean;
   active: number;
@@ -67,6 +69,7 @@ export type CombinedSyncSummary = {
   totalUnchanged: number;
   totalUpserted: number;
   totalDuplicateSkipped: number;
+  totalSkippedUnsupported: number;
   totalDeactivated: number;
   pages: number;
   targets: Record<MovieFeedTarget, FeedSyncSummary>;
@@ -213,6 +216,16 @@ function hasMovieChanged(
   );
 }
 
+async function hasPlayableInternalSource(sourceUrl: string) {
+  try {
+    const stream = await fetchPlayableStream(sourceUrl, { revalidate: 1800 });
+
+    return stream.sources.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function syncMovieFeed(
   target: MovieFeedTarget,
   options: { page?: number; pages?: number } = {},
@@ -234,6 +247,7 @@ export async function syncMovieFeed(
     unchanged: 0,
     upserted: 0,
     duplicateSkipped: feed.duplicateSkipped,
+    skippedUnsupported: 0,
     deactivated: 0,
     hadFetchErrors: feed.hadFetchErrors,
     active: sourceUrls.length,
@@ -269,6 +283,25 @@ export async function syncMovieFeed(
       const nextData = normalizeMovieData(movie);
       const feedFlag = { [config.dbField]: true } as Record<FeedDbField, true>;
       const existing = existingBySource.get(movie.sourceUrl);
+      const isPlayable = await hasPlayableInternalSource(movie.sourceUrl);
+
+      if (!isPlayable) {
+        summary.skippedUnsupported += 1;
+
+        if (existing?.[config.dbField]) {
+          await prisma.movie.update({
+            where: {
+              sourceUrl: movie.sourceUrl,
+            },
+            data: {
+              [config.dbField]: false,
+            } as Record<FeedDbField, false>,
+          });
+          summary.deactivated += 1;
+        }
+
+        continue;
+      }
 
       if (!existing) {
         await prisma.movie.create({
@@ -335,6 +368,10 @@ export async function syncAllMovieFeeds(
       home.duplicateSkipped +
       popular.duplicateSkipped +
       latest.duplicateSkipped,
+    totalSkippedUnsupported:
+      home.skippedUnsupported +
+      popular.skippedUnsupported +
+      latest.skippedUnsupported,
     totalDeactivated:
       home.deactivated + popular.deactivated + latest.deactivated,
     targets: {

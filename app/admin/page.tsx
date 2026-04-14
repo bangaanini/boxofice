@@ -38,6 +38,7 @@ type AdminPageProps = {
     message?: string;
     page?: string;
     pages?: string;
+    skippedUnsupported?: string;
     sync?: string;
     target?: string;
     unchanged?: string;
@@ -146,8 +147,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 </div>
                 <p className="text-xs leading-5 text-neutral-400">
                   Diambil dari API: {params.fetched ?? "0"} item. Judul unik di
-                  page ini: {params.active ?? "0"}. Tidak ada film lama yang
-                  dihapus dari feed. Duplikat dari response yang dilewati:{" "}
+                  page ini: {params.active ?? "0"}. Tidak masuk karena belum
+                  punya direct source internal: {params.skippedUnsupported ?? "0"}.
+                  Duplikat dari response yang dilewati:{" "}
                   {params.duplicateSkipped ?? "0"}. Error: {params.errors ?? "0"}.
                 </p>
               </div>
@@ -182,7 +184,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">
             Sinkronkan metadata lokal langsung dari kategori home, populer, dan
             new. Pilih nomor page upstream yang ingin dimasukkan ke katalog.
-            Judul lama tetap disimpan.
+            Hanya film dengan direct source yang cocok untuk internal player
+            yang akan aktif di katalog.
           </p>
 
           <form action={syncMoviesFromAdmin} className="mt-5 space-y-4">

@@ -52,7 +52,7 @@ function toVideoJsSource(source: StreamSource) {
   };
 }
 
-export function VideoPlayer({ sourceUrl, poster, title }: VideoPlayerProps) {
+export function VideoPlayer({ sourceUrl, poster }: VideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const playerRef = React.useRef<PlayerWithQualitySelector | null>(null);
   const [state, setState] = React.useState<LoadState>({ status: "loading" });
@@ -194,21 +194,6 @@ export function VideoPlayer({ sourceUrl, poster, title }: VideoPlayerProps) {
           <RefreshCw className="size-4" />
           Try again
         </Button>
-      </div>
-    );
-  }
-
-  if (stream?.iframe) {
-    return (
-      <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
-        <iframe
-          src={stream.iframe}
-          title={`${title} player`}
-          className="h-full w-full"
-          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-          allowFullScreen
-          referrerPolicy="no-referrer"
-        />
       </div>
     );
   }
