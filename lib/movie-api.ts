@@ -1,6 +1,7 @@
 const BASE_URL = "https://api.sonzaix.indevs.in";
 
 type JsonRecord = Record<string, unknown>;
+const API_REQUEST_TIMEOUT_MS = 10000;
 const MEDIA_PROBE_TIMEOUT_MS = 8000;
 
 export type NormalizedMovieMetadata = {
@@ -32,6 +33,7 @@ export type StreamSource = {
 export type SanitizedStreamResponse = {
   originalUrl: string;
   iframe?: string;
+  m3u8?: string;
   sources: StreamSource[];
   resolvedFrom?: string;
 };
@@ -41,6 +43,7 @@ export type MovieDetail = {
   title?: string;
   poster?: string;
   synopsis?: string;
+  genres: string[];
   releaseDate?: string;
   actors: string[];
   directors: string[];
@@ -116,6 +119,25 @@ function getStringArray(record: JsonRecord, keys: string[]): string[] {
     .filter((value): value is string => Boolean(value));
 }
 
+function getStringList(record: JsonRecord, keys: string[]): string[] {
+  const arrayValue = getStringArray(record, keys);
+
+  if (arrayValue.length > 0) {
+    return arrayValue;
+  }
+
+  const stringValue = getString(record, keys);
+
+  if (!stringValue) {
+    return [];
+  }
+
+  return stringValue
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function cleanSynopsis(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
@@ -152,6 +174,9 @@ async function requestJson<T>(
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+
     try {
       const response = await fetch(`${BASE_URL}${path}`, {
         ...restInit,
@@ -160,6 +185,7 @@ async function requestJson<T>(
           "User-Agent": "boxofice/1.0",
           ...headers,
         },
+        signal: restInit.signal ?? controller.signal,
       });
 
       if (!response.ok) {
@@ -190,6 +216,8 @@ async function requestJson<T>(
       }
 
       await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -355,6 +383,7 @@ function normalizeStreamResponse(
   return {
     originalUrl: getString(data, ["originalUrl", "sourceUrl", "url"]) ?? fallbackSourceUrl,
     iframe: getString(data, ["iframe", "embed", "embedUrl", "player"]),
+    m3u8: typeof data.m3u8 === "string" ? data.m3u8 : undefined,
     sources: normalizeStreamSources(data),
   };
 }
@@ -483,6 +512,16 @@ async function filterPlayableSources(sources: StreamSource[]) {
   );
 }
 
+function shouldResolveDetailBeforeStream(sourceUrl: string) {
+  try {
+    const url = new URL(sourceUrl);
+
+    return url.hostname.includes("lk21official");
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchHome(page = 1): Promise<MovieListResult> {
   const response = await requestJson<unknown>(`/lk21/home?page=${page}`);
   return normalizeMovieListResponse(response);
@@ -532,6 +571,7 @@ export async function fetchDetail(
     title: getString(data, ["title", "name"]),
     poster: getString(data, ["poster", "thumbnail", "image"]),
     synopsis: cleanSynopsis(getString(data, ["synopsis", "description", "overview"])),
+    genres: getStringList(data, ["genres", "genre"]),
     releaseDate: getString(data, ["releaseDate", "released", "date"]),
     actors: getStringArray(data, ["actors", "cast", "stars"]),
     directors: getStringArray(data, ["directors", "director"]),
@@ -563,10 +603,12 @@ export async function fetchPlayableStream(
   let initialStream: SanitizedStreamResponse | null = null;
   let initialError: unknown;
 
-  try {
-    initialStream = await fetchStream(sourceUrl, options);
-  } catch (error) {
-    initialError = error;
+  if (!shouldResolveDetailBeforeStream(sourceUrl)) {
+    try {
+      initialStream = await fetchStream(sourceUrl, options);
+    } catch (error) {
+      initialError = error;
+    }
   }
 
   if (initialStream && initialStream.sources.length > 0) {

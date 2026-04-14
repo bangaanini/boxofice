@@ -1,13 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { cache, Suspense } from "react";
 import { ArrowLeft, Calendar, Clapperboard, Star, Users } from "lucide-react";
 
 import { PlayButton } from "@/components/movie/play-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchDetail } from "@/lib/movie-api";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -17,15 +15,6 @@ type MoviePageProps = {
     id: string;
   }>;
 };
-
-const getMovieDetail = cache(async (sourceUrl: string) => {
-  try {
-    return await fetchDetail(sourceUrl, { revalidate: 3600 });
-  } catch (error) {
-    console.error("Failed to load movie detail", error);
-    return null;
-  }
-});
 
 function formatReleaseDate(value: string | undefined) {
   if (!value) {
@@ -45,44 +34,13 @@ function formatReleaseDate(value: string | undefined) {
   }).format(date);
 }
 
-async function MovieMetaDetails({ sourceUrl }: { sourceUrl: string }) {
-  const detail = await getMovieDetail(sourceUrl);
-  const releaseDate = formatReleaseDate(detail?.releaseDate);
-
-  if (!releaseDate) {
-    return null;
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-neutral-300">
-      <Calendar className="size-4" />
-      {releaseDate}
-    </span>
-  );
-}
-
-async function MovieSynopsis({
-  fallbackSynopsis,
-  sourceUrl,
+function MovieCredits({
+  actors,
+  directors,
 }: {
-  fallbackSynopsis: string;
-  sourceUrl: string;
+  actors: string[];
+  directors: string[];
 }) {
-  const detail = await getMovieDetail(sourceUrl);
-  const synopsis = detail?.synopsis ?? fallbackSynopsis;
-
-  return (
-    <p className="line-clamp-5 max-w-3xl text-sm leading-6 text-neutral-200 sm:line-clamp-none sm:text-lg sm:leading-8">
-      {synopsis}
-    </p>
-  );
-}
-
-async function MovieCredits({ sourceUrl }: { sourceUrl: string }) {
-  const detail = await getMovieDetail(sourceUrl);
-  const actors = detail?.actors.slice(0, 6) ?? [];
-  const directors = detail?.directors.slice(0, 3) ?? [];
-
   return (
     <dl className="grid gap-5 border-t border-white/10 pt-5 sm:grid-cols-2 sm:pt-6">
       <div>
@@ -91,7 +49,7 @@ async function MovieCredits({ sourceUrl }: { sourceUrl: string }) {
           Pemeran
         </dt>
         <dd className="mt-2 text-sm leading-6 text-neutral-200">
-          {actors.length ? actors.join(", ") : "Pemeran belum tersedia"}
+          {actors.length ? actors.slice(0, 6).join(", ") : "Pemeran belum tersedia"}
         </dd>
       </div>
       <div>
@@ -100,32 +58,9 @@ async function MovieCredits({ sourceUrl }: { sourceUrl: string }) {
           Sutradara
         </dt>
         <dd className="mt-2 text-sm leading-6 text-neutral-200">
-          {directors.length ? directors.join(", ") : "Sutradara belum tersedia"}
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
-function MovieCreditsFallback() {
-  return (
-    <dl className="grid gap-5 border-t border-white/10 pt-5 sm:grid-cols-2 sm:pt-6">
-      <div>
-        <dt className="flex items-center gap-2 text-sm font-semibold text-neutral-400">
-          <Users className="size-4 text-red-400" />
-          Pemeran
-        </dt>
-        <dd className="mt-2 text-sm leading-6 text-neutral-500">
-          Memuat detail pemain...
-        </dd>
-      </div>
-      <div>
-        <dt className="flex items-center gap-2 text-sm font-semibold text-neutral-400">
-          <Clapperboard className="size-4 text-red-400" />
-          Sutradara
-        </dt>
-        <dd className="mt-2 text-sm leading-6 text-neutral-500">
-          Memuat detail sutradara...
+          {directors.length
+            ? directors.slice(0, 3).join(", ")
+            : "Sutradara belum tersedia"}
         </dd>
       </div>
     </dl>
@@ -138,12 +73,17 @@ export default async function MoviePage({ params }: MoviePageProps) {
     where: { id },
     select: {
       description: true,
+      genre: true,
       id: true,
       quality: true,
       rating: true,
-      sourceUrl: true,
+      releaseDate: true,
+      actors: true,
+      directors: true,
       thumbnail: true,
       title: true,
+      year: true,
+      duration: true,
     },
   });
 
@@ -155,6 +95,7 @@ export default async function MoviePage({ params }: MoviePageProps) {
   const fallbackSynopsis =
     movie.description ??
     "Sinopsis belum tersedia. Video akan disiapkan otomatis saat kamu menekan tombol tonton.";
+  const releaseDate = formatReleaseDate(movie.releaseDate ?? undefined);
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -193,9 +134,20 @@ export default async function MoviePage({ params }: MoviePageProps) {
                   <Star className="size-4 fill-yellow-400 text-yellow-400" />
                   {movie.rating ?? "N/A"}
                 </span>
-                <Suspense fallback={null}>
-                  <MovieMetaDetails sourceUrl={movie.sourceUrl} />
-                </Suspense>
+                {movie.year ? (
+                  <span className="text-sm text-neutral-300">{movie.year}</span>
+                ) : null}
+                {releaseDate ? (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-neutral-300">
+                    <Calendar className="size-4" />
+                    {releaseDate}
+                  </span>
+                ) : null}
+                {movie.duration ? (
+                  <span className="text-sm text-neutral-300">
+                    {movie.duration}
+                  </span>
+                ) : null}
               </div>
 
               <div>
@@ -207,18 +159,15 @@ export default async function MoviePage({ params }: MoviePageProps) {
                 </h1>
               </div>
 
-              <Suspense
-                fallback={
-                  <p className="line-clamp-5 max-w-3xl text-sm leading-6 text-neutral-200 sm:line-clamp-none sm:text-lg sm:leading-8">
-                    {fallbackSynopsis}
-                  </p>
-                }
-              >
-                <MovieSynopsis
-                  sourceUrl={movie.sourceUrl}
-                  fallbackSynopsis={fallbackSynopsis}
-                />
-              </Suspense>
+              {movie.genre ? (
+                <p className="text-sm font-medium text-neutral-400">
+                  {movie.genre}
+                </p>
+              ) : null}
+
+              <p className="line-clamp-5 max-w-3xl text-sm leading-6 text-neutral-200 sm:line-clamp-none sm:text-lg sm:leading-8">
+                {fallbackSynopsis}
+              </p>
 
               <div className="hidden flex-wrap gap-3 sm:flex">
                 <PlayButton movieId={movie.id} />
@@ -234,9 +183,7 @@ export default async function MoviePage({ params }: MoviePageProps) {
                 </Button>
               </div>
 
-              <Suspense fallback={<MovieCreditsFallback />}>
-                <MovieCredits sourceUrl={movie.sourceUrl} />
-              </Suspense>
+              <MovieCredits actors={movie.actors} directors={movie.directors} />
             </div>
 
             <aside className="hidden lg:block">

@@ -8,6 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
+  max: 5,
   ssl: process.env.DATABASE_URL?.includes("supabase.com")
     ? { rejectUnauthorized: false }
     : undefined,

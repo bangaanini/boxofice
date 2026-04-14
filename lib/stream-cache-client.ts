@@ -9,6 +9,7 @@ export type CachedStreamSource = {
 
 export type CachedStreamResponse = {
   iframe?: string;
+  m3u8?: string;
   originalUrl?: string;
   resolvedFrom?: string;
   sources: CachedStreamSource[];

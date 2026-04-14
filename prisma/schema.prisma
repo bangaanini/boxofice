@@ -8,23 +8,50 @@ datasource db {
 }
 
 model Movie {
-  id          String   @id @default(uuid())
-  sourceUrl   String   @unique
-  title       String
-  thumbnail   String?
-  description String?  @db.Text
-  rating      String?
-  quality     String?
-  inHome      Boolean  @default(false)
-  inPopular   Boolean  @default(false)
-  inNew       Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String            @id @default(uuid())
+  sourceUrl      String            @unique
+  title          String
+  thumbnail      String?
+  description    String?           @db.Text
+  genre          String?
+  year           String?
+  duration       String?
+  rating         String?
+  quality        String?
+  releaseDate    String?
+  actors         String[]          @default([])
+  directors      String[]          @default([])
+  streams        String?           @db.Text
+  detailSyncedAt DateTime?
+  inHome         Boolean           @default(false)
+  inPopular      Boolean           @default(false)
+  inNew          Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  streamCache    MovieStreamCache?
 
   @@index([updatedAt])
   @@index([inHome, updatedAt])
   @@index([inPopular, updatedAt])
   @@index([inNew, updatedAt])
+  @@index([detailSyncedAt])
+}
+
+model MovieStreamCache {
+  id           String   @id @default(uuid())
+  movieId      String   @unique
+  sourceUrl    String   @unique
+  resolvedFrom String?  @db.Text
+  originalUrl  String?  @db.Text
+  iframe       String?  @db.Text
+  m3u8         String?  @db.Text
+  sources      Json     @db.JsonB
+  checkedAt    DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  movie        Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@index([checkedAt])
 }
 
 model User {
