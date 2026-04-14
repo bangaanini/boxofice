@@ -1,17 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { ensureAffiliateProgramSettings } from "@/lib/affiliate";
+import {
+  getAffiliateProfileCountSafe,
+  getAffiliateProgramSettingsSafe,
+} from "@/lib/affiliate";
 
 export async function getAdminOverviewData() {
-  const [
-    totalMovies,
-    homeCount,
-    popularCount,
-    newCount,
-    totalUsers,
-    totalFavorites,
-    totalHistory,
-    totalAffiliateProfiles,
-  ] = await Promise.all([
+  const [totalMovies, homeCount, popularCount, newCount, totalUsers, totalFavorites, totalHistory] =
+    await Promise.all([
     prisma.movie.count(),
     prisma.movie.count({ where: { inHome: true } }),
     prisma.movie.count({ where: { inPopular: true } }),
@@ -19,14 +14,21 @@ export async function getAdminOverviewData() {
     prisma.user.count(),
     prisma.userFavorite.count(),
     prisma.watchHistory.count(),
-    prisma.affiliateProfile.count(),
+  ]);
+  const [affiliateProfiles, settings] = await Promise.all([
+    getAffiliateProfileCountSafe(),
+    getAffiliateProgramSettingsSafe(),
   ]);
 
   return {
+    affiliateSchemaIssue: affiliateProfiles.schemaIssue ?? settings.schemaIssue,
+    affiliateSchemaReady:
+      affiliateProfiles.schemaReady && settings.schemaReady,
+    defaultCommissionRate: settings.settings.defaultCommissionRate,
     homeCount,
     newCount,
     popularCount,
-    totalAffiliateProfiles,
+    totalAffiliateProfiles: affiliateProfiles.count,
     totalFavorites,
     totalHistory,
     totalMovies,
@@ -35,84 +37,149 @@ export async function getAdminOverviewData() {
 }
 
 export async function getAdminUserTableData(query: string | undefined) {
-  const settings = await ensureAffiliateProgramSettings();
   const trimmedQuery = query?.trim();
+  const settings = await getAffiliateProgramSettingsSafe();
 
-  const users = await prisma.user.findMany({
-    where: trimmedQuery
-      ? {
-          OR: [
-            {
-              email: {
-                contains: trimmedQuery,
-                mode: "insensitive",
+  try {
+    const users = await prisma.user.findMany({
+      where: trimmedQuery
+        ? {
+            OR: [
+              {
+                email: {
+                  contains: trimmedQuery,
+                  mode: "insensitive",
+                },
               },
-            },
-            {
-              name: {
-                contains: trimmedQuery,
-                mode: "insensitive",
+              {
+                name: {
+                  contains: trimmedQuery,
+                  mode: "insensitive",
+                },
               },
-            },
-            {
-              affiliateProfile: {
-                is: {
-                  referralCode: {
-                    contains: trimmedQuery.toUpperCase(),
-                    mode: "insensitive",
+              {
+                affiliateProfile: {
+                  is: {
+                    referralCode: {
+                      contains: trimmedQuery.toUpperCase(),
+                      mode: "insensitive",
+                    },
                   },
                 },
               },
-            },
-          ],
-        }
-      : undefined,
-    orderBy: {
-      createdAt: "desc",
-    },
-    select: {
-      createdAt: true,
-      email: true,
-      id: true,
-      name: true,
-      _count: {
-        select: {
-          favorites: true,
-          sessions: true,
-          watchHistory: true,
-        },
+            ],
+          }
+        : undefined,
+      orderBy: {
+        createdAt: "desc",
       },
-      affiliateProfile: {
-        select: {
-          activeReferrals: true,
-          availableBalance: true,
-          commissionRate: true,
-          referralCode: true,
-          totalCommission: true,
+      select: {
+        createdAt: true,
+        email: true,
+        id: true,
+        name: true,
+        _count: {
+          select: {
+            favorites: true,
+            sessions: true,
+            watchHistory: true,
+          },
         },
-      },
-      affiliateReferral: {
-        select: {
-          profile: {
-            select: {
-              referralCode: true,
-              user: {
-                select: {
-                  email: true,
-                  name: true,
+        affiliateProfile: {
+          select: {
+            activeReferrals: true,
+            availableBalance: true,
+            commissionRate: true,
+            referralCode: true,
+            totalCommission: true,
+          },
+        },
+        affiliateReferral: {
+          select: {
+            profile: {
+              select: {
+                referralCode: true,
+                user: {
+                  select: {
+                    email: true,
+                    name: true,
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-    take: 100,
-  });
+      take: 100,
+    });
 
-  return {
-    defaultCommissionRate: settings.defaultCommissionRate,
-    totalUsers: users.length,
-    users,
-  };
+    return {
+      affiliateSchemaIssue: settings.schemaIssue,
+      affiliateSchemaReady: settings.schemaReady,
+      defaultCommissionRate: settings.settings.defaultCommissionRate,
+      totalUsers: users.length,
+      users,
+    };
+  } catch (error) {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !("code" in error) ||
+      !["P2021", "P2022"].includes(String(error.code))
+    ) {
+      throw error;
+    }
+
+    const users = await prisma.user.findMany({
+      where: trimmedQuery
+        ? {
+            OR: [
+              {
+                email: {
+                  contains: trimmedQuery,
+                  mode: "insensitive",
+                },
+              },
+              {
+                name: {
+                  contains: trimmedQuery,
+                  mode: "insensitive",
+                },
+              },
+            ],
+          }
+        : undefined,
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        createdAt: true,
+        email: true,
+        id: true,
+        name: true,
+        _count: {
+          select: {
+            favorites: true,
+            sessions: true,
+            watchHistory: true,
+          },
+        },
+      },
+      take: 100,
+    });
+
+    return {
+      affiliateSchemaIssue:
+        settings.schemaIssue ??
+        "Data affiliate belum siap di database runtime. Kolom referral dan komisi sementara dinonaktifkan sampai migration dijalankan.",
+      affiliateSchemaReady: false,
+      defaultCommissionRate: settings.settings.defaultCommissionRate,
+      totalUsers: users.length,
+      users: users.map((user) => ({
+        ...user,
+        affiliateProfile: null,
+        affiliateReferral: null,
+      })),
+    };
+  }
 }

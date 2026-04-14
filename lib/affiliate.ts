@@ -5,6 +5,20 @@ import { prisma } from "@/lib/prisma";
 export const AFFILIATE_MINIMUM_WITHDRAW = 50_000;
 export const DEFAULT_AFFILIATE_COMMISSION_RATE = 25;
 
+type AffiliateProgramSettingsSnapshot = {
+  createdAt: Date;
+  defaultCommissionRate: number;
+  id: string;
+  slug: string;
+  updatedAt: Date;
+};
+
+type AffiliateProgramSettingsResult = {
+  schemaIssue: string | null;
+  schemaReady: boolean;
+  settings: AffiliateProgramSettingsSnapshot;
+};
+
 type AffiliateUser = {
   id: string;
   name: string;
@@ -12,6 +26,30 @@ type AffiliateUser = {
 
 function normalizeReferralCode(value: string) {
   return value.trim().toUpperCase();
+}
+
+function isRecordWithCode(
+  error: unknown,
+): error is { code?: string; message?: string; meta?: unknown } {
+  return typeof error === "object" && error !== null;
+}
+
+function isMissingAffiliateSchemaError(error: unknown) {
+  if (!isRecordWithCode(error)) {
+    return false;
+  }
+
+  if (error.code !== "P2021" && error.code !== "P2022") {
+    return false;
+  }
+
+  const message = typeof error.message === "string" ? error.message : "";
+
+  return (
+    message.includes("AffiliateProgramSettings") ||
+    message.includes("commissionRate") ||
+    message.includes("AffiliateProfile")
+  );
 }
 
 function referralBaseFromName(name: string) {
@@ -63,6 +101,56 @@ export async function ensureAffiliateProgramSettings() {
   });
 }
 
+export async function getAffiliateProgramSettingsSafe(): Promise<AffiliateProgramSettingsResult> {
+  try {
+    const settings = await ensureAffiliateProgramSettings();
+
+    return {
+      schemaIssue: null,
+      schemaReady: true,
+      settings,
+    };
+  } catch (error) {
+    if (!isMissingAffiliateSchemaError(error)) {
+      throw error;
+    }
+
+    return {
+      schemaIssue:
+        "Tabel affiliate settings belum ada di database runtime. Jalankan migration terbaru agar pengaturan komisi aktif penuh.",
+      schemaReady: false,
+      settings: {
+        createdAt: new Date(0),
+        defaultCommissionRate: DEFAULT_AFFILIATE_COMMISSION_RATE,
+        id: "affiliate-settings-fallback",
+        slug: "default",
+        updatedAt: new Date(0),
+      },
+    };
+  }
+}
+
+export async function getAffiliateProfileCountSafe() {
+  try {
+    return {
+      count: await prisma.affiliateProfile.count(),
+      schemaIssue: null,
+      schemaReady: true,
+    };
+  } catch (error) {
+    if (!isMissingAffiliateSchemaError(error)) {
+      throw error;
+    }
+
+    return {
+      count: 0,
+      schemaIssue:
+        "Tabel affiliate profile belum siap di database runtime. Data affiliate ditampilkan sebagai fallback sementara.",
+      schemaReady: false,
+    };
+  }
+}
+
 export async function ensureAffiliateProfile(user: AffiliateUser) {
   const existing = await prisma.affiliateProfile.findUnique({
     where: { userId: user.id },
@@ -73,12 +161,12 @@ export async function ensureAffiliateProfile(user: AffiliateUser) {
     return existing;
   }
 
-  const settings = await ensureAffiliateProgramSettings();
+  const settingsResult = await getAffiliateProgramSettingsSafe();
   const referralCode = await generateUniqueReferralCode(user.name);
 
   return prisma.affiliateProfile.create({
     data: {
-      commissionRate: settings.defaultCommissionRate,
+      commissionRate: settingsResult.settings.defaultCommissionRate,
       minimumWithdraw: AFFILIATE_MINIMUM_WITHDRAW,
       referralCode,
       userId: user.id,

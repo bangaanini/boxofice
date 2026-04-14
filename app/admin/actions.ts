@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { ensureAffiliateProgramSettings } from "@/lib/affiliate";
+import { getAffiliateProgramSettingsSafe } from "@/lib/affiliate";
 import { sanitizeAdminRedirectPath } from "@/lib/admin-auth";
 import { clearAdminSessionCookie, requireAdminSession } from "@/lib/admin-session";
 import {
@@ -236,8 +236,17 @@ export async function updateAffiliateProgramSettings(formData: FormData) {
   }
 
   const applyToExisting = formData.get("applyToExisting") === "on";
+  const settingsResult = await getAffiliateProgramSettingsSafe();
 
-  const settings = await ensureAffiliateProgramSettings();
+  if (!settingsResult.schemaReady) {
+    redirect(
+      `${redirectBasePath}?settings=error&message=${encodeURIComponent(
+        settingsResult.schemaIssue ??
+          "Database runtime belum siap untuk menyimpan setting affiliate.",
+      )}`,
+    );
+  }
+  const settings = settingsResult.settings;
 
   await prisma.$transaction(async (tx) => {
     await tx.affiliateProgramSettings.update({

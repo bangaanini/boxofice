@@ -2,7 +2,6 @@ CREATE TABLE "AffiliateProfile" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "referralCode" TEXT NOT NULL,
-    "commissionRate" INTEGER NOT NULL DEFAULT 25,
     "totalClicks" INTEGER NOT NULL DEFAULT 0,
     "totalSignups" INTEGER NOT NULL DEFAULT 0,
     "activeReferrals" INTEGER NOT NULL DEFAULT 0,
@@ -15,16 +14,6 @@ CREATE TABLE "AffiliateProfile" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "AffiliateProfile_pkey" PRIMARY KEY ("id")
-);
-
-CREATE TABLE "AffiliateProgramSettings" (
-    "id" TEXT NOT NULL,
-    "slug" TEXT NOT NULL DEFAULT 'default',
-    "defaultCommissionRate" INTEGER NOT NULL DEFAULT 25,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "AffiliateProgramSettings_pkey" PRIMARY KEY ("id")
 );
 
 CREATE TABLE "AffiliateReferral" (
@@ -67,7 +56,6 @@ CREATE TABLE "AffiliateActivity" (
 CREATE UNIQUE INDEX "AffiliateProfile_userId_key" ON "AffiliateProfile"("userId");
 CREATE UNIQUE INDEX "AffiliateProfile_referralCode_key" ON "AffiliateProfile"("referralCode");
 CREATE INDEX "AffiliateProfile_createdAt_idx" ON "AffiliateProfile"("createdAt");
-CREATE UNIQUE INDEX "AffiliateProgramSettings_slug_key" ON "AffiliateProgramSettings"("slug");
 
 CREATE UNIQUE INDEX "AffiliateReferral_referredUserId_key" ON "AffiliateReferral"("referredUserId");
 CREATE INDEX "AffiliateReferral_profileId_createdAt_idx" ON "AffiliateReferral"("profileId", "createdAt");

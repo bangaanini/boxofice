@@ -5,19 +5,25 @@ import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
-import { ensureAffiliateProgramSettings } from "@/lib/affiliate";
 import { getAdminOverviewData } from "@/lib/admin-dashboard";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [overview, settings] = await Promise.all([
-    getAdminOverviewData(),
-    ensureAffiliateProgramSettings(),
-  ]);
+  const overview = await getAdminOverviewData();
 
   return (
     <div className="space-y-6">
+      {!overview.affiliateSchemaReady ? (
+        <AdminSurface className="text-sm leading-6 text-amber-100">
+          <p className="font-semibold text-white">Affiliate perlu migration</p>
+          <p className="mt-2">
+            {overview.affiliateSchemaIssue ??
+              "Database runtime belum memiliki tabel affiliate terbaru. Panel admin tetap dibuka dengan fallback sementara."}
+          </p>
+        </AdminSurface>
+      ) : null}
+
       <AdminSurface>
         <p className="inline-flex items-center gap-2 rounded-full border border-orange-400/15 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-200">
           Dashboard utama
@@ -38,7 +44,7 @@ export default async function AdminOverviewPage() {
           />
           <AdminMetricCard
             label="Komisi default"
-            value={`${settings.defaultCommissionRate}%`}
+            value={`${overview.defaultCommissionRate}%`}
           />
         </div>
       </AdminSurface>
@@ -121,7 +127,7 @@ export default async function AdminOverviewPage() {
           <div className="mt-5">
             <AdminMetricCard
               label="Presentase saat ini"
-              value={`${settings.defaultCommissionRate}%`}
+              value={`${overview.defaultCommissionRate}%`}
             />
           </div>
 

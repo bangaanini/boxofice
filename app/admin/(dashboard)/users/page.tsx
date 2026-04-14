@@ -38,7 +38,13 @@ export default async function AdminUsersPage({
 }: AdminUsersPageProps) {
   const params = await searchParams;
   const query = typeof params.q === "string" ? params.q : undefined;
-  const { defaultCommissionRate, totalUsers, users } =
+  const {
+    affiliateSchemaIssue,
+    affiliateSchemaReady,
+    defaultCommissionRate,
+    totalUsers,
+    users,
+  } =
     await getAdminUserTableData(query);
 
   const referredUsers = users.filter((user) => user.affiliateReferral).length;
@@ -50,6 +56,16 @@ export default async function AdminUsersPage({
 
   return (
     <div className="space-y-6">
+      {!affiliateSchemaReady ? (
+        <AdminSurface className="text-sm leading-6 text-amber-100">
+          <p className="font-semibold text-white">Kolom affiliate fallback aktif</p>
+          <p className="mt-2">
+            {affiliateSchemaIssue ??
+              "Database runtime belum memuat skema affiliate lengkap. Data referred by dan komisi ditampilkan terbatas sementara."}
+          </p>
+        </AdminSurface>
+      ) : null}
+
       <AdminSurface>
         <p className="inline-flex items-center gap-2 rounded-full border border-orange-400/15 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-200">
           Tabel user
