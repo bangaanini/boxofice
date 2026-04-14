@@ -365,7 +365,7 @@ export function WatchPlayer({
         : 0;
       const now = Date.now();
 
-      if (!force && now - lastProgressReportRef.current < 15000) {
+      if (!force && now - lastProgressReportRef.current < 5000) {
         return;
       }
 
@@ -404,6 +404,10 @@ export function WatchPlayer({
     const handlePause = () => reportProgress(true);
     const handleEnded = () => reportProgress(true);
     const handlePageHide = () => reportProgress(true);
+    const progressIntervalId = window.setInterval(
+      () => reportProgress(false),
+      5000,
+    );
 
     currentVideo.addEventListener("timeupdate", handleTimeUpdate);
     currentVideo.addEventListener("pause", handlePause);
@@ -412,6 +416,7 @@ export function WatchPlayer({
 
     return () => {
       reportProgress(true);
+      window.clearInterval(progressIntervalId);
       currentVideo.removeEventListener("timeupdate", handleTimeUpdate);
       currentVideo.removeEventListener("pause", handlePause);
       currentVideo.removeEventListener("ended", handleEnded);

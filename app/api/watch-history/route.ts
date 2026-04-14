@@ -42,6 +42,10 @@ export async function POST(request: NextRequest) {
     body?.completed === true ||
     (durationSeconds !== null && progressSeconds >= Math.max(durationSeconds - 20, 1));
 
+  if (!completed && progressSeconds < 5) {
+    return NextResponse.json({ ok: true, skipped: "progress_too_low" });
+  }
+
   await prisma.watchHistory.upsert({
     where: {
       userId_movieId: {
@@ -58,7 +62,7 @@ export async function POST(request: NextRequest) {
     },
     update: {
       completed,
-      durationSeconds,
+      ...(durationSeconds !== null ? { durationSeconds } : {}),
       lastWatchedAt: new Date(),
       progressSeconds,
     },

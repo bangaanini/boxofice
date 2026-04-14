@@ -14,6 +14,8 @@ import {
 
 type DetailWatchActionsProps = {
   initialSaved: boolean;
+  initialOpen?: boolean;
+  initialProgressSeconds?: number;
   movieId: string;
   poster?: string | null;
   title: string;
@@ -21,12 +23,14 @@ type DetailWatchActionsProps = {
 
 export function DetailWatchActions({
   initialSaved,
+  initialOpen = false,
+  initialProgressSeconds = 0,
   movieId,
   poster,
   title,
 }: DetailWatchActionsProps) {
   const playerRef = React.useRef<HTMLDivElement | null>(null);
-  const [isPlayerOpen, setIsPlayerOpen] = React.useState(false);
+  const [isPlayerOpen, setIsPlayerOpen] = React.useState(initialOpen);
 
   React.useEffect(() => {
     const warmupId = window.setTimeout(() => {
@@ -107,6 +111,7 @@ export function DetailWatchActions({
           <WatchPlayer
             autoPlay
             defaultQuality="480p"
+            initialProgressSeconds={initialProgressSeconds}
             movieId={movieId}
             poster={poster}
           />

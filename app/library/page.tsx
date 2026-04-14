@@ -202,7 +202,7 @@ function HistoryList({
         return (
           <Link
             key={history.movie.id}
-            href={`/watch/${history.movie.id}`}
+            href={`/movie/${history.movie.id}?play=resume`}
             prefetch
             className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 rounded-md border border-white/10 bg-white/[0.04] p-2 transition-colors hover:bg-white/[0.08] sm:grid-cols-[120px_minmax(0,1fr)]"
           >

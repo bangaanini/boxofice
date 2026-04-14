@@ -16,6 +16,9 @@ type MoviePageProps = {
   params: Promise<{
     id: string;
   }>;
+  searchParams: Promise<{
+    play?: string;
+  }>;
 };
 
 function formatReleaseDate(value: string | undefined) {
@@ -95,37 +98,40 @@ function RelatedMoviesSection({ movies }: { movies: MovieCard[] }) {
   );
 }
 
-export default async function MoviePage({ params }: MoviePageProps) {
-  const { id } = await params;
-  const [movie, user] = await Promise.all([
-    prisma.movie.findUnique({
-      where: { id },
-      select: {
-        description: true,
-        genre: true,
-        id: true,
-        inHome: true,
-        inNew: true,
-        inPopular: true,
-        quality: true,
-        rating: true,
-        releaseDate: true,
-        actors: true,
-        directors: true,
-        thumbnail: true,
-        title: true,
-        year: true,
-        duration: true,
-      },
-    }),
+export default async function MoviePage({ params, searchParams }: MoviePageProps) {
+  const [{ id }, query, user] = await Promise.all([
+    params,
+    searchParams,
     getCurrentUserSession(),
   ]);
+  const movie = await prisma.movie.findUnique({
+    where: { id },
+    select: {
+      description: true,
+      genre: true,
+      id: true,
+      inHome: true,
+      inNew: true,
+      inPopular: true,
+      quality: true,
+      rating: true,
+      releaseDate: true,
+      actors: true,
+      directors: true,
+      thumbnail: true,
+      title: true,
+      year: true,
+      duration: true,
+    },
+  });
 
   if (!movie) {
     notFound();
   }
 
-  const [favorite, relatedMovies] = await Promise.all([
+  const shouldOpenPlayer =
+    query.play === "1" || query.play === "true" || query.play === "resume";
+  const [favorite, history, relatedMovies] = await Promise.all([
     user
       ? prisma.userFavorite.findUnique({
           where: {
@@ -136,6 +142,19 @@ export default async function MoviePage({ params }: MoviePageProps) {
           },
           select: {
             id: true,
+          },
+        })
+      : Promise.resolve(null),
+    user
+      ? prisma.watchHistory.findUnique({
+          where: {
+            userId_movieId: {
+              movieId: movie.id,
+              userId: user.id,
+            },
+          },
+          select: {
+            progressSeconds: true,
           },
         })
       : Promise.resolve(null),
@@ -234,6 +253,8 @@ export default async function MoviePage({ params }: MoviePageProps) {
 
               <DetailWatchActions
                 initialSaved={Boolean(favorite)}
+                initialOpen={shouldOpenPlayer}
+                initialProgressSeconds={history?.progressSeconds ?? 0}
                 movieId={movie.id}
                 poster={poster}
                 title={movie.title}
