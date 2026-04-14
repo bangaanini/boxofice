@@ -261,48 +261,72 @@ export function WatchPlayer({
     const mediaUrl = toMediaSourceUrl(activeSource);
     const resumeTime = resumeSnapshot?.time ?? 0;
     const hasResumeTarget = resumeTime > 1;
-    const resumeEvents = [
-      "durationchange",
-      "loadedmetadata",
-      "loadeddata",
-      "canplay",
-    ] as const;
+    let hasStartedPlayback = false;
+    const resumeEvents = ["loadedmetadata", "loadeddata", "canplay", "seeked"] as const;
 
-    function scheduleResumePlayback(delayMs: number) {
-      const timeoutId = window.setTimeout(resumePlayback, delayMs);
+    function scheduleResumeStep(delayMs: number) {
+      const timeoutId = window.setTimeout(runResumeStep, delayMs);
       resumeTimeoutIds.push(timeoutId);
     }
 
-    function resumePlayback() {
-      if (!resumeSnapshot || disposed) {
+    function getResumeTargetTime() {
+      if (!hasResumeTarget) {
+        return 0;
+      }
+
+      if (!Number.isFinite(video.duration)) {
+        return resumeTime;
+      }
+
+      return Math.min(resumeTime, Math.max(video.duration - 1, 0));
+    }
+
+    function applyResumeSeek() {
+      if (!hasResumeTarget || disposed) {
+        return true;
+      }
+
+      const targetTime = getResumeTargetTime();
+
+      if (Math.abs(video.currentTime - targetTime) <= 1) {
+        return true;
+      }
+
+      try {
+        const seekableVideo = video as VideoElementWithFastSeek;
+
+        if (typeof seekableVideo.fastSeek === "function") {
+          seekableVideo.fastSeek(targetTime);
+        } else {
+          video.currentTime = targetTime;
+        }
+      } catch {
+        return false;
+      }
+
+      return Math.abs(video.currentTime - targetTime) <= 1;
+    }
+
+    function playWhenResumeReady() {
+      if (!resumeSnapshot?.shouldPlay || hasStartedPlayback || disposed) {
         return;
       }
 
-      if (hasResumeTarget) {
-        try {
-          const duration = Number.isFinite(video.duration)
-            ? Math.max(video.duration - 1, 0)
-            : null;
-          const targetTime =
-            duration !== null ? Math.min(resumeTime, duration) : resumeTime;
-
-          if (Math.abs(video.currentTime - targetTime) > 1) {
-            const seekableVideo = video as VideoElementWithFastSeek;
-
-            if (typeof seekableVideo.fastSeek === "function") {
-              seekableVideo.fastSeek(targetTime);
-            } else {
-              video.currentTime = targetTime;
-            }
-          }
-        } catch {
-          scheduleResumePlayback(300);
-          return;
-        }
+      if (hasResumeTarget && Math.abs(video.currentTime - getResumeTargetTime()) > 2) {
+        return;
       }
 
-      if (resumeSnapshot.shouldPlay) {
-        void video.play().catch(() => undefined);
+      hasStartedPlayback = true;
+      void video.play().catch(() => {
+        hasStartedPlayback = false;
+      });
+    }
+
+    function runResumeStep() {
+      const isSeeked = applyResumeSeek();
+
+      if (isSeeked) {
+        playWhenResumeReady();
       }
     }
 
@@ -319,14 +343,14 @@ export function WatchPlayer({
       video.poster = poster ?? "";
       video.addEventListener("error", handleNativeError);
       resumeEvents.forEach((eventName) => {
-        video.addEventListener(eventName, resumePlayback);
+        video.addEventListener(eventName, runResumeStep);
       });
-      scheduleResumePlayback(450);
-      scheduleResumePlayback(1200);
 
       if (!isHlsSource(activeSource)) {
         video.src = mediaUrl;
         video.load();
+        scheduleResumeStep(250);
+        scheduleResumeStep(900);
         return;
       }
 
@@ -345,24 +369,25 @@ export function WatchPlayer({
           startPosition: hasResumeTarget ? resumeTime : -1,
         });
         hlsRef.current = hls;
-        hls.attachMedia(video);
-        hls.loadSource(mediaUrl);
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          hls?.loadSource(mediaUrl);
+        });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (hasResumeTarget) {
             hls?.startLoad(resumeTime);
           }
 
-          resumePlayback();
-          scheduleResumePlayback(120);
-          scheduleResumePlayback(450);
-          scheduleResumePlayback(1100);
+          runResumeStep();
+          scheduleResumeStep(120);
+          scheduleResumeStep(450);
+          scheduleResumeStep(1100);
         });
         hls.on(Hls.Events.LEVEL_LOADED, () => {
-          resumePlayback();
-          scheduleResumePlayback(200);
+          runResumeStep();
+          scheduleResumeStep(200);
         });
         hls.on(Hls.Events.FRAG_BUFFERED, () => {
-          resumePlayback();
+          runResumeStep();
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
@@ -371,6 +396,7 @@ export function WatchPlayer({
             moveToNextPlayableSource(activeSource.url);
           }
         });
+        hls.attachMedia(video);
         return;
       }
 
@@ -380,6 +406,8 @@ export function WatchPlayer({
       ) {
         video.src = mediaUrl;
         video.load();
+        scheduleResumeStep(250);
+        scheduleResumeStep(900);
         return;
       }
 
@@ -394,7 +422,7 @@ export function WatchPlayer({
         window.clearTimeout(timeoutId);
       });
       resumeEvents.forEach((eventName) => {
-        video.removeEventListener(eventName, resumePlayback);
+        video.removeEventListener(eventName, runResumeStep);
       });
       video.removeEventListener("error", handleNativeError);
       hls?.destroy();
