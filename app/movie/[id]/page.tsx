@@ -129,8 +129,6 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
     notFound();
   }
 
-  const shouldOpenPlayer =
-    query.play === "1" || query.play === "true" || query.play === "resume";
   const [favorite, history, relatedMovies] = await Promise.all([
     user
       ? prisma.userFavorite.findUnique({
@@ -167,6 +165,11 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
       limit: 14,
     }),
   ]);
+  const resumeProgressSeconds = history?.progressSeconds ?? 0;
+  const shouldShowResumePrompt =
+    query.play === "resume" && resumeProgressSeconds > 5;
+  const shouldOpenPlayer =
+    (query.play === "1" || query.play === "true") && !shouldShowResumePrompt;
 
   const poster = movie.thumbnail;
   const fallbackSynopsis =
@@ -254,9 +257,10 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
               <DetailWatchActions
                 initialSaved={Boolean(favorite)}
                 initialOpen={shouldOpenPlayer}
-                initialProgressSeconds={history?.progressSeconds ?? 0}
+                initialProgressSeconds={resumeProgressSeconds}
                 movieId={movie.id}
                 poster={poster}
+                showResumePrompt={shouldShowResumePrompt}
                 title={movie.title}
               />
 

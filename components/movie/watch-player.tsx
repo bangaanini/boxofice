@@ -323,6 +323,10 @@ export function WatchPlayer({
           backBufferLength: 60,
           enableWorker: true,
           maxBufferLength: 45,
+          startPosition:
+            resumeSnapshot && resumeSnapshot.time > 1
+              ? resumeSnapshot.time
+              : -1,
         });
         hlsRef.current = hls;
         hls.attachMedia(video);
