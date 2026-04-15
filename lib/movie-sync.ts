@@ -2,8 +2,8 @@ import {
   fetchDetail,
   fetchHome,
   fetchNew,
+  fetchPlayableStream,
   fetchPopular,
-  fetchStream,
   type MovieDetail,
   type MovieListResult,
   type SanitizedStreamResponse,
@@ -19,6 +19,7 @@ export const MAX_SYNC_PAGES = 20;
 const DEFAULT_SYNC_STREAM_VALIDATION_CONCURRENCY = 3;
 const MAX_SYNC_STREAM_VALIDATION_CONCURRENCY = 8;
 const DEFAULT_STREAM_CACHE_TTL_HOURS = 24;
+const STREAM_REUSABLE_FRESH_MS = 15 * 60 * 1000;
 
 type FeedDbField = "inHome" | "inPopular" | "inNew";
 
@@ -101,6 +102,27 @@ export type CombinedSyncSummary = {
   totalDeactivated: number;
   pages: number;
   targets: Record<MovieFeedTarget, FeedSyncSummary>;
+};
+
+export type FeedAuditSummary = {
+  target: MovieFeedTarget;
+  checked: number;
+  playable: number;
+  broken: number;
+  hidden: number;
+  refreshed: number;
+  errors: string[];
+};
+
+export type CombinedAuditSummary = {
+  totalChecked: number;
+  totalPlayable: number;
+  totalBroken: number;
+  totalHidden: number;
+  totalRefreshed: number;
+  totalErrors: number;
+  targets: Record<MovieFeedTarget, FeedAuditSummary>;
+  errors: string[];
 };
 
 export type TitleCleanupSummary = {
@@ -314,6 +336,10 @@ function hasCachedStream(cache: ExistingSyncedMovie["streamCache"]) {
   return Array.isArray(cache?.sources) && cache.sources.length > 0;
 }
 
+function isReusableStreamFresh(cache: ExistingSyncedMovie["streamCache"]) {
+  return Boolean(cache?.checkedAt) && !isStale(cache?.checkedAt, STREAM_REUSABLE_FRESH_MS);
+}
+
 async function fetchMovieEnrichment(sourceUrl: string) {
   let detail: MovieDetail | null = null;
   let stream: SanitizedStreamResponse | null = null;
@@ -325,7 +351,7 @@ async function fetchMovieEnrichment(sourceUrl: string) {
   }
 
   try {
-    stream = await fetchStream(detail?.streams ?? sourceUrl, {
+    stream = await fetchPlayableStream(sourceUrl, {
       revalidate: 1800,
     });
   } catch {
@@ -361,6 +387,27 @@ async function writeStreamCache(
       m3u8: stream.m3u8,
       sources: stream.sources,
       checkedAt: new Date(),
+    },
+  });
+}
+
+async function clearStreamCache(movieId: string) {
+  await prisma.movieStreamCache.deleteMany({
+    where: {
+      movieId,
+    },
+  });
+}
+
+async function hideMovieFromCatalog(movieId: string) {
+  await prisma.movie.update({
+    where: {
+      id: movieId,
+    },
+    data: {
+      inHome: false,
+      inPopular: false,
+      inNew: false,
     },
   });
 }
@@ -481,7 +528,7 @@ export async function syncMovieFeed(
         const hasReusableStream =
           existing?.[config.dbField] === true &&
           hasCachedStream(existing.streamCache) &&
-          !isStale(existing.streamCache?.checkedAt, resolveStreamCacheTtlMs());
+          isReusableStreamFresh(existing.streamCache);
         const shouldFetchEnrichment =
           !hasReusableStream ||
           isStale(existing?.detailSyncedAt, resolveStreamCacheTtlMs());
@@ -572,6 +619,165 @@ export async function syncMovieFeed(
   );
 
   return summary;
+}
+
+function createAuditSummary(target: MovieFeedTarget): FeedAuditSummary {
+  return {
+    target,
+    checked: 0,
+    playable: 0,
+    broken: 0,
+    hidden: 0,
+    refreshed: 0,
+    errors: [],
+  };
+}
+
+function activeTargetsForMovie(movie: {
+  inHome: boolean;
+  inPopular: boolean;
+  inNew: boolean;
+}) {
+  const targets: MovieFeedTarget[] = [];
+
+  if (movie.inHome) {
+    targets.push("home");
+  }
+
+  if (movie.inPopular) {
+    targets.push("popular");
+  }
+
+  if (movie.inNew) {
+    targets.push("new");
+  }
+
+  return targets;
+}
+
+type AuditedMovie = {
+  id: string;
+  inHome: boolean;
+  inNew: boolean;
+  inPopular: boolean;
+  sourceUrl: string;
+  title: string;
+};
+
+async function resolveAuditedMovies(target: MovieFeedTarget | "all") {
+  return prisma.movie.findMany({
+    where:
+      target === "all"
+        ? {
+            OR: [{ inHome: true }, { inPopular: true }, { inNew: true }],
+          }
+        : {
+            [FEED_CONFIG[target].dbField]: true,
+          },
+    orderBy: {
+      updatedAt: "desc",
+    },
+    select: {
+      id: true,
+      inHome: true,
+      inNew: true,
+      inPopular: true,
+      sourceUrl: true,
+      title: true,
+    },
+  });
+}
+
+export async function auditMovieCatalog(
+  target: MovieFeedTarget | "all",
+  options: { autoHide?: boolean } = {},
+): Promise<FeedAuditSummary | CombinedAuditSummary> {
+  const autoHide = options.autoHide ?? true;
+  const movies = await resolveAuditedMovies(target);
+  const targets: Record<MovieFeedTarget, FeedAuditSummary> = {
+    home: createAuditSummary("home"),
+    popular: createAuditSummary("popular"),
+    new: createAuditSummary("new"),
+  };
+  const errors: string[] = [];
+  const totals = {
+    broken: 0,
+    checked: 0,
+    hidden: 0,
+    playable: 0,
+    refreshed: 0,
+  };
+
+  await runWithConcurrency(
+    movies,
+    resolveValidationConcurrency(),
+    async (movie: AuditedMovie) => {
+      const affectedTargets =
+        target === "all" ? activeTargetsForMovie(movie) : [target];
+
+      totals.checked += 1;
+      affectedTargets.forEach((feedTarget) => {
+        targets[feedTarget].checked += 1;
+      });
+
+      try {
+        const stream = await fetchPlayableStream(movie.sourceUrl, {
+          revalidate: 60,
+        });
+
+        if (!stream.sources.length) {
+          totals.broken += 1;
+          affectedTargets.forEach((feedTarget) => {
+            targets[feedTarget].broken += 1;
+          });
+
+          await clearStreamCache(movie.id);
+
+          if (autoHide) {
+            await hideMovieFromCatalog(movie.id);
+            totals.hidden += 1;
+            affectedTargets.forEach((feedTarget) => {
+              targets[feedTarget].hidden += 1;
+            });
+          }
+
+          return;
+        }
+
+        await writeStreamCache(movie.id, movie.sourceUrl, stream);
+        totals.playable += 1;
+        totals.refreshed += 1;
+        affectedTargets.forEach((feedTarget) => {
+          targets[feedTarget].playable += 1;
+          targets[feedTarget].refreshed += 1;
+        });
+      } catch (error) {
+        const message = `Audit gagal untuk ${movie.title}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`;
+
+        errors.push(message);
+        affectedTargets.forEach((feedTarget) => {
+          targets[feedTarget].errors.push(message);
+        });
+      }
+    },
+  );
+
+  if (target === "all") {
+    return {
+      totalChecked: totals.checked,
+      totalPlayable: totals.playable,
+      totalBroken: totals.broken,
+      totalHidden: totals.hidden,
+      totalRefreshed: totals.refreshed,
+      totalErrors: errors.length,
+      targets,
+      errors,
+    };
+  }
+
+  return targets[target];
 }
 
 export async function syncAllMovieFeeds(

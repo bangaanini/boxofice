@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const STREAM_CACHE_FRESH_MS = 15 * 60 * 1000;
 
 type CachedStreamSource = {
   url: string;
@@ -14,6 +15,7 @@ type CachedStreamSource = {
 };
 
 type CachedMovieStream = {
+  checkedAt: Date;
   iframe: string | null;
   m3u8: string | null;
   originalUrl: string | null;
@@ -54,6 +56,10 @@ function cachedStreamResponse(cache: CachedMovieStream) {
   };
 }
 
+function isCacheFresh(checkedAt: Date) {
+  return Date.now() - checkedAt.getTime() <= STREAM_CACHE_FRESH_MS;
+}
+
 async function resolveStreamLookup(request: NextRequest) {
   const sourceUrl = request.nextUrl.searchParams.get("sourceUrl");
 
@@ -65,6 +71,7 @@ async function resolveStreamLookup(request: NextRequest) {
         sourceUrl: true,
         streamCache: {
           select: {
+            checkedAt: true,
             iframe: true,
             m3u8: true,
             originalUrl: true,
@@ -95,6 +102,7 @@ async function resolveStreamLookup(request: NextRequest) {
       sourceUrl: true,
       streamCache: {
         select: {
+          checkedAt: true,
           iframe: true,
           m3u8: true,
           originalUrl: true,
@@ -125,11 +133,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const cachedStream = lookup.streamCache
-      ? cachedStreamResponse(lookup.streamCache)
-      : null;
+    const streamCache = lookup.streamCache;
+    const cachedStream = streamCache ? cachedStreamResponse(streamCache) : null;
 
-    if (cachedStream) {
+    if (cachedStream && streamCache && isCacheFresh(streamCache.checkedAt)) {
       return NextResponse.json(cachedStream, {
         headers: {
           "Cache-Control": "s-maxage=3600, stale-while-revalidate=300",
@@ -141,34 +148,46 @@ export async function GET(request: NextRequest) {
       revalidate: 3600,
     });
 
-    if (lookup.movieId && stream.sources.length) {
-      await prisma.movieStreamCache
-        .upsert({
-          where: {
-            movieId: lookup.movieId,
-          },
-          create: {
-            movieId: lookup.movieId,
-            sourceUrl: lookup.sourceUrl,
-            resolvedFrom: stream.resolvedFrom,
-            originalUrl: stream.originalUrl,
-            iframe: stream.iframe,
-            m3u8: stream.m3u8,
-            sources: stream.sources,
-            checkedAt: new Date(),
-          },
-          update: {
-            resolvedFrom: stream.resolvedFrom,
-            originalUrl: stream.originalUrl,
-            iframe: stream.iframe,
-            m3u8: stream.m3u8,
-            sources: stream.sources,
-            checkedAt: new Date(),
-          },
-        })
-        .catch((error) => {
-          console.error("Failed to write stream cache", error);
-        });
+    if (lookup.movieId) {
+      if (stream.sources.length) {
+        await prisma.movieStreamCache
+          .upsert({
+            where: {
+              movieId: lookup.movieId,
+            },
+            create: {
+              movieId: lookup.movieId,
+              sourceUrl: lookup.sourceUrl,
+              resolvedFrom: stream.resolvedFrom,
+              originalUrl: stream.originalUrl,
+              iframe: stream.iframe,
+              m3u8: stream.m3u8,
+              sources: stream.sources,
+              checkedAt: new Date(),
+            },
+            update: {
+              resolvedFrom: stream.resolvedFrom,
+              originalUrl: stream.originalUrl,
+              iframe: stream.iframe,
+              m3u8: stream.m3u8,
+              sources: stream.sources,
+              checkedAt: new Date(),
+            },
+          })
+          .catch((error) => {
+            console.error("Failed to write stream cache", error);
+          });
+      } else {
+        await prisma.movieStreamCache
+          .deleteMany({
+            where: {
+              movieId: lookup.movieId,
+            },
+          })
+          .catch((error) => {
+            console.error("Failed to clear broken stream cache", error);
+          });
+      }
     }
 
     return NextResponse.json(

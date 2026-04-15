@@ -8,10 +8,15 @@ import { cn } from "@/lib/utils";
 
 type SyncSubmitButtonProps = {
   label: string;
+  pendingLabel?: string;
   target: string;
 };
 
-export function SyncSubmitButton({ label, target }: SyncSubmitButtonProps) {
+export function SyncSubmitButton({
+  label,
+  pendingLabel = "Menyinkronkan...",
+  target,
+}: SyncSubmitButtonProps) {
   const { data, pending } = useFormStatus();
   const activeTarget = data?.get("target");
   const isActive = pending && activeTarget === target;
@@ -30,7 +35,7 @@ export function SyncSubmitButton({ label, target }: SyncSubmitButtonProps) {
       )}
     >
       <RefreshCw className={cn("size-4", isActive && "animate-spin")} />
-      {isActive ? "Menyinkronkan..." : label}
+      {isActive ? pendingLabel : label}
     </Button>
   );
 }

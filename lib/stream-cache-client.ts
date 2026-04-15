@@ -124,6 +124,20 @@ export function writeCachedStream(
   writeSessionCache(key, entry);
 }
 
+export function clearCachedStream(key: string) {
+  memoryCache.delete(key);
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(storageKey(key));
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
 export async function prefetchCachedStream(lookup: StreamLookup) {
   const cached = readCachedStream(lookup.cacheKey);
 

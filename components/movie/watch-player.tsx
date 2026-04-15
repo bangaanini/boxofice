@@ -6,6 +6,7 @@ import type Hls from "hls.js";
 
 import { Button } from "@/components/ui/button";
 import {
+  clearCachedStream,
   getMovieStreamCacheKey,
   getSourceStreamCacheKey,
   prefetchCachedStream,
@@ -348,11 +349,15 @@ export function WatchPlayer({
         return;
       }
 
+      if (streamCacheKey) {
+        clearCachedStream(streamCacheKey);
+      }
+
       setError(
         "Sumber video langsung dari upstream belum bisa diputar di pemutar ini.",
       );
     },
-    [failedSourceUrls, sources],
+    [failedSourceUrls, sources, streamCacheKey],
   );
 
   React.useEffect(() => {
@@ -860,6 +865,14 @@ export function WatchPlayer({
     pulseChrome();
   }
 
+  function retryLoad() {
+    if (streamCacheKey) {
+      clearCachedStream(streamCacheKey);
+    }
+
+    setRetryCount((value) => value + 1);
+  }
+
   const shouldRotateImmersive = isImmersive && isPortraitViewport;
 
   if (!stream && !error) {
@@ -898,7 +911,7 @@ export function WatchPlayer({
         <p className="max-w-md text-sm leading-6 text-neutral-400">
           {error}
         </p>
-        <Button onClick={() => setRetryCount((value) => value + 1)}>
+        <Button onClick={retryLoad}>
           <RotateCw className="size-4" />
           Coba lagi
         </Button>
@@ -917,7 +930,7 @@ export function WatchPlayer({
           iframe. Judul seperti ini akan disaring dari katalog setelah sync
           berikutnya.
         </p>
-        <Button onClick={() => setRetryCount((value) => value + 1)}>
+        <Button onClick={retryLoad}>
           <RotateCw className="size-4" />
           Coba lagi
         </Button>

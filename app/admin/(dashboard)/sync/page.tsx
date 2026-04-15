@@ -1,4 +1,5 @@
 import {
+  auditCatalogFromAdmin,
   cleanupMovieTitlesFromAdmin,
   syncMoviesFromAdmin,
 } from "@/app/admin/actions";
@@ -16,6 +17,30 @@ export const dynamic = "force-dynamic";
 type AdminSyncPageProps = {
   searchParams: Promise<{
     active?: string;
+    audit?: string;
+    auditBroken?: string;
+    auditChecked?: string;
+    auditErrors?: string;
+    auditHidden?: string;
+    auditHomeBroken?: string;
+    auditHomeChecked?: string;
+    auditHomeErrors?: string;
+    auditHomeHidden?: string;
+    auditHomePlayable?: string;
+    auditMessage?: string;
+    auditNewBroken?: string;
+    auditNewChecked?: string;
+    auditNewErrors?: string;
+    auditNewHidden?: string;
+    auditNewPlayable?: string;
+    auditPlayable?: string;
+    auditPopularBroken?: string;
+    auditPopularChecked?: string;
+    auditPopularErrors?: string;
+    auditPopularHidden?: string;
+    auditPopularPlayable?: string;
+    auditRefreshed?: string;
+    auditTarget?: string;
     created?: string;
     duplicateSkipped?: string;
     errors?: string;
@@ -104,6 +129,36 @@ function FeedReportRow({
       <p className="text-xs leading-6 text-neutral-400">
         Fetched: {fetched ?? "0"} · Unsupported:{" "}
         {skippedUnsupported ?? "0"} · Error: {errors ?? "0"}
+      </p>
+    </div>
+  );
+}
+
+function AuditReportRow({
+  label,
+  checked,
+  playable,
+  broken,
+  hidden,
+  errors,
+}: {
+  label: string;
+  checked?: string;
+  playable?: string;
+  broken?: string;
+  hidden?: string;
+  errors?: string;
+}) {
+  return (
+    <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
+      <p className="text-sm font-semibold text-white">{label}</p>
+      <p className="mt-2 text-xs leading-6 text-neutral-300">
+        Dicek: <strong>{checked ?? "0"}</strong> · Playable:{" "}
+        <strong>{playable ?? "0"}</strong> · Broken:{" "}
+        <strong>{broken ?? "0"}</strong>
+      </p>
+      <p className="text-xs leading-6 text-neutral-400">
+        Disembunyikan: {hidden ?? "0"} · Error audit: {errors ?? "0"}
       </p>
     </div>
   );
@@ -247,6 +302,111 @@ function TitleCleanupBanner({
   );
 }
 
+function AuditResultBanner({
+  params,
+}: {
+  params: Awaited<AdminSyncPageProps["searchParams"]>;
+}) {
+  if (!params.audit) {
+    return null;
+  }
+
+  return (
+    <AdminSurface className="text-sm leading-6 text-neutral-200">
+      {params.audit === "error" ? (
+        <span className="text-red-200">
+          Audit {params.auditTarget ?? "katalog"} gagal:{" "}
+          {params.auditMessage ?? "terjadi kesalahan saat mengecek stream"}
+        </span>
+      ) : params.auditTarget === "all" ? (
+        <div className="space-y-3">
+          <p className="font-semibold text-white">
+            Audit semua katalog {params.audit === "partial" ? "selesai sebagian." : "selesai."}
+          </p>
+          <div className="grid gap-2 lg:grid-cols-5">
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Dicek: <strong>{params.auditChecked ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Masih playable: <strong>{params.auditPlayable ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Broken: <strong>{params.auditBroken ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Disembunyikan: <strong>{params.auditHidden ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Error audit: <strong>{params.auditErrors ?? "0"}</strong>
+            </span>
+          </div>
+          <div className="grid gap-3 xl:grid-cols-3">
+            <AuditReportRow
+              label="Audit home"
+              checked={params.auditHomeChecked}
+              playable={params.auditHomePlayable}
+              broken={params.auditHomeBroken}
+              hidden={params.auditHomeHidden}
+              errors={params.auditHomeErrors}
+            />
+            <AuditReportRow
+              label="Audit populer"
+              checked={params.auditPopularChecked}
+              playable={params.auditPopularPlayable}
+              broken={params.auditPopularBroken}
+              hidden={params.auditPopularHidden}
+              errors={params.auditPopularErrors}
+            />
+            <AuditReportRow
+              label="Audit new"
+              checked={params.auditNewChecked}
+              playable={params.auditNewPlayable}
+              broken={params.auditNewBroken}
+              hidden={params.auditNewHidden}
+              errors={params.auditNewErrors}
+            />
+          </div>
+          <p className="text-xs leading-5 text-neutral-400">
+            Temuan utamanya sekarang cukup jelas: sebagian judul gagal bukan
+            karena layout player, tapi karena link HLS dari upstream yang dulu
+            valid sekarang sudah tidak merespons lagi. Audit ini merapikan
+            katalog berdasarkan kondisi sumber terbaru.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="font-semibold text-white">
+            Audit {params.auditTarget ?? "feed"}{" "}
+            {params.audit === "partial" ? "selesai sebagian." : "selesai."}
+          </p>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Dicek: <strong>{params.auditChecked ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Playable: <strong>{params.auditPlayable ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Broken: <strong>{params.auditBroken ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Disembunyikan: <strong>{params.auditHidden ?? "0"}</strong>
+            </span>
+            <span className="rounded-md bg-black/30 px-3 py-2">
+              Error audit: <strong>{params.auditErrors ?? "0"}</strong>
+            </span>
+          </div>
+          <p className="text-xs leading-5 text-neutral-400">
+            Cache stream yang rusak sekarang ikut dibersihkan. Judul yang tidak
+            lagi punya sumber valid akan otomatis hilang dari rails agar home
+            tetap bersih.
+          </p>
+        </div>
+      )}
+    </AdminSurface>
+  );
+}
+
 export default async function AdminSyncPage({
   searchParams,
 }: AdminSyncPageProps) {
@@ -274,6 +434,7 @@ export default async function AdminSyncPage({
       </AdminSurface>
 
       <SyncResultBanner params={params} />
+      <AuditResultBanner params={params} />
       <TitleCleanupBanner params={params} />
 
       <AdminSurface>
@@ -334,6 +495,62 @@ export default async function AdminSyncPage({
           >
             Bersihkan judul
           </Button>
+        </form>
+      </AdminSurface>
+
+      <AdminSurface>
+        <p className="text-sm font-semibold text-orange-200">Audit stream</p>
+        <h2 className="mt-2 text-2xl font-bold text-white">
+          Cek film yang sudah tidak bisa diputar
+        </h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-400">
+          Audit akan mengecek ulang sumber stream aktif langsung ke upstream.
+          Jika sumbernya benar-benar mati, cache akan dibersihkan dan judul bisa
+          otomatis disembunyikan dari katalog supaya user tidak lagi masuk ke
+          detail yang error.
+        </p>
+
+        <form action={auditCatalogFromAdmin} className="mt-5 space-y-4">
+          <input type="hidden" name="redirectTo" value="/admin/sync" />
+          <label className="flex items-start gap-3 rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-neutral-300">
+            <input
+              type="checkbox"
+              name="autoHideBroken"
+              value="on"
+              defaultChecked
+              className="mt-1 size-4 rounded border-white/15 bg-black/30"
+            />
+            <span>
+              <strong className="block text-white">
+                Auto hide film yang broken
+              </strong>
+              Kalau dimatikan, audit hanya membuat laporan dan membersihkan cache
+              rusak tanpa mengubah visibilitas film di home.
+            </span>
+          </label>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SyncSubmitButton
+              label="Audit All"
+              pendingLabel="Mengaudit..."
+              target="all"
+            />
+            <SyncSubmitButton
+              label="Audit Home"
+              pendingLabel="Mengaudit..."
+              target="home"
+            />
+            <SyncSubmitButton
+              label="Audit Populer"
+              pendingLabel="Mengaudit..."
+              target="popular"
+            />
+            <SyncSubmitButton
+              label="Audit New"
+              pendingLabel="Mengaudit..."
+              target="new"
+            />
+          </div>
         </form>
       </AdminSurface>
     </div>

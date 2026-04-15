@@ -8,6 +8,7 @@ import { sanitizeAdminRedirectPath } from "@/lib/admin-auth";
 import { clearAdminSessionCookie, requireAdminSession } from "@/lib/admin-session";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 import {
+  auditMovieCatalog,
   cleanupMovieTitles,
   resolveSyncPage,
   syncMovieFeed,
@@ -139,6 +140,71 @@ async function syncAllFeedsForPage(page: number) {
   };
 }
 
+function buildSingleAuditParams(
+  target: MovieFeedTarget,
+  summary: Awaited<ReturnType<typeof auditMovieCatalog>>,
+) {
+  const resolvedSummary = summary as Extract<
+    Awaited<ReturnType<typeof auditMovieCatalog>>,
+    { target: MovieFeedTarget }
+  >;
+
+  return new URLSearchParams({
+    audit: resolvedSummary.errors.length ? "partial" : "ok",
+    auditBroken: String(resolvedSummary.broken),
+    auditChecked: String(resolvedSummary.checked),
+    auditErrors: String(resolvedSummary.errors.length),
+    auditHidden: String(resolvedSummary.hidden),
+    auditMessage: resolvedSummary.errors[0] ?? "",
+    auditPlayable: String(resolvedSummary.playable),
+    auditRefreshed: String(resolvedSummary.refreshed),
+    auditTarget: target,
+  });
+}
+
+function buildAllAuditParams(
+  summary: Extract<
+    Awaited<ReturnType<typeof auditMovieCatalog>>,
+    { targets: Record<MovieFeedTarget, unknown> }
+  >,
+) {
+  const home = summary.targets.home;
+  const popular = summary.targets.popular;
+  const latest = summary.targets.new;
+
+  return new URLSearchParams({
+    audit: summary.totalErrors > 0 ? "partial" : "ok",
+    auditBroken: String(summary.totalBroken),
+    auditChecked: String(summary.totalChecked),
+    auditErrors: String(summary.totalErrors),
+    auditHidden: String(summary.totalHidden),
+    auditMessage:
+      summary.errors[0] ??
+      home.errors[0] ??
+      popular.errors[0] ??
+      latest.errors[0] ??
+      "",
+    auditPlayable: String(summary.totalPlayable),
+    auditRefreshed: String(summary.totalRefreshed),
+    auditTarget: "all",
+    auditHomeBroken: String(home.broken),
+    auditHomeChecked: String(home.checked),
+    auditHomeErrors: String(home.errors.length),
+    auditHomeHidden: String(home.hidden),
+    auditHomePlayable: String(home.playable),
+    auditPopularBroken: String(popular.broken),
+    auditPopularChecked: String(popular.checked),
+    auditPopularErrors: String(popular.errors.length),
+    auditPopularHidden: String(popular.hidden),
+    auditPopularPlayable: String(popular.playable),
+    auditNewBroken: String(latest.broken),
+    auditNewChecked: String(latest.checked),
+    auditNewErrors: String(latest.errors.length),
+    auditNewHidden: String(latest.hidden),
+    auditNewPlayable: String(latest.playable),
+  });
+}
+
 export async function syncMoviesFromAdmin(formData: FormData) {
   await requireAdminSession();
   const rawTarget = String(formData.get("target") ?? "");
@@ -209,6 +275,59 @@ export async function cleanupMovieTitlesFromAdmin(formData: FormData) {
       message:
         error instanceof Error ? error.message : "Gagal membersihkan judul",
       titleCleanup: "error",
+    });
+
+    redirectPath = `${redirectBasePath}?${params.toString()}`;
+  }
+
+  redirect(redirectPath);
+}
+
+export async function auditCatalogFromAdmin(formData: FormData) {
+  await requireAdminSession();
+  const rawTarget = String(formData.get("target") ?? "");
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/sync");
+  const target =
+    rawTarget === "home" || rawTarget === "popular" || rawTarget === "new"
+      ? rawTarget
+      : rawTarget === "all"
+        ? "all"
+        : "all";
+
+  let redirectPath = `${redirectBasePath}?audit=ok&auditTarget=${target}`;
+
+  try {
+    const summary = await auditMovieCatalog(target, {
+      autoHide: formData.get("autoHideBroken") === "on",
+    });
+    const params =
+      target === "all"
+        ? buildAllAuditParams(
+            summary as Extract<
+              Awaited<ReturnType<typeof auditMovieCatalog>>,
+              { targets: Record<MovieFeedTarget, unknown> }
+            >,
+          )
+        : buildSingleAuditParams(
+            target,
+            summary as Extract<
+              Awaited<ReturnType<typeof auditMovieCatalog>>,
+              { target: MovieFeedTarget }
+            >,
+          );
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    revalidatePath("/admin/sync");
+    revalidatePath("/browse/home");
+    revalidatePath("/browse/populer");
+    revalidatePath("/browse/new");
+    redirectPath = `${redirectBasePath}?${params.toString()}`;
+  } catch (error) {
+    const params = new URLSearchParams({
+      audit: "error",
+      auditMessage: error instanceof Error ? error.message : "Audit gagal",
+      auditTarget: target,
     });
 
     redirectPath = `${redirectBasePath}?${params.toString()}`;
