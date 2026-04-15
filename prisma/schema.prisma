@@ -306,17 +306,23 @@ model AffiliateReferral {
 }
 
 model AffiliatePayoutRequest {
-  id        String           @id @default(uuid())
-  profileId  String
-  amount     Int
-  status     String          @default("pending")
-  note       String?         @db.Text
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  profile    AffiliateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id             String            @id @default(uuid())
+  profileId      String
+  amount         Int
+  payoutMethod   String
+  payoutProvider String
+  recipientName  String
+  accountNumber  String
+  status         String            @default("pending")
+  note           String?           @db.Text
+  processedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  profile        AffiliateProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, createdAt])
   @@index([status])
+  @@index([processedAt])
 }
 
 model AffiliateActivity {

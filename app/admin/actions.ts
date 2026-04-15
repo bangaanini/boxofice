@@ -947,6 +947,197 @@ export async function deleteUserAccount(formData: FormData) {
   );
 }
 
+export async function manageAffiliatePayoutRequest(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/withdrawals");
+  const payoutId = readTextField(formData, "payoutId");
+  const intent = readTextField(formData, "intent");
+  const note = readNullableTextField(formData, "note");
+
+  if (!payoutId) {
+    redirect(
+      `${redirectBasePath}?withdraw=error&message=${encodeURIComponent("Permintaan penarikan tidak ditemukan.")}`,
+    );
+  }
+
+  const payout = await prisma.affiliatePayoutRequest.findUnique({
+    where: { id: payoutId },
+    select: {
+      amount: true,
+      id: true,
+      payoutProvider: true,
+      profile: {
+        select: {
+          id: true,
+          user: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+      recipientName: true,
+      status: true,
+    },
+  });
+
+  if (!payout) {
+    redirect(
+      `${redirectBasePath}?withdraw=error&message=${encodeURIComponent("Permintaan penarikan tidak ditemukan.")}`,
+    );
+  }
+
+  if (intent === "approve") {
+    if (payout.status === "paid") {
+      redirect(
+        `${redirectBasePath}?withdraw=error&message=${encodeURIComponent("Permintaan ini sudah ditandai dibayar.")}`,
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.affiliatePayoutRequest.update({
+        where: { id: payout.id },
+        data: {
+          note,
+          status: "approved",
+        },
+      });
+
+      await tx.affiliateActivity.create({
+        data: {
+          amount: payout.amount,
+          description:
+            `Admin menyetujui penarikan ${payout.payoutProvider} atas nama ${payout.recipientName}.`,
+          profileId: payout.profile.id,
+          title: "Penarikan disetujui",
+          type: "payout_approved",
+        },
+      });
+    });
+
+    revalidatePath("/affiliate");
+    revalidatePath("/admin");
+    revalidatePath("/admin/withdrawals");
+
+    redirect(
+      `${redirectBasePath}?withdraw=ok&message=${encodeURIComponent(`Permintaan ${payout.profile.user.name} berhasil disetujui.`)}`,
+    );
+  }
+
+  if (intent === "reject") {
+    if (payout.status === "rejected") {
+      redirect(
+        `${redirectBasePath}?withdraw=error&message=${encodeURIComponent("Permintaan ini sudah ditolak sebelumnya.")}`,
+      );
+    }
+
+    if (payout.status === "paid") {
+      redirect(
+        `${redirectBasePath}?withdraw=error&message=${encodeURIComponent("Permintaan yang sudah dibayar tidak bisa ditolak.")}`,
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.affiliatePayoutRequest.update({
+        where: { id: payout.id },
+        data: {
+          note,
+          processedAt: new Date(),
+          status: "rejected",
+        },
+      });
+
+      await tx.affiliateProfile.update({
+        where: { id: payout.profile.id },
+        data: {
+          availableBalance: {
+            increment: payout.amount,
+          },
+          pendingBalance: {
+            decrement: payout.amount,
+          },
+        },
+      });
+
+      await tx.affiliateActivity.create({
+        data: {
+          amount: payout.amount,
+          description:
+            note ??
+            "Permintaan penarikan ditolak admin dan saldo dikembalikan ke saldo tersedia.",
+          profileId: payout.profile.id,
+          title: "Penarikan ditolak",
+          type: "payout_rejected",
+        },
+      });
+    });
+
+    revalidatePath("/affiliate");
+    revalidatePath("/admin");
+    revalidatePath("/admin/withdrawals");
+
+    redirect(
+      `${redirectBasePath}?withdraw=ok&message=${encodeURIComponent(`Permintaan ${payout.profile.user.name} ditolak dan saldo dikembalikan.`)}`,
+    );
+  }
+
+  if (intent === "paid") {
+    if (payout.status === "paid") {
+      redirect(
+        `${redirectBasePath}?withdraw=error&message=${encodeURIComponent("Permintaan ini sudah selesai dibayar.")}`,
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.affiliatePayoutRequest.update({
+        where: { id: payout.id },
+        data: {
+          note,
+          processedAt: new Date(),
+          status: "paid",
+        },
+      });
+
+      await tx.affiliateProfile.update({
+        where: { id: payout.profile.id },
+        data: {
+          pendingBalance: {
+            decrement: payout.amount,
+          },
+          withdrawnBalance: {
+            increment: payout.amount,
+          },
+        },
+      });
+
+      await tx.affiliateActivity.create({
+        data: {
+          amount: payout.amount,
+          description:
+            note ??
+            `Penarikan ${payout.payoutProvider} sudah dikirim ke ${payout.recipientName}.`,
+          profileId: payout.profile.id,
+          title: "Penarikan dibayar",
+          type: "payout_paid",
+        },
+      });
+    });
+
+    revalidatePath("/affiliate");
+    revalidatePath("/admin");
+    revalidatePath("/admin/withdrawals");
+
+    redirect(
+      `${redirectBasePath}?withdraw=ok&message=${encodeURIComponent(`Permintaan ${payout.profile.user.name} ditandai sudah dibayar.`)}`,
+    );
+  }
+
+  redirect(
+    `${redirectBasePath}?withdraw=error&message=${encodeURIComponent("Aksi penarikan tidak dikenal.")}`,
+  );
+}
+
 export async function logoutAdmin() {
   await requireAdminSession();
   await clearAdminSessionCookie();

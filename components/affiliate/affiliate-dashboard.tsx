@@ -29,9 +29,14 @@ type AffiliateActivityItem = {
 };
 
 type AffiliatePayoutItem = {
+  accountNumberMasked: string;
   amountLabel: string;
   createdAtLabel: string;
   id: string;
+  note?: string | null;
+  payoutMethodLabel: string;
+  payoutProvider: string;
+  recipientName: string;
   statusLabel: string;
 };
 
@@ -71,6 +76,149 @@ function StatChip({
   );
 }
 
+function PayoutModal({
+  action,
+  availableBalance,
+  canRequestPayout,
+  isPending,
+  minimumWithdrawLabel,
+  onClose,
+}: {
+  action: (formData: FormData) => void;
+  availableBalance: number;
+  canRequestPayout: boolean;
+  isPending: boolean;
+  minimumWithdrawLabel: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 px-4 pb-6 pt-10 backdrop-blur-sm sm:items-center">
+      <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(22,22,22,0.98),rgba(8,8,8,0.99))] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-lg font-bold text-white">Ajukan penarikan</p>
+            <p className="mt-1 text-sm leading-6 text-neutral-400">
+              Isi tujuan pencairan. Admin akan melihat detail ini langsung di
+              dashboard.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="h-9 px-3 text-neutral-300 hover:bg-white/10"
+          >
+            Tutup
+          </Button>
+        </div>
+
+        <form action={action} className="mt-5 space-y-4">
+          <div>
+            <label className="text-sm font-medium text-neutral-300">
+              Metode pembayaran
+            </label>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-3 rounded-[16px] border border-white/10 bg-white/[0.05] px-4 py-3">
+                <input
+                  type="radio"
+                  name="payoutMethod"
+                  value="bank"
+                  defaultChecked
+                  className="size-4 accent-red-500"
+                />
+                <span className="text-sm font-medium text-white">Bank</span>
+              </label>
+              <label className="flex items-center gap-3 rounded-[16px] border border-white/10 bg-white/[0.05] px-4 py-3">
+                <input
+                  type="radio"
+                  name="payoutMethod"
+                  value="ewallet"
+                  className="size-4 accent-red-500"
+                />
+                <span className="text-sm font-medium text-white">E-Wallet</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-neutral-300">
+              Nama bank / e-wallet
+            </label>
+            <input
+              name="payoutProvider"
+              placeholder="Contoh: BCA, BNI, DANA, GoPay"
+              className="mt-2 h-12 w-full rounded-[16px] border border-white/10 bg-black/25 px-4 text-sm text-white outline-none placeholder:text-neutral-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-neutral-300">
+              Nama penerima
+            </label>
+            <input
+              name="recipientName"
+              placeholder="Nama sesuai rekening / akun e-wallet"
+              className="mt-2 h-12 w-full rounded-[16px] border border-white/10 bg-black/25 px-4 text-sm text-white outline-none placeholder:text-neutral-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-neutral-300">
+              Nomor rekening / nomor e-wallet
+            </label>
+            <input
+              name="accountNumber"
+              inputMode="numeric"
+              placeholder="Masukkan nomor tujuan pencairan"
+              className="mt-2 h-12 w-full rounded-[16px] border border-white/10 bg-black/25 px-4 text-sm text-white outline-none placeholder:text-neutral-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-neutral-300">
+              Jumlah penarikan
+            </label>
+            <input
+              name="amount"
+              type="number"
+              min={0}
+              defaultValue={availableBalance}
+              className="mt-2 h-12 w-full rounded-[16px] border border-white/10 bg-black/25 px-4 text-sm text-white outline-none"
+            />
+            <p className="mt-2 text-xs leading-5 text-neutral-500">
+              Minimum penarikan {minimumWithdrawLabel}. Kamu bisa tarik sebagian
+              selama saldo mencukupi.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+              className="h-12 border border-white/10 bg-white/[0.08] text-white hover:bg-white/[0.14]"
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              disabled={!canRequestPayout || isPending}
+              className="h-12 bg-red-600 text-white hover:bg-red-500"
+            >
+              {isPending ? (
+                <RefreshCw className="size-4 animate-spin" />
+              ) : (
+                <Gift className="size-4" />
+              )}
+              Kirim
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function AffiliateDashboard({
   activeReferrals,
   activities,
@@ -94,6 +242,7 @@ export function AffiliateDashboard({
   const [link, setLink] = React.useState(referralUrl);
   const [copied, setCopied] = React.useState(false);
   const [shareFeedback, setShareFeedback] = React.useState<string | null>(null);
+  const [showPayoutModal, setShowPayoutModal] = React.useState(false);
 
   React.useEffect(() => {
     setLink(referralUrl);
@@ -122,6 +271,12 @@ export function AffiliateDashboard({
       window.clearTimeout(timeoutId);
     };
   }, [shareFeedback]);
+
+  React.useEffect(() => {
+    if (actionState.success) {
+      setShowPayoutModal(false);
+    }
+  }, [actionState.success]);
 
   async function copyLink() {
     try {
@@ -281,21 +436,15 @@ export function AffiliateDashboard({
           </p>
         </div>
 
-        <form action={payoutAction} className="mt-4">
-          <input type="hidden" name="amount" value={availableBalance} />
-          <Button
-            type="submit"
-            disabled={!canRequestPayout || isPayoutPending}
-            className="h-12 w-full bg-red-600 text-white hover:bg-red-500"
-          >
-            {isPayoutPending ? (
-              <RefreshCw className="size-4 animate-spin" />
-            ) : (
-              <Gift className="size-4" />
-            )}
-            {canRequestPayout ? "Ajukan penarikan" : "Saldo belum cukup"}
-          </Button>
-        </form>
+        <Button
+          type="button"
+          onClick={() => setShowPayoutModal(true)}
+          disabled={!canRequestPayout}
+          className="mt-4 h-12 w-full bg-red-600 text-white hover:bg-red-500"
+        >
+          <Gift className="size-4" />
+          {canRequestPayout ? "Ajukan penarikan" : "Saldo belum cukup"}
+        </Button>
 
         {actionState.error ? (
           <p className="mt-3 rounded-md border border-orange-500/20 bg-orange-500/10 px-3 py-2 text-sm text-orange-100">
@@ -412,6 +561,85 @@ export function AffiliateDashboard({
           )}
         </div>
       </section>
+
+      <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,18,0.92),rgba(8,8,8,0.96))] p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-base font-bold text-white">Riwayat penarikan</p>
+            <p className="mt-1 text-sm text-neutral-400">
+              Semua pengajuan komisi yang pernah kamu kirim.
+            </p>
+          </div>
+          <ArrowUpRight className="size-5 text-neutral-500" />
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {payouts.length ? (
+            payouts.map((payout) => (
+              <div
+                key={payout.id}
+                className="rounded-[18px] border border-white/10 bg-white/[0.04] p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {payout.payoutProvider} • {payout.payoutMethodLabel}
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-neutral-400">
+                      {payout.recipientName} • {payout.accountNumberMasked}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
+                      payout.statusLabel === "Dibayar"
+                        ? "bg-emerald-500/10 text-emerald-200 ring-emerald-400/20"
+                        : payout.statusLabel === "Ditolak"
+                          ? "bg-red-500/10 text-red-200 ring-red-400/20"
+                          : payout.statusLabel === "Disetujui"
+                            ? "bg-sky-500/10 text-sky-200 ring-sky-400/20"
+                            : "bg-white/[0.06] text-neutral-300 ring-white/10",
+                    )}
+                  >
+                    {payout.statusLabel}
+                  </span>
+                </div>
+                <p className="mt-3 text-lg font-bold text-white">
+                  {payout.amountLabel}
+                </p>
+                {payout.note ? (
+                  <p className="mt-2 text-sm leading-6 text-neutral-400">
+                    {payout.note}
+                  </p>
+                ) : null}
+                <p className="mt-3 text-xs text-neutral-500">
+                  {payout.createdAtLabel}
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-[18px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center">
+              <p className="text-sm font-semibold text-white">
+                Belum ada permintaan penarikan
+              </p>
+              <p className="mt-2 text-sm leading-6 text-neutral-400">
+                Saat saldo cukup, kirim permintaan dan statusnya akan muncul di sini.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {showPayoutModal ? (
+        <PayoutModal
+          action={payoutAction}
+          availableBalance={availableBalance}
+          canRequestPayout={canRequestPayout}
+          isPending={isPayoutPending}
+          minimumWithdrawLabel={minimumWithdrawLabel}
+          onClose={() => setShowPayoutModal(false)}
+        />
+      ) : null}
     </div>
   );
 }

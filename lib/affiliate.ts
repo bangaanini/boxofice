@@ -204,6 +204,18 @@ export async function getAffiliateDashboard(user: AffiliateUser) {
       payoutRequests: {
         orderBy: { createdAt: "desc" },
         take: 5,
+        select: {
+          accountNumber: true,
+          amount: true,
+          createdAt: true,
+          id: true,
+          note: true,
+          payoutMethod: true,
+          payoutProvider: true,
+          processedAt: true,
+          recipientName: true,
+          status: true,
+        },
       },
       referrals: {
         orderBy: { createdAt: "desc" },
@@ -429,7 +441,11 @@ export async function attachAffiliateReferral(input: {
 }
 
 export async function requestAffiliatePayout(input: {
+  accountNumber: string;
   amount: number;
+  payoutMethod: string;
+  payoutProvider: string;
+  recipientName: string;
   userId: string;
 }) {
   const profile = await prisma.affiliateProfile.findUnique({
@@ -457,6 +473,11 @@ export async function requestAffiliatePayout(input: {
   }
 
   const amount = Math.trunc(input.amount);
+  const payoutMethod =
+    input.payoutMethod === "ewallet" ? "ewallet" : "bank";
+  const payoutProvider = input.payoutProvider.trim();
+  const recipientName = input.recipientName.trim();
+  const accountNumber = input.accountNumber.trim();
 
   if (amount < profile.minimumWithdraw) {
     throw new Error("Saldo belum memenuhi minimum penarikan.");
@@ -466,15 +487,34 @@ export async function requestAffiliatePayout(input: {
     throw new Error("Saldo yang bisa ditarik tidak mencukupi.");
   }
 
+  if (payoutProvider.length < 2) {
+    throw new Error("Metode pembayaran wajib dipilih.");
+  }
+
+  if (recipientName.length < 2) {
+    throw new Error("Nama penerima minimal 2 karakter.");
+  }
+
+  if (accountNumber.length < 4) {
+    throw new Error("Nomor rekening atau e-wallet belum valid.");
+  }
+
   const payout = await prisma.$transaction(async (tx) => {
     const createdPayout = await tx.affiliatePayoutRequest.create({
       data: {
+        accountNumber,
         amount,
+        payoutMethod,
+        payoutProvider,
         profileId: profile.id,
+        recipientName,
       },
       select: {
+        payoutMethod: true,
+        payoutProvider: true,
         amount: true,
         id: true,
+        recipientName: true,
       },
     });
 
@@ -494,7 +534,7 @@ export async function requestAffiliatePayout(input: {
       data: {
         amount,
         description:
-          "Permintaan penarikan baru sudah masuk dan menunggu pengecekan admin.",
+          `Permintaan penarikan ${createdPayout.payoutProvider} atas nama ${createdPayout.recipientName} sudah masuk dan menunggu pengecekan admin.`,
         profileId: profile.id,
         title: "Penarikan diajukan",
         type: "payout_requested",
@@ -505,6 +545,40 @@ export async function requestAffiliatePayout(input: {
   });
 
   return payout;
+}
+
+export async function getAffiliatePayoutRequestsForAdmin() {
+  return prisma.affiliatePayoutRequest.findMany({
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    select: {
+      accountNumber: true,
+      amount: true,
+      createdAt: true,
+      id: true,
+      note: true,
+      payoutMethod: true,
+      payoutProvider: true,
+      processedAt: true,
+      profile: {
+        select: {
+          availableBalance: true,
+          pendingBalance: true,
+          referralCode: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              telegramId: true,
+              telegramUsername: true,
+            },
+          },
+        },
+      },
+      recipientName: true,
+      status: true,
+      updatedAt: true,
+    },
+  });
 }
 
 export async function applyAffiliateCommissionForVipOrder(input: {

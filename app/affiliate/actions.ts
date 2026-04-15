@@ -19,17 +19,27 @@ export async function requestAffiliatePayoutAction(
 ): Promise<AffiliateActionState> {
   const user = await requireUserSession();
   const amount = Number(formData.get("amount") ?? 0);
+  const payoutMethod = String(formData.get("payoutMethod") ?? "");
+  const payoutProvider = String(formData.get("payoutProvider") ?? "");
+  const recipientName = String(formData.get("recipientName") ?? "");
+  const accountNumber = String(formData.get("accountNumber") ?? "");
 
   try {
     const payout = await requestAffiliatePayout({
+      accountNumber,
       amount,
+      payoutMethod,
+      payoutProvider,
+      recipientName,
       userId: user.id,
     });
 
     revalidatePath("/affiliate");
 
     return {
-      success: `Permintaan penarikan Rp ${new Intl.NumberFormat("id-ID").format(payout.amount)} sudah dikirim.`,
+      success:
+        `Permintaan penarikan Rp ${new Intl.NumberFormat("id-ID").format(payout.amount)} ` +
+        `ke ${payout.payoutProvider} atas nama ${payout.recipientName} sudah dikirim.`,
     };
   } catch (error) {
     return {

@@ -10,6 +10,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Users,
+  Wallet,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 
@@ -54,6 +55,13 @@ const items = [
     icon: Percent,
     label: "Komisi affiliate",
     match: (pathname: string) => pathname.startsWith("/admin/commission"),
+  },
+  {
+    description: "Review permintaan pencairan komisi",
+    href: "/admin/withdrawals",
+    icon: Wallet,
+    label: "Withdraw affiliate",
+    match: (pathname: string) => pathname.startsWith("/admin/withdrawals"),
   },
   {
     description: "Atur preview gratis dan paywall VIP",

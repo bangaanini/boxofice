@@ -43,6 +43,20 @@ function payoutStatusLabel(status: string) {
   }
 }
 
+function payoutMethodLabel(method: string) {
+  return method === "ewallet" ? "E-Wallet" : "Bank";
+}
+
+function maskAccountNumber(value: string) {
+  const trimmed = value.trim();
+
+  if (trimmed.length <= 4) {
+    return trimmed;
+  }
+
+  return `${"*".repeat(Math.max(trimmed.length - 4, 0))}${trimmed.slice(-4)}`;
+}
+
 const affiliateSteps = [
   {
     description:
@@ -140,9 +154,14 @@ export default async function AffiliatePage() {
           clicks={profile.totalClicks}
           minimumWithdrawLabel={formatCurrency(profile.minimumWithdraw)}
           payouts={profile.payoutRequests.map((request) => ({
+            accountNumberMasked: maskAccountNumber(request.accountNumber),
             amountLabel: formatCurrency(request.amount),
             createdAtLabel: formatActivityDate(request.createdAt),
             id: request.id,
+            note: request.note,
+            payoutMethodLabel: payoutMethodLabel(request.payoutMethod),
+            payoutProvider: request.payoutProvider,
+            recipientName: request.recipientName,
             statusLabel: payoutStatusLabel(request.status),
           }))}
           pendingBalanceLabel={formatCurrency(profile.pendingBalance)}
