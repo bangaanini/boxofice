@@ -117,8 +117,11 @@ export async function getAdminUserTableData(query: string | undefined) {
             activeReferrals: true,
             availableBalance: true,
             commissionRate: true,
+            commissionRateOverride: true,
+            pendingBalance: true,
             referralCode: true,
             totalCommission: true,
+            withdrawnBalance: true,
           },
         },
         affiliateReferral: {

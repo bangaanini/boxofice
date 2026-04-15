@@ -1,6 +1,10 @@
 import { Search } from "lucide-react";
 
-import { deleteUserAccount, updateUserVipStatus } from "@/app/admin/actions";
+import {
+  deleteUserAccount,
+  updateUserAffiliateCommission,
+  updateUserVipStatus,
+} from "@/app/admin/actions";
 import { DeleteUserForm } from "@/components/admin/delete-user-form";
 import {
   AdminMetricCard,
@@ -168,15 +172,17 @@ export default async function AdminUsersPage({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1360px] w-full text-left">
+          <table className="min-w-[1560px] w-full text-left">
             <thead className="bg-white/[0.04] text-sm text-neutral-400">
               <tr>
                 <th className="px-5 py-4 font-medium">User</th>
                 <th className="px-5 py-4 font-medium">Referred by</th>
                 <th className="px-5 py-4 font-medium">Status VIP</th>
-                <th className="px-5 py-4 font-medium">Rate komisi</th>
+                <th className="px-5 py-4 font-medium">Komisi aktif</th>
                 <th className="px-5 py-4 font-medium">Komisi referral</th>
-                <th className="px-5 py-4 font-medium">Saldo tersedia</th>
+                <th className="px-5 py-4 font-medium">Saldo aktif</th>
+                <th className="px-5 py-4 font-medium">Saldo pending</th>
+                <th className="px-5 py-4 font-medium">Sudah cair</th>
                 <th className="px-5 py-4 font-medium">Favorit</th>
                 <th className="px-5 py-4 font-medium">Riwayat</th>
                 <th className="px-5 py-4 font-medium">Referral aktif</th>
@@ -259,13 +265,26 @@ export default async function AdminUsersPage({
                         </p>
                       </td>
                       <td className="px-5 py-4 text-sm text-white">
-                        {profile?.commissionRate ?? defaultCommissionRate}%
+                        <p className="font-semibold text-white">
+                          {(profile?.commissionRateOverride ?? defaultCommissionRate)}%
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {profile?.commissionRateOverride != null
+                            ? "Override individu"
+                            : `Fallback global ${defaultCommissionRate}%`}
+                        </p>
                       </td>
                       <td className="px-5 py-4 text-sm text-white">
                         {formatCurrency(profile?.totalCommission ?? 0)}
                       </td>
                       <td className="px-5 py-4 text-sm text-white">
                         {formatCurrency(profile?.availableBalance ?? 0)}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-white">
+                        {formatCurrency(profile?.pendingBalance ?? 0)}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-white">
+                        {formatCurrency(profile?.withdrawnBalance ?? 0)}
                       </td>
                       <td className="px-5 py-4 text-sm text-white">
                         {user._count.favorites}
@@ -283,6 +302,40 @@ export default async function AdminUsersPage({
                         {formatDate(user.createdAt)}
                       </td>
                       <td className="space-y-3 px-5 py-4">
+                        <form
+                          action={updateUserAffiliateCommission}
+                          className="space-y-2 rounded-[16px] border border-white/10 bg-black/20 p-3"
+                        >
+                          <input type="hidden" name="redirectTo" value={redirectTo} />
+                          <input type="hidden" name="userId" value={user.id} />
+                          <label className="block">
+                            <span className="text-xs font-medium text-neutral-400">
+                              Komisi individu
+                            </span>
+                            <div className="mt-2 flex items-center gap-2">
+                              <input
+                                type="number"
+                                name="commissionRateOverride"
+                                min={1}
+                                max={100}
+                                defaultValue={profile?.commissionRateOverride ?? ""}
+                                placeholder={String(defaultCommissionRate)}
+                                className="h-10 w-20 rounded-[12px] border border-white/10 bg-black/25 px-3 text-sm text-white outline-none"
+                              />
+                              <span className="text-xs text-neutral-400">%</span>
+                            </div>
+                            <p className="mt-2 text-[11px] leading-5 text-neutral-500">
+                              Kosongkan untuk pakai komisi global.
+                            </p>
+                          </label>
+                          <Button
+                            type="submit"
+                            variant="secondary"
+                            className="h-9 border border-white/10 bg-white/10 text-xs text-white hover:bg-white/15"
+                          >
+                            Simpan komisi
+                          </Button>
+                        </form>
                         <form
                           action={updateUserVipStatus}
                           className="space-y-2 rounded-[16px] border border-white/10 bg-black/20 p-3"
@@ -332,7 +385,7 @@ export default async function AdminUsersPage({
               ) : (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={14}
                     className="px-5 py-14 text-center text-neutral-400"
                   >
                     Tidak ada user yang cocok dengan pencarian ini.

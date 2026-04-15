@@ -16,7 +16,7 @@ export default async function AdminDashboardLayout({
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(126,63,34,0.2),transparent_26%),linear-gradient(180deg,#130d0c_0%,#080808_58%,#040404_100%)] px-4 pb-10 pt-6 sm:px-6 lg:px-8">
-        <div className="mx-auto grid w-full max-w-[1600px] gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="grid w-full gap-6 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
           <div className="xl:sticky xl:top-6 xl:self-start">
             <AdminSidebar email={session.email} />
           </div>

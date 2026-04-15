@@ -7,6 +7,7 @@ import { getAffiliateProgramSettingsSafe } from "@/lib/affiliate";
 import { sanitizeAdminRedirectPath } from "@/lib/admin-auth";
 import { clearAdminSessionCookie, requireAdminSession } from "@/lib/admin-session";
 import { getPaymentGatewaySettingsSafe } from "@/lib/payments";
+import { sendTelegramUserMessage } from "@/lib/telegram-bot";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 import {
   auditMovieCatalog,
@@ -382,6 +383,7 @@ export async function updateAffiliateProgramSettings(formData: FormData) {
       await tx.affiliateProfile.updateMany({
         data: {
           commissionRate: defaultCommissionRate,
+          commissionRateOverride: null,
         },
       });
     }
@@ -772,6 +774,83 @@ export async function createOrUpdateVipPlan(formData: FormData) {
   );
 }
 
+export async function updateUserAffiliateCommission(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/users");
+  const userId = readTextField(formData, "userId");
+  const rawRate = String(formData.get("commissionRateOverride") ?? "").trim();
+  const settingsResult = await getAffiliateProgramSettingsSafe();
+
+  if (!userId) {
+    redirect(
+      `${redirectBasePath}?user=error&message=${encodeURIComponent("User affiliate tidak ditemukan.")}`,
+    );
+  }
+
+  const profile = await prisma.affiliateProfile.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      user: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!profile) {
+    redirect(
+      `${redirectBasePath}?user=error&message=${encodeURIComponent("Profil affiliate user belum tersedia.")}`,
+    );
+  }
+
+  if (!rawRate) {
+    await prisma.affiliateProfile.update({
+      where: { id: profile.id },
+      data: {
+        commissionRateOverride: null,
+      },
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/users");
+    revalidatePath("/affiliate");
+
+    redirect(
+      `${redirectBasePath}?user=updated&message=${encodeURIComponent(
+        `Komisi ${profile.user.name} kembali mengikuti global ${settingsResult.settings.defaultCommissionRate}%.`,
+      )}`,
+    );
+  }
+
+  const rate = Math.trunc(Number(rawRate));
+
+  if (!Number.isFinite(rate) || rate < 1 || rate > 100) {
+    redirect(
+      `${redirectBasePath}?user=error&message=${encodeURIComponent("Komisi individu harus di antara 1% sampai 100%.")}`,
+    );
+  }
+
+  await prisma.affiliateProfile.update({
+    where: { id: profile.id },
+    data: {
+      commissionRateOverride: rate,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/users");
+  revalidatePath("/affiliate");
+
+  redirect(
+    `${redirectBasePath}?user=updated&message=${encodeURIComponent(
+      `Komisi individu ${profile.user.name} disetel ke ${rate}%.`,
+    )}`,
+  );
+}
+
 export async function updateUserVipStatus(formData: FormData) {
   await requireAdminSession();
 
@@ -973,6 +1052,7 @@ export async function manageAffiliatePayoutRequest(formData: FormData) {
           user: {
             select: {
               name: true,
+              telegramId: true,
             },
           },
         },
@@ -1015,6 +1095,20 @@ export async function manageAffiliatePayoutRequest(formData: FormData) {
         },
       });
     });
+
+    await sendTelegramUserMessage({
+      telegramId: payout.profile.user.telegramId,
+      text:
+        `✅ Penarikan komisi Box Office berhasil diproses.\n\n` +
+        `Nominal: ${new Intl.NumberFormat("id-ID", {
+          currency: "IDR",
+          maximumFractionDigits: 0,
+          style: "currency",
+        }).format(payout.amount)}\n` +
+        `Metode: ${payout.payoutProvider}\n` +
+        `Penerima: ${payout.recipientName}\n\n` +
+        `Cek saldo affiliate kamu untuk melihat histori terbaru.`,
+    }).catch(() => null);
 
     revalidatePath("/affiliate");
     revalidatePath("/admin");

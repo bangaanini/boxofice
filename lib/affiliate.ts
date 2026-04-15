@@ -177,12 +177,10 @@ export async function ensureAffiliateProfile(user: AffiliateUser) {
     return existing;
   }
 
-  const settingsResult = await getAffiliateProgramSettingsSafe();
   const referralCode = await generateUniqueReferralCode(user.name);
 
   return prisma.affiliateProfile.create({
     data: {
-      commissionRate: settingsResult.settings.defaultCommissionRate,
       minimumWithdraw: AFFILIATE_MINIMUM_WITHDRAW,
       referralCode,
       userId: user.id,
@@ -586,6 +584,7 @@ export async function applyAffiliateCommissionForVipOrder(input: {
   orderId: string;
   referredUserId: string;
 }) {
+  const settingsResult = await getAffiliateProgramSettingsSafe();
   const referral = await prisma.affiliateReferral.findUnique({
     where: { referredUserId: input.referredUserId },
     select: {
@@ -594,6 +593,7 @@ export async function applyAffiliateCommissionForVipOrder(input: {
       profile: {
         select: {
           commissionRate: true,
+          commissionRateOverride: true,
           id: true,
         },
       },
@@ -607,7 +607,8 @@ export async function applyAffiliateCommissionForVipOrder(input: {
 
   const commissionAmount = roundCommissionAmount(
     input.amount,
-    referral.profile.commissionRate,
+    referral.profile.commissionRateOverride ??
+      settingsResult.settings.defaultCommissionRate,
   );
 
   if (commissionAmount <= 0) {

@@ -129,6 +129,7 @@ model AffiliateProfile {
   userId           String                   @unique
   referralCode     String                   @unique
   commissionRate   Int                      @default(25)
+  commissionRateOverride Int?
   totalClicks      Int                      @default(0)
   totalSignups     Int                      @default(0)
   activeReferrals  Int                      @default(0)
