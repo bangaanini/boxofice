@@ -205,6 +205,7 @@ model PartnerBot {
   botUsername      String   @unique
   botName          String
   miniAppShortName String?
+  settingsOverrides Json?   @db.JsonB
   webhookSecret    String
   active           Boolean  @default(true)
   createdAt        DateTime @default(now())

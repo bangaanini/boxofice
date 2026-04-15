@@ -6,7 +6,11 @@ import {
 } from "@/lib/affiliate";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 import { buildAffiliateStartParam } from "@/lib/telegram-miniapp";
-import { getPartnerBotForWebhook } from "@/lib/telegram-partner-bots";
+import {
+  buildPartnerBotOwnerSettingsUrl,
+  getPartnerBotForWebhook,
+  resolvePartnerBotSettings,
+} from "@/lib/telegram-partner-bots";
 import {
   isStartCommand,
   sendTelegramWelcomeMessage,
@@ -80,16 +84,33 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }).catch(() => undefined);
 
   const botSettings = await getTelegramBotSettingsSafe();
-  const settings = {
-    ...botSettings.settings,
-    affiliateUrl: botSettings.settings.affiliateUrl,
-    openAppUrl: botSettings.settings.openAppUrl,
-    searchUrl: botSettings.settings.searchUrl,
-    vipUrl: botSettings.settings.vipUrl,
-  };
+  const resolvedSettings = resolvePartnerBotSettings(
+    botSettings.settings,
+    partnerBot.settingsOverrides,
+  );
+  const isOwnerChat =
+    String(partnerBot.owner.telegramId ?? "") ===
+    String(update?.message?.from?.id ?? "");
+  const settingsUrl = buildPartnerBotOwnerSettingsUrl(
+    botSettings.runtime.publicAppUrl,
+    partnerBot.id,
+  );
+  const extraRows = isOwnerChat
+    ? [
+        [
+          {
+            text: resolvedSettings.settingsLabel,
+            web_app: {
+              url: settingsUrl,
+            },
+          },
+        ],
+      ]
+    : undefined;
 
   await sendTelegramWelcomeMessage({
     botToken: partnerBot.botToken,
+    extraRows,
     message: {
       chatId:
         typeof update?.message?.chat?.id === "number" ? update.message.chat.id : null,
@@ -97,7 +118,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       telegramId: update?.message?.from?.id,
       username: update?.message?.from?.username,
     },
-    settings,
+    settings: resolvedSettings.settings,
     startParam,
   }).catch((error) => {
     console.error("Partner Telegram webhook sendMessage failed", error);

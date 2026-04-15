@@ -1,13 +1,58 @@
 import { randomBytes } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
-import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
+import {
+  getTelegramBotSettingsSafe,
+  type TelegramBotSettingsSnapshot,
+} from "@/lib/telegram-bot-settings";
 import {
   buildAffiliateStartParam,
   buildTelegramBotChatUrlForUsername,
   buildTelegramMiniAppUrlForConfig,
   validateTelegramInitData,
 } from "@/lib/telegram-miniapp";
+
+export type PartnerBotSettingsOverrides = Partial<
+  Pick<
+    TelegramBotSettingsSnapshot,
+    | "affiliateGroupLabel"
+    | "affiliateGroupUrl"
+    | "affiliateLabel"
+    | "affiliateUrl"
+    | "channelLabel"
+    | "channelUrl"
+    | "openAppLabel"
+    | "openAppUrl"
+    | "searchLabel"
+    | "searchUrl"
+    | "supportLabel"
+    | "supportUrl"
+    | "vipLabel"
+    | "vipUrl"
+    | "welcomeMessage"
+  >
+> & {
+  settingsLabel?: string;
+};
+
+export const PARTNER_BOT_OVERRIDE_KEYS = [
+  "affiliateGroupLabel",
+  "affiliateGroupUrl",
+  "affiliateLabel",
+  "affiliateUrl",
+  "channelLabel",
+  "channelUrl",
+  "openAppLabel",
+  "openAppUrl",
+  "searchLabel",
+  "searchUrl",
+  "settingsLabel",
+  "supportLabel",
+  "supportUrl",
+  "vipLabel",
+  "vipUrl",
+  "welcomeMessage",
+] as const;
 
 function isRecordWithCode(
   error: unknown,
@@ -32,6 +77,23 @@ function isMissingPartnerBotSchemaError(error: unknown) {
 
 export function createPartnerBotWebhookSecret() {
   return randomBytes(24).toString("hex");
+}
+
+export function getDefaultPartnerSettingsButtonLabel() {
+  return "⚙️ Setting bot";
+}
+
+export function buildPartnerBotOwnerSettingsUrl(
+  publicAppUrl: string,
+  partnerBotId: string,
+) {
+  const url = new URL(
+    `${publicAppUrl.replace(/\/+$/, "")}/partner-bot/settings`,
+  );
+
+  url.searchParams.set("bot", partnerBotId);
+
+  return url.toString();
 }
 
 export function buildPartnerBotWebhookUrl(
@@ -61,6 +123,69 @@ export function buildPartnerBotLinks(input: {
       startParam,
     ),
     startParam,
+  };
+}
+
+export function sanitizePartnerBotSettingsOverrides(
+  value: unknown,
+): PartnerBotSettingsOverrides {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const input = value as Record<string, unknown>;
+  const sanitized: PartnerBotSettingsOverrides = {};
+
+  for (const key of PARTNER_BOT_OVERRIDE_KEYS) {
+    const rawValue = input[key];
+
+    if (typeof rawValue !== "string") {
+      continue;
+    }
+
+    const trimmedValue = rawValue.trim();
+
+    if (!trimmedValue) {
+      continue;
+    }
+
+    sanitized[key] = trimmedValue;
+  }
+
+  return sanitized;
+}
+
+export function resolvePartnerBotSettings(
+  globalSettings: TelegramBotSettingsSnapshot,
+  overridesValue: unknown,
+) {
+  const overrides = sanitizePartnerBotSettingsOverrides(overridesValue);
+
+  return {
+    overrides,
+    settings: {
+      ...globalSettings,
+      affiliateGroupLabel:
+        overrides.affiliateGroupLabel ?? globalSettings.affiliateGroupLabel,
+      affiliateGroupUrl:
+        overrides.affiliateGroupUrl ?? globalSettings.affiliateGroupUrl,
+      affiliateLabel: overrides.affiliateLabel ?? globalSettings.affiliateLabel,
+      affiliateUrl: overrides.affiliateUrl ?? globalSettings.affiliateUrl,
+      channelLabel: overrides.channelLabel ?? globalSettings.channelLabel,
+      channelUrl: overrides.channelUrl ?? globalSettings.channelUrl,
+      openAppLabel: overrides.openAppLabel ?? globalSettings.openAppLabel,
+      openAppUrl: overrides.openAppUrl ?? globalSettings.openAppUrl,
+      searchLabel: overrides.searchLabel ?? globalSettings.searchLabel,
+      searchUrl: overrides.searchUrl ?? globalSettings.searchUrl,
+      supportLabel: overrides.supportLabel ?? globalSettings.supportLabel,
+      supportUrl: overrides.supportUrl ?? globalSettings.supportUrl,
+      vipLabel: overrides.vipLabel ?? globalSettings.vipLabel,
+      vipUrl: overrides.vipUrl ?? globalSettings.vipUrl,
+      welcomeMessage:
+        overrides.welcomeMessage ?? globalSettings.welcomeMessage,
+    },
+    settingsLabel:
+      overrides.settingsLabel?.trim() || getDefaultPartnerSettingsButtonLabel(),
   };
 }
 
@@ -112,10 +237,12 @@ export async function getPartnerBotForWebhook(partnerBotId: string) {
       id: true,
       label: true,
       miniAppShortName: true,
+      settingsOverrides: true,
       owner: {
         select: {
           id: true,
           name: true,
+          telegramId: true,
           affiliateProfile: {
             select: {
               referralCode: true,
@@ -160,6 +287,7 @@ export async function listPartnerBotsForAdmin() {
         id: true,
         label: true,
         miniAppShortName: true,
+        settingsOverrides: true,
         owner: {
           select: {
             affiliateProfile: {
@@ -197,6 +325,64 @@ export async function listPartnerBotsForAdmin() {
     })),
     publicAppUrl: telegram.runtime.publicAppUrl,
   };
+}
+
+export async function getOwnedPartnerBotsForUser(userId: string) {
+  const telegram = await getTelegramBotSettingsSafe();
+  const partnerBots = await prisma.partnerBot.findMany({
+    where: {
+      ownerUserId: userId,
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+    select: {
+      active: true,
+      botName: true,
+      botUsername: true,
+      id: true,
+      label: true,
+      miniAppShortName: true,
+      owner: {
+        select: {
+          affiliateProfile: {
+            select: {
+              referralCode: true,
+            },
+          },
+        },
+      },
+      settingsOverrides: true,
+      updatedAt: true,
+    },
+  });
+
+  return partnerBots.map((partnerBot) => {
+    const resolved = resolvePartnerBotSettings(
+      telegram.settings,
+      partnerBot.settingsOverrides,
+    );
+    const referralCode = partnerBot.owner.affiliateProfile?.referralCode ?? null;
+
+    return {
+      ...partnerBot,
+      currentReferralCode: referralCode,
+      effectiveSettings: resolved.settings,
+      ownerSettingsButtonLabel: resolved.settingsLabel,
+      rawOverrides: resolved.overrides,
+      settingsUrl: buildPartnerBotOwnerSettingsUrl(
+        telegram.runtime.publicAppUrl,
+        partnerBot.id,
+      ),
+      shareLinks: referralCode
+        ? buildPartnerBotLinks({
+            botUsername: partnerBot.botUsername,
+            miniAppShortName: partnerBot.miniAppShortName,
+            referralCode,
+          })
+        : null,
+    };
+  });
 }
 
 export type TelegramMatchedBotCandidate =

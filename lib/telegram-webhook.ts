@@ -12,6 +12,18 @@ export type TelegramStartMessage = {
   username?: string;
 };
 
+type TelegramInlineButton =
+  | {
+      text: string;
+      url: string;
+    }
+  | {
+      text: string;
+      web_app: {
+        url: string;
+      };
+    };
+
 function sanitizeAbsoluteUrl(value: string) {
   const trimmed = value.trim();
 
@@ -83,6 +95,7 @@ export function appendStartParam(urlValue: string, startParam: string | null) {
 export function buildTelegramInlineKeyboard(
   settings: TelegramBotSettingsSnapshot,
   startParam: string | null,
+  extraRows?: TelegramInlineButton[][],
 ) {
   const openAppUrl = sanitizeAbsoluteUrl(settings.openAppUrl);
   const searchUrl = sanitizeAbsoluteUrl(settings.searchUrl);
@@ -92,51 +105,82 @@ export function buildTelegramInlineKeyboard(
   const supportUrl = sanitizeAbsoluteUrl(settings.supportUrl);
   const vipUrl = sanitizeAbsoluteUrl(settings.vipUrl);
 
-  return [
-    openAppUrl
-      ? [
-          createWebAppButton(
-            settings.openAppLabel,
-            appendStartParam(openAppUrl, startParam),
-          ),
-        ]
-      : [],
-    searchUrl
-      ? [
-          createWebAppButton(
-            settings.searchLabel,
-            appendStartParam(searchUrl, startParam),
-          ),
-        ]
-      : [],
-    affiliateUrl
-      ? [
-          createWebAppButton(
-            settings.affiliateLabel,
-            appendStartParam(affiliateUrl, startParam),
-          ),
-        ]
-      : [],
-    [
-      affiliateGroupUrl
-        ? createUrlButton(settings.affiliateGroupLabel, affiliateGroupUrl)
-        : null,
-      channelUrl ? createUrlButton(settings.channelLabel, channelUrl) : null,
-    ].filter(Boolean),
-    [
-      supportUrl ? createUrlButton(settings.supportLabel, supportUrl) : null,
-      vipUrl
-        ? createWebAppButton(
-            settings.vipLabel,
-            appendStartParam(vipUrl, startParam),
-          )
-        : null,
-    ].filter(Boolean),
-  ].filter((row) => row.length > 0);
+  const rows: TelegramInlineButton[][] = [];
+
+  if (openAppUrl) {
+    rows.push([
+      createWebAppButton(
+        settings.openAppLabel,
+        appendStartParam(openAppUrl, startParam),
+      ),
+    ]);
+  }
+
+  if (searchUrl) {
+    rows.push([
+      createWebAppButton(
+        settings.searchLabel,
+        appendStartParam(searchUrl, startParam),
+      ),
+    ]);
+  }
+
+  if (affiliateUrl) {
+    rows.push([
+      createWebAppButton(
+        settings.affiliateLabel,
+        appendStartParam(affiliateUrl, startParam),
+      ),
+    ]);
+  }
+
+  const communityRow: TelegramInlineButton[] = [];
+
+  if (affiliateGroupUrl) {
+    communityRow.push(
+      createUrlButton(settings.affiliateGroupLabel, affiliateGroupUrl),
+    );
+  }
+
+  if (channelUrl) {
+    communityRow.push(createUrlButton(settings.channelLabel, channelUrl));
+  }
+
+  if (communityRow.length) {
+    rows.push(communityRow);
+  }
+
+  const supportRow: TelegramInlineButton[] = [];
+
+  if (supportUrl) {
+    supportRow.push(createUrlButton(settings.supportLabel, supportUrl));
+  }
+
+  if (vipUrl) {
+    supportRow.push(
+      createWebAppButton(
+        settings.vipLabel,
+        appendStartParam(vipUrl, startParam),
+      ),
+    );
+  }
+
+  if (supportRow.length) {
+    rows.push(supportRow);
+  }
+
+  if (extraRows?.length) {
+    rows.push(
+      ...extraRows.filter((row) => Array.isArray(row) && row.length > 0),
+    );
+  }
+
+  return rows;
 }
 
 export async function sendTelegramWelcomeMessage(input: {
   botToken: string;
+  extraRows?: TelegramInlineButton[][];
   message: TelegramStartMessage;
   settings: TelegramBotSettingsSnapshot;
   startParam: string | null;
@@ -157,6 +201,7 @@ export async function sendTelegramWelcomeMessage(input: {
       inline_keyboard: buildTelegramInlineKeyboard(
         input.settings,
         input.startParam,
+        input.extraRows,
       ),
     },
     text,

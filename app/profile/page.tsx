@@ -4,6 +4,7 @@ import { MessageCircle, Sparkles, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getCinematicBackdropMovies } from "@/lib/movie-feeds";
+import { getOwnedPartnerBotsForUser } from "@/lib/telegram-partner-bots";
 import { requireUserSession } from "@/lib/user-auth";
 import { repairPaidVipOrdersForUser } from "@/lib/vip-checkout";
 import { getVipProgramSettingsSafe, getVipStatus } from "@/lib/vip";
@@ -26,6 +27,9 @@ export default async function ProfilePage() {
   const user =
     (await repairPaidVipOrdersForUser(sessionUser.id).catch(() => null)) ??
     sessionUser;
+  const ownedPartnerBots = await getOwnedPartnerBotsForUser(user.id).catch(
+    () => [],
+  );
   const vipStatus = getVipStatus(user);
   const vipSettings = vipSettingsResult.settings;
 
@@ -183,6 +187,25 @@ export default async function ProfilePage() {
               </p>
             </div>
           </div>
+
+          {ownedPartnerBots.length ? (
+            <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.05] p-4">
+              <p className="text-sm font-semibold text-white">Bot partner</p>
+              <p className="mt-2 text-sm leading-6 text-neutral-300">
+                Kamu punya {ownedPartnerBots.length} bot partner aktif di sistem.
+                Pesan sambutan dan tombolnya bisa kamu atur sendiri.
+              </p>
+              <Button
+                asChild
+                variant="secondary"
+                className="mt-4 h-11 border border-white/10 bg-white/[0.08] text-white hover:bg-white/[0.14]"
+              >
+                <Link href="/partner-bot/settings">
+                  Atur bot partner
+                </Link>
+              </Button>
+            </div>
+          ) : null}
         </div>
       </section>
     </main>

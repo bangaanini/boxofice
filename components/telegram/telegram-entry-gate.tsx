@@ -26,6 +26,7 @@ type TelegramEntryGateProps = {
   adminLoginUrl: string;
   botChatUrl: string;
   miniAppUrl: string;
+  successRedirectPath?: string;
 };
 
 function getTelegramWebApp() {
@@ -56,6 +57,7 @@ export function TelegramEntryGate({
   adminLoginUrl,
   botChatUrl,
   miniAppUrl,
+  successRedirectPath = "/",
 }: TelegramEntryGateProps) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
@@ -110,7 +112,7 @@ export function TelegramEntryGate({
       }
 
       setStatus("Akun siap. Membuka Box Office...");
-      router.replace("/");
+      router.replace(successRedirectPath);
       router.refresh();
     } catch (authError) {
       setError(
@@ -121,7 +123,7 @@ export function TelegramEntryGate({
       setStatus("Koneksi Telegram butuh dicoba lagi.");
       setIsLoading(false);
     }
-  }, [botChatUrl, router]);
+  }, [botChatUrl, router, successRedirectPath]);
 
   React.useEffect(() => {
     const webApp = getTelegramWebApp();
