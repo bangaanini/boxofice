@@ -3,28 +3,15 @@ import {
   AdminSurface,
 } from "@/components/admin/admin-surface";
 import { Button } from "@/components/ui/button";
-import {
-  updateAffiliateProgramSettings,
-  updateTelegramBotSettings,
-  updateVipProgramSettings,
-} from "@/app/admin/actions";
-import {
-  getAffiliateProfileCountSafe,
-  getAffiliateProgramSettingsSafe,
-} from "@/lib/affiliate";
+import { updateTelegramBotSettings } from "@/app/admin/actions";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
-import { getVipProgramSettingsSafe } from "@/lib/vip";
 
 export const dynamic = "force-dynamic";
 
 type AdminSettingsPageProps = {
   searchParams: Promise<{
-    applyToExisting?: string;
     bot?: string;
     message?: string;
-    rate?: string;
-    settings?: string;
-    vip?: string;
   }>;
 };
 
@@ -73,22 +60,9 @@ export default async function AdminSettingsPage({
   searchParams,
 }: AdminSettingsPageProps) {
   const params = await searchParams;
-  const [affiliateSettingsResult, profilesResult, telegramSettingsResult, vipSettingsResult] =
-    await Promise.all([
-      getAffiliateProgramSettingsSafe(),
-      getAffiliateProfileCountSafe(),
-      getTelegramBotSettingsSafe(),
-      getVipProgramSettingsSafe(),
-    ]);
-
-  const affiliateSettings = affiliateSettingsResult.settings;
+  const telegramSettingsResult = await getTelegramBotSettingsSafe();
   const telegramSettings = telegramSettingsResult.settings;
   const telegramRuntime = telegramSettingsResult.runtime;
-  const vipSettings = vipSettingsResult.settings;
-  const affiliateSchemaReady =
-    affiliateSettingsResult.schemaReady && profilesResult.schemaReady;
-  const affiliateSchemaIssue =
-    affiliateSettingsResult.schemaIssue ?? profilesResult.schemaIssue;
   const webhookUrl = `${telegramRuntime.publicAppUrl}/api/telegram/webhook`;
   const setWebhookCommand = `curl -X POST "https://api.telegram.org/bot${telegramRuntime.botToken}/setWebhook" \\\n  -d "url=${webhookUrl}" \\\n  -d "secret_token=${telegramRuntime.webhookSecret}"`;
   const deleteWebhookCommand = `curl "https://api.telegram.org/bot${telegramRuntime.botToken}/deleteWebhook"`;
@@ -121,8 +95,8 @@ export default async function AdminSettingsPage({
             value={telegramSettings.webhookSecret ? "Database" : "Env"}
           />
           <AdminMetricCard
-            label="Presentase affiliate"
-            value={`${affiliateSettings.defaultCommissionRate}%`}
+            label="Main App URL"
+            value={telegramRuntime.publicAppUrl.replace(/^https?:\/\//, "")}
           />
         </div>
       </AdminSurface>
@@ -136,34 +110,6 @@ export default async function AdminSettingsPage({
           ) : (
             <span className="text-emerald-100">
               {params.message ?? "Pengaturan bot berhasil diperbarui."}
-            </span>
-          )}
-        </AdminSurface>
-      ) : null}
-
-      {params.settings ? (
-        <AdminSurface className="text-sm leading-6 text-neutral-200">
-          {params.settings === "error" ? (
-            <span className="text-red-200">
-              {params.message ?? "Setting affiliate gagal diperbarui."}
-            </span>
-          ) : (
-            <span className="text-emerald-100">
-              {params.message ?? "Setting affiliate berhasil diperbarui."}
-            </span>
-          )}
-        </AdminSurface>
-      ) : null}
-
-      {params.vip ? (
-        <AdminSurface className="text-sm leading-6 text-neutral-200">
-          {params.vip === "error" ? (
-            <span className="text-red-200">
-              {params.message ?? "Pengaturan VIP gagal diperbarui."}
-            </span>
-          ) : (
-            <span className="text-emerald-100">
-              {params.message ?? "Pengaturan VIP berhasil diperbarui."}
             </span>
           )}
         </AdminSurface>
@@ -343,163 +289,6 @@ export default async function AdminSettingsPage({
                 {deleteWebhookCommand}
               </pre>
             </div>
-          </AdminSurface>
-
-          <AdminSurface>
-            <p className="text-sm font-semibold text-orange-200">
-              Pengaturan VIP
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-white">
-              Preview gratis dan paywall
-            </h2>
-            {!vipSettingsResult.schemaReady ? (
-              <p className="mt-3 text-sm leading-6 text-amber-100">
-                {vipSettingsResult.schemaIssue ??
-                  "Database runtime belum siap untuk setting VIP."}
-              </p>
-            ) : (
-              <form action={updateVipProgramSettings} className="mt-5 space-y-5">
-                <input type="hidden" name="redirectTo" value="/admin/settings" />
-
-                <label className="flex items-start gap-3 rounded-[18px] border border-white/10 bg-black/20 p-4">
-                  <input
-                    name="previewEnabled"
-                    type="checkbox"
-                    defaultChecked={vipSettings.previewEnabled}
-                    className="mt-1 size-4 rounded border-white/20 bg-black"
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold text-white">
-                      Aktifkan preview gratis untuk user non-VIP
-                    </span>
-                    <span className="mt-1 block text-sm leading-6 text-neutral-400">
-                      Setelah batas menit habis, player akan pause dan menampilkan paywall VIP.
-                    </span>
-                  </span>
-                </label>
-
-                <div>
-                  <label className="block text-sm font-medium text-neutral-300">
-                    Batas preview
-                  </label>
-                  <div className="mt-2 flex items-center rounded-[18px] border border-white/10 bg-black/25 px-4">
-                    <input
-                      name="previewLimitMinutes"
-                      type="number"
-                      min={1}
-                      max={120}
-                      defaultValue={vipSettings.previewLimitMinutes}
-                      className="h-12 w-full bg-transparent text-base text-white outline-none"
-                    />
-                    <span className="text-sm font-semibold text-neutral-400">
-                      menit
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field
-                    defaultValue={vipSettings.joinVipLabel}
-                    label="Label tombol VIP"
-                    name="joinVipLabel"
-                  />
-                  <Field
-                    defaultValue={vipSettings.joinVipUrl}
-                    label="URL tombol VIP"
-                    name="joinVipUrl"
-                    type="url"
-                  />
-                  <Field
-                    defaultValue={vipSettings.paywallTitle}
-                    label="Judul paywall"
-                    name="paywallTitle"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-neutral-300">
-                    Deskripsi paywall
-                  </label>
-                  <textarea
-                    name="paywallDescription"
-                    defaultValue={vipSettings.paywallDescription}
-                    rows={4}
-                    className="mt-2 w-full rounded-[20px] border border-white/10 bg-black/25 px-4 py-4 text-sm leading-7 text-white outline-none placeholder:text-neutral-500"
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  className="h-11 bg-red-600 text-white hover:bg-red-500"
-                >
-                  Simpan pengaturan VIP
-                </Button>
-              </form>
-            )}
-          </AdminSurface>
-
-          <AdminSurface>
-            <p className="text-sm font-semibold text-orange-200">
-              Pengaturan affiliate
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-white">
-              Presentase komisi default
-            </h2>
-            {!affiliateSchemaReady ? (
-              <p className="mt-3 text-sm leading-6 text-amber-100">
-                {affiliateSchemaIssue ??
-                  "Database runtime belum siap untuk setting affiliate."}
-              </p>
-            ) : (
-              <form
-                action={updateAffiliateProgramSettings}
-                className="mt-5 space-y-5"
-              >
-                <input type="hidden" name="redirectTo" value="/admin/settings" />
-                <div>
-                  <label className="block text-sm font-medium text-neutral-300">
-                    Presentase komisi default
-                  </label>
-                  <div className="mt-2 flex items-center rounded-[18px] border border-white/10 bg-black/25 px-4">
-                    <input
-                      name="defaultCommissionRate"
-                      type="number"
-                      min={1}
-                      max={100}
-                      defaultValue={affiliateSettings.defaultCommissionRate}
-                      className="h-12 w-full bg-transparent text-base text-white outline-none"
-                    />
-                    <span className="text-sm font-semibold text-neutral-400">
-                      %
-                    </span>
-                  </div>
-                </div>
-
-                <label className="flex items-start gap-3 rounded-[18px] border border-white/10 bg-black/20 p-4">
-                  <input
-                    name="applyToExisting"
-                    type="checkbox"
-                    className="mt-1 size-4 rounded border-white/20 bg-black"
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold text-white">
-                      Terapkan juga ke semua profil affiliate yang sudah ada
-                    </span>
-                    <span className="mt-1 block text-sm leading-6 text-neutral-400">
-                      Saat rate global berubah, semua profil lama bisa ikut
-                      disesuaikan dari sini.
-                    </span>
-                  </span>
-                </label>
-
-                <Button
-                  type="submit"
-                  className="h-11 bg-red-600 text-white hover:bg-red-500"
-                >
-                  Simpan presentase
-                </Button>
-              </form>
-            )}
           </AdminSurface>
         </div>
       </div>

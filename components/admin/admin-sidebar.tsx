@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Home, Percent, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import {
+  Bot,
+  Crown,
+  Home,
+  Percent,
+  RefreshCw,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
@@ -33,11 +41,25 @@ const items = [
     match: (pathname: string) => pathname.startsWith("/admin/sync"),
   },
   {
-    description: "Telegram bot, Mini App, dan komisi",
+    description: "Telegram bot, webhook, dan Mini App",
     href: "/admin/settings",
-    icon: Percent,
+    icon: Bot,
     label: "Settings bot",
     match: (pathname: string) => pathname.startsWith("/admin/settings"),
+  },
+  {
+    description: "Atur presentase komisi affiliate",
+    href: "/admin/commission",
+    icon: Percent,
+    label: "Komisi affiliate",
+    match: (pathname: string) => pathname.startsWith("/admin/commission"),
+  },
+  {
+    description: "Atur preview gratis dan paywall VIP",
+    href: "/admin/vip",
+    icon: Crown,
+    label: "Pengaturan VIP",
+    match: (pathname: string) => pathname.startsWith("/admin/vip"),
   },
 ] as const;
 
