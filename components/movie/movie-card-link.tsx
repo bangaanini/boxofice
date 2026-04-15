@@ -16,6 +16,7 @@ export function MovieCardLink({ movie, className }: MovieCardLinkProps) {
     <Link
       href={`/movie/${movie.id}`}
       prefetch
+      data-haptic="light"
       className={cn(
         "group outline-none transition-transform active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-red-300",
         className,

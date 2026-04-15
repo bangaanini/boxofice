@@ -1,11 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { MovieCardLink } from "@/components/movie/movie-card-link";
 import { TelegramEntryGate } from "@/components/telegram/telegram-entry-gate";
-import { Button } from "@/components/ui/button";
-import { getHomepageMovieData } from "@/lib/movie-feeds";
+import {
+  getHomepageFilterOptions,
+  getHomepageMovieData,
+  type HomepageFilters,
+} from "@/lib/movie-feeds";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 import {
   buildTelegramBotChatUrlForUsername,
@@ -14,6 +17,75 @@ import {
 import { getCurrentUserSession } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
+
+type HomePageProps = {
+  searchParams: Promise<{
+    genre?: string;
+    year?: string;
+  }>;
+};
+
+function normalizeQueryValue(value?: string | null) {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : null;
+}
+
+function buildFilterHref(
+  current: HomepageFilters,
+  patch: Partial<Record<keyof HomepageFilters, string | null>>,
+) {
+  const nextGenre = Object.prototype.hasOwnProperty.call(patch, "genre")
+    ? patch.genre
+    : current.genre;
+  const nextYear = Object.prototype.hasOwnProperty.call(patch, "year")
+    ? patch.year
+    : current.year;
+  const next = {
+    genre: normalizeQueryValue(nextGenre),
+    year: normalizeQueryValue(nextYear),
+  };
+  const params = new URLSearchParams();
+
+  if (next.genre) {
+    params.set("genre", next.genre);
+  }
+
+  if (next.year) {
+    params.set("year", next.year);
+  }
+
+  const query = params.toString();
+
+  return query ? `/?${query}` : "/";
+}
+
+function FilterChip({
+  active,
+  href,
+  label,
+}: {
+  active: boolean;
+  href: string;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      prefetch
+      scroll={false}
+      data-haptic="light"
+      className={[
+        "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        active
+          ? "border-red-400/40 bg-red-600 text-white"
+          : "border-white/10 bg-white/[0.04] text-neutral-300 hover:bg-white/[0.08]",
+      ].join(" ")}
+    >
+      {label}
+    </Link>
+  );
+}
 
 function MovieRail({
   href,
@@ -29,13 +101,9 @@ function MovieRail({
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 py-3 sm:px-8 sm:py-4 lg:px-10">
-      <div className="mb-3 sm:mb-4">
-        <div>
-          <h2 className="text-xl font-bold text-white sm:text-2xl">
-            {title}
-          </h2>
-        </div>
+    <section className="mx-auto w-full max-w-7xl px-4 py-2 sm:px-8 sm:py-3 lg:px-10">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-white sm:text-2xl">{title}</h2>
       </div>
 
       <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-3 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
@@ -48,6 +116,8 @@ function MovieRail({
         ))}
         <Link
           href={href}
+          prefetch
+          data-haptic="light"
           className="flex aspect-[2/3] w-[132px] shrink-0 flex-col items-center justify-center rounded-md border border-white/10 bg-white/[0.05] p-4 text-center outline-none transition-colors active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-red-300 hover:bg-white/[0.09] sm:w-[180px]"
         >
           <span className="flex size-11 items-center justify-center rounded-md bg-red-600/15 text-red-300 ring-1 ring-red-400/20">
@@ -62,8 +132,11 @@ function MovieRail({
   );
 }
 
-export default async function Home() {
-  const user = await getCurrentUserSession();
+export default async function Home({ searchParams }: HomePageProps) {
+  const [{ genre, year }, user] = await Promise.all([
+    searchParams,
+    getCurrentUserSession(),
+  ]);
 
   if (!user) {
     const telegram = await getTelegramBotSettingsSafe();
@@ -79,93 +152,146 @@ export default async function Home() {
     );
   }
 
-  const { featured, homeMovies, popularMovies, newMovies } =
-    await getHomepageMovieData(18);
+  const selectedGenre = normalizeQueryValue(genre);
+  const selectedYear = normalizeQueryValue(year);
+  const [filters, { homeMovies, popularMovies, newMovies, totalMovies }] =
+    await Promise.all([
+      getHomepageFilterOptions(),
+      getHomepageMovieData({
+        genre: selectedGenre,
+        limit: 18,
+        year: selectedYear,
+      }),
+    ]);
+  const currentFilters = {
+    genre: selectedGenre,
+    year: selectedYear,
+  } satisfies HomepageFilters;
+  const displayName =
+    user.telegramFirstName?.trim() ||
+    user.name.trim() ||
+    user.telegramUsername ||
+    "Teman";
+  const usernameLabel = user.telegramUsername
+    ? `@${user.telegramUsername}`
+    : "Akun Telegram aktif";
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      <section className="relative isolate overflow-hidden border-b border-white/10">
-        {featured?.thumbnail ? (
-          <Image
-            src={featured.thumbnail}
-            alt=""
-            fill
-            unoptimized
-            sizes="100vw"
-            className="scale-105 object-cover opacity-35 sm:scale-110 sm:opacity-30 sm:blur-sm"
-            priority
-          />
-        ) : null}
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,#000_0%,rgba(0,0,0,0.86)_42%,rgba(0,0,0,0.55)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_18%,rgba(220,38,38,0.26),transparent_30%)]" />
+    <main className="min-h-screen bg-black pb-24 text-white sm:pb-8">
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.96),rgba(10,10,10,0.88))] backdrop-blur-xl">
+        <div className="mx-auto w-full max-w-7xl px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] sm:px-8 lg:px-10">
+          <div className="flex items-center gap-3">
+            <div className="relative size-11 shrink-0 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+              {user.telegramPhotoUrl ? (
+                <Image
+                  src={user.telegramPhotoUrl}
+                  alt={displayName}
+                  fill
+                  unoptimized
+                  sizes="44px"
+                  className="object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-base font-semibold text-white">
+                {displayName}
+              </p>
+              <p className="truncate text-xs text-neutral-400">
+                {usernameLabel}
+              </p>
+            </div>
+          </div>
 
-        <div className="relative z-10 mx-auto flex min-h-[420px] w-full max-w-7xl items-end px-4 pb-8 pt-20 sm:min-h-[560px] sm:items-center sm:px-8 sm:py-12 lg:px-10">
-          <div className="grid w-full items-center gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="max-w-3xl">
-              <p className="text-sm font-semibold text-red-400">Box Office</p>
-              <h1 className="mt-3 text-4xl font-black leading-none text-white sm:mt-4 sm:text-6xl lg:text-7xl">
-                {featured?.title ?? "Koleksi film siap menemani waktumu"}
-              </h1>
-              <div className="mt-6 flex flex-wrap items-center gap-3 sm:mt-7">
-                {featured ? (
-                  <Button
-                    asChild
-                    size="lg"
-                    className="h-11 bg-red-600 px-5 text-white hover:bg-red-500 sm:h-12 sm:px-7"
-                  >
-                    <Link href={`/movie/${featured.id}`}>
-                      <Play className="size-5 fill-current" />
-                      Mulai nonton
-                    </Link>
-                  </Button>
-                ) : null}
+          <div className="mt-3 flex items-center gap-2 text-xs text-neutral-400">
+            <span>{totalMovies} judul siap ditonton</span>
+            {(selectedGenre || selectedYear) && (
+              <span className="text-neutral-500">Filter aktif</span>
+            )}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div>
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">
+                Genre
+              </div>
+              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+                <FilterChip
+                  active={!selectedGenre}
+                  href={buildFilterHref(currentFilters, { genre: null })}
+                  label="Semua"
+                />
+                {filters.genres.map((genreOption) => (
+                  <FilterChip
+                    key={genreOption}
+                    active={selectedGenre === genreOption}
+                    href={buildFilterHref(currentFilters, {
+                      genre: genreOption,
+                    })}
+                    label={genreOption}
+                  />
+                ))}
               </div>
             </div>
 
-            {featured?.thumbnail ? (
-              <div className="hidden overflow-hidden rounded-md bg-neutral-950 shadow-2xl shadow-red-950/30 ring-1 ring-white/15 lg:block">
-                <div className="relative aspect-[2/3]">
-                  <Image
-                    src={featured.thumbnail}
-                    alt={`${featured.title} poster`}
-                    fill
-                    unoptimized
-                    sizes="300px"
-                    className="object-cover"
-                    priority
-                  />
-                </div>
+            <div>
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">
+                Tahun
               </div>
-            ) : null}
+              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+                <FilterChip
+                  active={!selectedYear}
+                  href={buildFilterHref(currentFilters, { year: null })}
+                  label="Semua"
+                />
+                {filters.years.map((yearOption) => (
+                  <FilterChip
+                    key={yearOption}
+                    active={selectedYear === yearOption}
+                    href={buildFilterHref(currentFilters, { year: yearOption })}
+                    label={yearOption}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      </header>
 
-      <MovieRail
-        href="/browse/home"
-        title="Pilihan Untukmu"
-        movies={homeMovies}
-      />
-      <MovieRail
-        href="/browse/populer"
-        title="Sedang populer"
-        movies={popularMovies}
-      />
-      <MovieRail
-        href="/browse/new"
-        title="Rilis terbaru"
-        movies={newMovies}
-      />
+      <div className="pt-[182px] sm:pt-[188px]">
+        <MovieRail
+          href="/browse/home"
+          title="Pilihan Untukmu"
+          movies={homeMovies}
+        />
+        <MovieRail
+          href="/browse/populer"
+          title="Sedang populer"
+          movies={popularMovies}
+        />
+        <MovieRail
+          href="/browse/new"
+          title="Rilis terbaru"
+          movies={newMovies}
+        />
 
-      {!homeMovies.length && !popularMovies.length && !newMovies.length ? (
-        <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-8 lg:px-10">
-          <div className="flex min-h-[320px] flex-col items-center justify-center rounded-md border border-dashed border-white/15 bg-neutral-900/60 px-6 text-center">
-            <p className="text-2xl font-semibold text-white">
-              Belum ada film
-            </p>
-          </div>
-        </section>
-      ) : null}
+        {!homeMovies.length && !popularMovies.length && !newMovies.length ? (
+          <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-8 lg:px-10">
+            <div className="flex min-h-[280px] flex-col items-center justify-center rounded-md border border-dashed border-white/15 bg-neutral-900/60 px-6 text-center">
+              <p className="text-2xl font-semibold text-white">
+                Belum ada film yang cocok
+              </p>
+              <p className="mt-3 max-w-md text-sm leading-6 text-neutral-400">
+                Coba ganti genre atau tahun agar katalog yang tampil lebih luas.
+              </p>
+            </div>
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }

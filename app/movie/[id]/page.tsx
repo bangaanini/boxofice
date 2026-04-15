@@ -6,7 +6,11 @@ import { DetailWatchActions } from "@/components/movie/detail-watch-actions";
 import { MovieCardLink } from "@/components/movie/movie-card-link";
 import { SynopsisAccordion } from "@/components/movie/synopsis-accordion";
 import { Badge } from "@/components/ui/badge";
-import { getRelatedMovies, type MovieCard } from "@/lib/movie-feeds";
+import {
+  getMovieDetailData,
+  getRelatedMovies,
+  type MovieCard,
+} from "@/lib/movie-feeds";
 import { prisma } from "@/lib/prisma";
 import { requireUserSession } from "@/lib/user-auth";
 
@@ -104,26 +108,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
     searchParams,
     requireUserSession(),
   ]);
-  const movie = await prisma.movie.findUnique({
-    where: { id },
-    select: {
-      description: true,
-      genre: true,
-      id: true,
-      inHome: true,
-      inNew: true,
-      inPopular: true,
-      quality: true,
-      rating: true,
-      releaseDate: true,
-      actors: true,
-      directors: true,
-      thumbnail: true,
-      title: true,
-      year: true,
-      duration: true,
-    },
-  });
+  const movie = await getMovieDetailData(id);
 
   if (!movie) {
     notFound();

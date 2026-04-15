@@ -78,7 +78,8 @@ export function MobileBottomNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={item.href === "/" ? true : null}
+                prefetch
+                data-haptic="medium"
                 className="flex flex-col items-center justify-end gap-1.5 px-1 pb-1.5 pt-2"
               >
                 <span

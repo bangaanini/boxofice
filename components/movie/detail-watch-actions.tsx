@@ -87,6 +87,7 @@ export function DetailWatchActions({
             type="button"
             size="lg"
             onClick={playInline}
+            data-haptic="medium"
             className="h-12 w-full bg-red-600 px-7 text-white hover:bg-red-500 sm:w-auto"
           >
             <Play className="size-4 fill-current" />
@@ -102,6 +103,7 @@ export function DetailWatchActions({
           asChild
           size="lg"
           variant="secondary"
+          data-haptic="light"
           className="hidden h-12 border border-white/10 bg-white/10 px-7 text-white hover:bg-white/15 sm:inline-flex"
         >
           <Link href="/" prefetch>

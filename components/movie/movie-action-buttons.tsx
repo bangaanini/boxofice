@@ -93,6 +93,7 @@ export function MovieActionButtons({
         type="button"
         variant="secondary"
         onClick={toggleSave}
+        data-haptic={isSaved ? "success" : "light"}
         disabled={isSaving}
         className="h-12 border border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
         aria-pressed={isSaved}
@@ -104,6 +105,7 @@ export function MovieActionButtons({
         type="button"
         variant="secondary"
         onClick={shareMovie}
+        data-haptic="light"
         className="h-12 border border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
       >
         <Share2 className="size-4" />
