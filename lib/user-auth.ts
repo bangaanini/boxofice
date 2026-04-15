@@ -208,6 +208,16 @@ export async function createUserSession(user: AuthUser) {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = createTokenHash(token);
   const expiresAt = new Date(Date.now() + USER_SESSION_TTL_SECONDS * 1000);
+  const cookieStore = await cookies();
+  const existingToken = cookieStore.get(USER_SESSION_COOKIE)?.value;
+
+  if (existingToken) {
+    await prisma.userSession.deleteMany({
+      where: {
+        tokenHash: createTokenHash(existingToken),
+      },
+    }).catch(() => undefined);
+  }
 
   await prisma.userSession.create({
     data: {
@@ -217,7 +227,6 @@ export async function createUserSession(user: AuthUser) {
     },
   });
 
-  const cookieStore = await cookies();
   cookieStore.set({
     ...getCookieOptions(),
     name: USER_SESSION_COOKIE,
