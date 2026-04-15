@@ -1125,7 +1125,7 @@ export function WatchPlayer({
                   data-haptic="medium"
                   className="h-11 bg-red-600 text-white hover:bg-red-500"
                 >
-                  <a href={stream?.upgradeUrl ?? "/profile"}>
+                  <a href={stream?.upgradeUrl ?? "/vip"}>
                     {stream?.upgradeLabel ?? "Buka VIP"}
                   </a>
                 </Button>

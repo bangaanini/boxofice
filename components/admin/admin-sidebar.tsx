@@ -5,6 +5,7 @@ import {
   Bot,
   Crown,
   Home,
+  Landmark,
   Percent,
   RefreshCw,
   ShieldCheck,
@@ -60,6 +61,13 @@ const items = [
     icon: Crown,
     label: "Pengaturan VIP",
     match: (pathname: string) => pathname.startsWith("/admin/vip"),
+  },
+  {
+    description: "Gateway pembayaran dan paket VIP",
+    href: "/admin/payments",
+    icon: Landmark,
+    label: "Payment gateway",
+    match: (pathname: string) => pathname.startsWith("/admin/payments"),
   },
 ] as const;
 

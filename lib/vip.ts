@@ -48,7 +48,18 @@ function getOptionalEnv(name: string) {
 }
 
 function defaultJoinVipUrl() {
-  return `${getEnvPublicAppUrl()}/profile`;
+  return `${getEnvPublicAppUrl()}/vip`;
+}
+
+function isLegacyProfileVipUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const appUrl = new URL(getEnvPublicAppUrl());
+
+    return url.origin === appUrl.origin && url.pathname === "/profile";
+  } catch {
+    return false;
+  }
 }
 
 function createDefaultVipProgramSettings(): VipProgramSettingsSnapshot {
@@ -99,14 +110,16 @@ function normalizeJoinVipUrl(value: string | null | undefined) {
   }
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return trimmed;
+    return isLegacyProfileVipUrl(trimmed) ? defaultJoinVipUrl() : trimmed;
   }
 
   if (trimmed.startsWith("/")) {
-    return `${getEnvPublicAppUrl()}${trimmed}`;
+    const normalized = `${getEnvPublicAppUrl()}${trimmed}`;
+    return isLegacyProfileVipUrl(normalized) ? defaultJoinVipUrl() : normalized;
   }
 
-  return `https://${trimmed}`;
+  const normalized = `https://${trimmed}`;
+  return isLegacyProfileVipUrl(normalized) ? defaultJoinVipUrl() : normalized;
 }
 
 export function isVipActive(expiresAt: Date | null | undefined) {

@@ -3,6 +3,7 @@ import {
   getAffiliateProfileCountSafe,
   getAffiliateProgramSettingsSafe,
 } from "@/lib/affiliate";
+import { getPaymentGatewaySettingsSafe, getVipPlansSafe } from "@/lib/payments";
 import { getVipProgramSettingsSafe } from "@/lib/vip";
 
 export async function getAdminOverviewData() {
@@ -23,10 +24,12 @@ export async function getAdminOverviewData() {
       },
     }),
   ]);
-  const [affiliateProfiles, settings, vipSettings] = await Promise.all([
+  const [affiliateProfiles, settings, vipSettings, paymentSettings, vipPlans] = await Promise.all([
     getAffiliateProfileCountSafe(),
     getAffiliateProgramSettingsSafe(),
     getVipProgramSettingsSafe(),
+    getPaymentGatewaySettingsSafe(),
+    getVipPlansSafe({ activeOnly: true }),
   ]);
 
   return {
@@ -46,6 +49,10 @@ export async function getAdminOverviewData() {
     vipPreviewLimitMinutes: vipSettings.settings.previewLimitMinutes,
     vipSchemaIssue: vipSettings.schemaIssue,
     vipSchemaReady: vipSettings.schemaReady,
+    paymentGatewayEnabled: paymentSettings.runtime.enabled,
+    paymentSchemaIssue: paymentSettings.schemaIssue ?? vipPlans.schemaIssue,
+    paymentSchemaReady: paymentSettings.schemaReady && vipPlans.schemaReady,
+    activeVipPlans: vipPlans.plans.length,
   };
 }
 

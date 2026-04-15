@@ -126,7 +126,7 @@ function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
     supportUrl: buildTelegramBotChatUrlForUsername(runtime.botUsername),
     updatedAt: new Date(0),
     vipLabel: "💎 Join VIP",
-    vipUrl: `${runtime.publicAppUrl}/profile`,
+    vipUrl: `${runtime.publicAppUrl}/vip`,
     webhookSecret: null,
     welcomeMessage:
       "👋 Hai {first_name}! Selamat datang di Box Office.\n\n🎬 Nonton film Box Office langsung dari Telegram.\n🔥 Tanpa ribet • Full HD • Update setiap hari\n\n📌 Cara pakai:\n• Buka -> langsung mulai nonton\n• Cari Judul -> cari film favoritmu\n• Gabung Affiliate -> mulai bangun komisi dari Telegram\n• Film Box Office -> lihat update kanal utama\n• Hubungi Admin -> kalau ada kendala\n• Join VIP -> buka akses premium\n\nPilih menu di bawah dan mulai sekarang!",
@@ -175,10 +175,27 @@ function fillWebAppUrlFromRuntime(value: string, fallback: string) {
   return trimmed;
 }
 
+function isLegacyInternalVipUrl(value: string, runtime: TelegramBotRuntime) {
+  try {
+    const url = new URL(value);
+    const appUrl = new URL(runtime.publicAppUrl);
+
+    return url.origin === appUrl.origin && url.pathname === "/profile";
+  } catch {
+    return false;
+  }
+}
+
 function withDerivedLinks(
   settings: TelegramBotSettingsSnapshot,
   runtime: TelegramBotRuntime,
 ) {
+  const vipFallbackUrl = `${runtime.publicAppUrl}/vip`;
+  const resolvedVipUrl = fillWebAppUrlFromRuntime(
+    settings.vipUrl,
+    vipFallbackUrl,
+  );
+
   return {
     ...settings,
     affiliateGroupUrl: fillUrlFromRuntime(
@@ -205,10 +222,9 @@ function withDerivedLinks(
       settings.supportUrl,
       buildTelegramBotChatUrlForUsername(runtime.botUsername),
     ),
-    vipUrl: fillWebAppUrlFromRuntime(
-      settings.vipUrl,
-      `${runtime.publicAppUrl}/profile`,
-    ),
+    vipUrl: isLegacyInternalVipUrl(resolvedVipUrl, runtime)
+      ? vipFallbackUrl
+      : resolvedVipUrl,
   };
 }
 

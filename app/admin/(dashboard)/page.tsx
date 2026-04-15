@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Percent, RefreshCw, Users } from "lucide-react";
+import { ArrowRight, Landmark, Percent, RefreshCw, Users } from "lucide-react";
 
 import {
   AdminMetricCard,
@@ -20,6 +20,16 @@ export default async function AdminOverviewPage() {
           <p className="mt-2">
             {overview.affiliateSchemaIssue ??
               "Database runtime belum memiliki tabel affiliate terbaru. Panel admin tetap dibuka dengan fallback sementara."}
+          </p>
+        </AdminSurface>
+      ) : null}
+
+      {!overview.paymentSchemaReady ? (
+        <AdminSurface className="text-sm leading-6 text-amber-100">
+          <p className="font-semibold text-white">Payment module fallback aktif</p>
+          <p className="mt-2">
+            {overview.paymentSchemaIssue ??
+              "Database runtime belum siap penuh untuk modul payment terbaru."}
           </p>
         </AdminSurface>
       ) : null}
@@ -49,7 +59,7 @@ export default async function AdminOverviewPage() {
         </div>
       </AdminSurface>
 
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div className="grid gap-5 xl:grid-cols-4">
         <AdminSurface>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -132,10 +142,45 @@ export default async function AdminOverviewPage() {
           </div>
 
           <Link
-            href="/admin/settings"
+            href="/admin/commission"
             className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-white"
           >
-            Buka settings
+            Buka pengaturan komisi
+            <ArrowRight className="size-4" />
+          </Link>
+        </AdminSurface>
+
+        <AdminSurface>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-orange-200">Payment</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">
+                Gateway VIP
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-neutral-400">
+                Atur checkout Paymenku, paket VIP yang dijual, dan pantau order
+                QRIS maupun bank VA yang masuk dari Mini App.
+              </p>
+            </div>
+            <Landmark className="size-5 text-neutral-500" />
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <AdminMetricCard
+              label="Gateway"
+              value={overview.paymentGatewayEnabled ? "Aktif" : "Belum aktif"}
+            />
+            <AdminMetricCard
+              label="Paket aktif"
+              value={overview.activeVipPlans}
+            />
+          </div>
+
+          <Link
+            href="/admin/payments"
+            className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-white"
+          >
+            Buka payment gateway
             <ArrowRight className="size-4" />
           </Link>
         </AdminSurface>

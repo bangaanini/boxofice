@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getAffiliateProgramSettingsSafe } from "@/lib/affiliate";
 import { sanitizeAdminRedirectPath } from "@/lib/admin-auth";
 import { clearAdminSessionCookie, requireAdminSession } from "@/lib/admin-session";
+import { getPaymentGatewaySettingsSafe } from "@/lib/payments";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 import {
   auditMovieCatalog,
@@ -411,7 +412,13 @@ function readNullableTextField(formData: FormData, key: string) {
   return value || null;
 }
 
-function readRequiredUrlField(formData: FormData, key: string, label: string) {
+function readRequiredUrlField(
+  formData: FormData,
+  key: string,
+  label: string,
+  redirectBasePath = "/admin/settings",
+  statusKey = "bot",
+) {
   const value = readTextField(formData, key);
 
   try {
@@ -424,12 +431,18 @@ function readRequiredUrlField(formData: FormData, key: string, label: string) {
     return url.toString();
   } catch {
     redirect(
-      `/admin/settings?bot=error&message=${encodeURIComponent(`${label} wajib berupa URL yang valid.`)}`,
+      `${redirectBasePath}?${statusKey}=error&message=${encodeURIComponent(`${label} wajib berupa URL yang valid.`)}`,
     );
   }
 }
 
-function readNullableUrlField(formData: FormData, key: string, label: string) {
+function readNullableUrlField(
+  formData: FormData,
+  key: string,
+  label: string,
+  redirectBasePath = "/admin/settings",
+  statusKey = "bot",
+) {
   const value = readTextField(formData, key);
 
   if (!value) {
@@ -446,7 +459,7 @@ function readNullableUrlField(formData: FormData, key: string, label: string) {
     return url.toString();
   } catch {
     redirect(
-      `/admin/settings?bot=error&message=${encodeURIComponent(`${label} wajib berupa URL yang valid.`)}`,
+      `${redirectBasePath}?${statusKey}=error&message=${encodeURIComponent(`${label} wajib berupa URL yang valid.`)}`,
     );
   }
 }
@@ -460,6 +473,15 @@ function readPositiveIntegerField(
   const safeValue = Number.isFinite(rawValue) ? Math.trunc(rawValue) : fallback;
 
   return Math.max(1, safeValue);
+}
+
+function slugify(input: string) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
 }
 
 export async function updateTelegramBotSettings(formData: FormData) {
@@ -491,31 +513,59 @@ export async function updateTelegramBotSettings(formData: FormData) {
       formData,
       "affiliateGroupUrl",
       "URL group affiliate",
+      redirectBasePath,
     ),
     affiliateLabel: readTextField(formData, "affiliateLabel") || "💰 Gabung Affiliate",
     affiliateUrl: readRequiredUrlField(
       formData,
       "affiliateUrl",
       "URL tombol affiliate",
+      redirectBasePath,
     ),
     botToken: readNullableTextField(formData, "botToken"),
     botUsername: readNullableTextField(formData, "botUsername"),
     channelLabel: readTextField(formData, "channelLabel") || "🎥 Film Box Office",
-    channelUrl: readRequiredUrlField(formData, "channelUrl", "URL channel film"),
+    channelUrl: readRequiredUrlField(
+      formData,
+      "channelUrl",
+      "URL channel film",
+      redirectBasePath,
+    ),
     miniAppShortName: readNullableTextField(formData, "miniAppShortName"),
     openAppLabel: readTextField(formData, "openAppLabel") || "🎬 Buka",
-    openAppUrl: readRequiredUrlField(formData, "openAppUrl", "URL tombol buka"),
+    openAppUrl: readRequiredUrlField(
+      formData,
+      "openAppUrl",
+      "URL tombol buka",
+      redirectBasePath,
+    ),
     publicAppUrl: readNullableUrlField(
       formData,
       "publicAppUrl",
       "Public App URL",
+      redirectBasePath,
     ),
     searchLabel: readTextField(formData, "searchLabel") || "🔎 Cari Judul",
-    searchUrl: readRequiredUrlField(formData, "searchUrl", "URL tombol cari"),
+    searchUrl: readRequiredUrlField(
+      formData,
+      "searchUrl",
+      "URL tombol cari",
+      redirectBasePath,
+    ),
     supportLabel: readTextField(formData, "supportLabel") || "📞 Hubungi Admin",
-    supportUrl: readRequiredUrlField(formData, "supportUrl", "URL support admin"),
+    supportUrl: readRequiredUrlField(
+      formData,
+      "supportUrl",
+      "URL support admin",
+      redirectBasePath,
+    ),
     vipLabel: readTextField(formData, "vipLabel") || "💎 Join VIP",
-    vipUrl: readRequiredUrlField(formData, "vipUrl", "URL tombol VIP"),
+    vipUrl: readRequiredUrlField(
+      formData,
+      "vipUrl",
+      "URL tombol VIP",
+      redirectBasePath,
+    ),
     webhookSecret: readNullableTextField(formData, "webhookSecret"),
     welcomeMessage,
   };
@@ -536,7 +586,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
 export async function updateVipProgramSettings(formData: FormData) {
   await requireAdminSession();
 
-  const redirectBasePath = resolveRedirectTarget(formData, "/admin/settings");
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/vip");
   const settingsResult = await getVipProgramSettingsSafe();
 
   if (!settingsResult.schemaReady) {
@@ -555,7 +605,13 @@ export async function updateVipProgramSettings(formData: FormData) {
     settingsResult.settings.previewLimitMinutes,
   );
   const joinVipLabel = readTextField(formData, "joinVipLabel") || "Buka VIP";
-  const joinVipUrl = readRequiredUrlField(formData, "joinVipUrl", "URL tombol VIP");
+  const joinVipUrl = readRequiredUrlField(
+    formData,
+    "joinVipUrl",
+    "URL tombol VIP",
+    redirectBasePath,
+    "vip",
+  );
   const paywallTitle = readTextField(formData, "paywallTitle") || "Lanjutkan dengan VIP";
   const paywallDescription = readTextField(formData, "paywallDescription");
 
@@ -578,12 +634,141 @@ export async function updateVipProgramSettings(formData: FormData) {
   });
 
   revalidatePath("/admin");
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/vip");
   revalidatePath("/");
   revalidatePath("/profile");
+  revalidatePath("/vip");
 
   redirect(
-    `${redirectBasePath}?vip=ok&message=${encodeURIComponent("Pengaturan VIP berhasil diperbarui.")}`,
+      `${redirectBasePath}?vip=ok&message=${encodeURIComponent("Pengaturan VIP berhasil diperbarui.")}`,
+    );
+}
+
+export async function updatePaymentGatewaySettings(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/payments");
+  const settingsResult = await getPaymentGatewaySettingsSafe();
+
+  if (!settingsResult.schemaReady) {
+    redirect(
+      `${redirectBasePath}?payment=error&message=${encodeURIComponent(
+        settingsResult.schemaIssue ??
+          "Database runtime belum siap untuk menyimpan payment gateway.",
+      )}`,
+    );
+  }
+
+  const provider = readTextField(formData, "provider") || "paymenku";
+  const checkoutButtonLabel =
+    readTextField(formData, "checkoutButtonLabel") || "Aktifkan sekarang";
+
+  if (provider !== "paymenku") {
+    redirect(
+      `${redirectBasePath}?payment=error&message=${encodeURIComponent("Untuk tahap ini provider yang didukung baru Paymenku.")}`,
+    );
+  }
+
+  await prisma.paymentGatewaySettings.update({
+    where: { id: settingsResult.settings.id },
+    data: {
+      checkoutButtonLabel,
+      enabled: formData.get("enabled") === "on",
+      provider,
+      stripePublishableKey: null,
+      stripeSecretKey: readNullableTextField(formData, "paymenkuApiKey"),
+      stripeWebhookSecret: readNullableTextField(formData, "paymenkuWebhookToken"),
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/payments");
+  revalidatePath("/vip");
+
+  redirect(
+    `${redirectBasePath}?payment=ok&message=${encodeURIComponent("Payment gateway berhasil diperbarui.")}`,
+  );
+}
+
+export async function createOrUpdateVipPlan(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/payments");
+  const planId = readTextField(formData, "planId");
+  const title = readTextField(formData, "title");
+  const description = readTextField(formData, "description");
+  const slug = slugify(readTextField(formData, "slug") || title);
+  const durationDays = readPositiveIntegerField(formData, "durationDays", 30);
+  const priceAmount = readPositiveIntegerField(formData, "priceAmount", 49000);
+  const sortOrder = readPositiveIntegerField(formData, "sortOrder", 1);
+  const currency = readTextField(formData, "currency").toUpperCase() || "IDR";
+
+  if (title.length < 3) {
+    redirect(
+      `${redirectBasePath}?plan=error&message=${encodeURIComponent("Judul paket minimal 3 karakter.")}`,
+    );
+  }
+
+  if (description.length < 12) {
+    redirect(
+      `${redirectBasePath}?plan=error&message=${encodeURIComponent("Deskripsi paket minimal 12 karakter.")}`,
+    );
+  }
+
+  if (!slug) {
+    redirect(
+      `${redirectBasePath}?plan=error&message=${encodeURIComponent("Slug paket belum valid.")}`,
+    );
+  }
+
+  const payload = {
+    active: formData.get("active") === "on",
+    badge: readNullableTextField(formData, "badge"),
+    ctaLabel: readTextField(formData, "ctaLabel") || "Aktifkan sekarang",
+    currency,
+    description,
+    durationDays,
+    highlight: formData.get("highlight") === "on",
+    priceAmount,
+    slug,
+    sortOrder,
+    title,
+  };
+
+  try {
+    if (planId) {
+      await prisma.vipPlan.update({
+        where: { id: planId },
+        data: payload,
+      });
+    } else {
+      await prisma.vipPlan.create({
+        data: payload,
+      });
+    }
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      String(error.code) === "P2002"
+    ) {
+      redirect(
+        `${redirectBasePath}?plan=error&message=${encodeURIComponent("Slug paket sudah dipakai. Gunakan slug lain.")}`,
+      );
+    }
+
+    throw error;
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/payments");
+  revalidatePath("/vip");
+
+  redirect(
+    `${redirectBasePath}?plan=ok&message=${encodeURIComponent(
+      planId ? "Paket VIP berhasil diperbarui." : "Paket VIP baru berhasil ditambahkan.",
+    )}`,
   );
 }
 
