@@ -87,23 +87,24 @@ export function MovieActionButtons({
   }
 
   async function shareMovie() {
-    const url = shareUrl || telegramShareUrl || window.location.href;
+    const webUrl = shareUrl || window.location.href;
+    const telegramUrl = telegramShareUrl || webUrl;
     const text = shareText || `Tonton ${title} di Layar BoxOffice`;
 
     try {
       if (isTelegramMiniAppBrowser()) {
         openTelegramShareComposer({
           text,
-          url,
+          url: telegramUrl,
         });
       } else if (navigator.share) {
         await navigator.share({
           title,
           text,
-          url,
+          url: webUrl,
         });
       } else {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(webUrl);
         setShareLabel("Link tersalin");
         window.setTimeout(() => setShareLabel("Bagikan"), 1600);
       }
