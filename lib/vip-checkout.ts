@@ -5,6 +5,7 @@ import {
   getPaymentGatewaySettingsSafe,
   getPaymenkuChannels,
 } from "@/lib/payments";
+import { sendTelegramUserMessage } from "@/lib/telegram-bot";
 
 type PaymenkuCreateTransactionResponse = {
   data?: {
@@ -132,6 +133,8 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
       user: {
         select: {
           id: true,
+          name: true,
+          telegramId: true,
           vipExpiresAt: true,
           vipStartedAt: true,
         },
@@ -183,6 +186,21 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
     amount: commissionBaseAmount,
     orderId: order.id,
     referredUserId: order.user.id,
+  }).catch(() => null);
+
+  await sendTelegramUserMessage({
+    telegramId: order.user.telegramId,
+    text:
+      `🎉 VIP Box Office aktif untuk ${order.user.name}.\n\n` +
+      `Paket: ${order.plan.title}\n` +
+      `Masa aktif baru: ${nextExpiresAt.toLocaleString("id-ID", {
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        month: "long",
+        year: "numeric",
+      })}\n\n` +
+      `Sekarang kamu bisa lanjut nonton tanpa batas preview.`,
   }).catch(() => null);
 
   return order;

@@ -112,9 +112,7 @@ export function PaymentStatusSheet({
       if ((payload.status ?? payload.order?.status) === "paid") {
         setMessage("Pembayaran sudah masuk. VIP kamu aktif.");
         window.setTimeout(() => {
-          router.replace(
-            `/vip?payment=paid&orderId=${encodeURIComponent(orderId)}&message=${encodeURIComponent("Pembayaran terkonfirmasi. VIP kamu sudah aktif.")}`,
-          );
+          router.replace(`/vip/success?orderId=${encodeURIComponent(orderId)}`);
           router.refresh();
         }, 1200);
       }

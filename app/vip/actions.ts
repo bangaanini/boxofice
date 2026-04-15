@@ -57,7 +57,7 @@ export async function checkVipPaymentStatus(formData: FormData) {
 
     if (result.status === "paid") {
       redirect(
-        `/vip?payment=paid&orderId=${encodeURIComponent(orderId)}&message=${encodeURIComponent("Pembayaran terkonfirmasi. VIP kamu sudah aktif.")}`,
+        `/vip/success?orderId=${encodeURIComponent(orderId)}`,
       );
     }
 
