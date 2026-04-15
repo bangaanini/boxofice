@@ -69,6 +69,8 @@ model User {
   telegramPhotoUrl  String?            @db.Text
   telegramAuthDate  DateTime?
   lastTelegramAuthAt DateTime?
+  vipStartedAt      DateTime?
+  vipExpiresAt      DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   sessions          UserSession[]
@@ -175,6 +177,19 @@ model TelegramBotSettings {
   supportUrl          String   @db.Text
   vipLabel            String
   vipUrl              String   @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model VipProgramSettings {
+  id                  String   @id @default(uuid())
+  slug                String   @unique @default("default")
+  previewEnabled      Boolean  @default(true)
+  previewLimitMinutes Int      @default(3)
+  joinVipLabel        String   @default("Buka VIP")
+  joinVipUrl          String   @db.Text
+  paywallTitle        String   @default("Lanjutkan dengan VIP")
+  paywallDescription  String   @db.Text
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

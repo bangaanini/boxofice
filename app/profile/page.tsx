@@ -1,8 +1,10 @@
 import Image from "next/image";
 import { MessageCircle, Sparkles, UserRound } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { getCinematicBackdropMovies } from "@/lib/movie-feeds";
 import { requireUserSession } from "@/lib/user-auth";
+import { getVipProgramSettingsSafe, getVipStatus } from "@/lib/vip";
 
 function initials(name: string) {
   return name
@@ -14,10 +16,13 @@ function initials(name: string) {
 }
 
 export default async function ProfilePage() {
-  const [user, backdropMovies] = await Promise.all([
+  const [user, backdropMovies, vipSettingsResult] = await Promise.all([
     requireUserSession(),
     getCinematicBackdropMovies(),
+    getVipProgramSettingsSafe(),
   ]);
+  const vipStatus = getVipStatus(user);
+  const vipSettings = vipSettingsResult.settings;
 
   const heroMovie = backdropMovies[0] ?? null;
   const stackMovies = backdropMovies.slice(1, 4);
@@ -105,9 +110,47 @@ export default async function ProfilePage() {
               <Sparkles className="size-4 text-orange-300" />
               Status VIP
             </p>
-            <p className="mt-2 text-sm leading-6 text-neutral-200">
-              Program dalam penyiapan
-            </p>
+            {vipStatus.active ? (
+              <>
+                <p className="mt-2 text-sm leading-6 text-neutral-200">
+                  Akunmu sedang VIP. Preview otomatis dimatikan dan semua akses penuh tetap aktif sampai masa berlangganan berakhir.
+                </p>
+                <div className="mt-4 rounded-[18px] border border-white/10 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400">
+                    Aktif sampai
+                  </p>
+                  <p className="mt-2 text-lg font-bold text-white">
+                    {vipStatus.expiresAt
+                      ? new Intl.DateTimeFormat("id-ID", {
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          month: "long",
+                          year: "numeric",
+                        }).format(vipStatus.expiresAt)
+                      : "-"}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-sm leading-6 text-neutral-200">
+                  Akunmu masih mode gratis. Preview akan berhenti otomatis setelah{" "}
+                  {vipSettings.previewEnabled
+                    ? `${vipSettings.previewLimitMinutes} menit`
+                    : "batas yang diatur admin"}
+                  .
+                </p>
+                <Button
+                  asChild
+                  className="mt-4 h-11 bg-red-600 text-white hover:bg-red-500"
+                >
+                  <a href={vipSettings.joinVipUrl}>
+                    {vipSettings.joinVipLabel}
+                  </a>
+                </Button>
+              </>
+            )}
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">

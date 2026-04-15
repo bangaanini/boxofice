@@ -2,6 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { fetchPlayableStream, MovieApiError } from "@/lib/movie-api";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserSession } from "@/lib/user-auth";
+import {
+  createPlaybackAccessToken,
+  getVipProgramSettingsSafe,
+  getVipStatus,
+  resolvePreviewLimitSeconds,
+} from "@/lib/vip";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,7 +130,15 @@ async function resolveStreamLookup(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const lookup = await resolveStreamLookup(request);
+  const [lookup, user, vipSettingsResult] = await Promise.all([
+    resolveStreamLookup(request),
+    getCurrentUserSession(),
+    getVipProgramSettingsSafe(),
+  ]);
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   if (!lookup?.sourceUrl) {
     return NextResponse.json(
@@ -133,15 +148,40 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const vipStatus = getVipStatus(user);
+    const previewLimitSeconds = resolvePreviewLimitSeconds(
+      vipSettingsResult.settings,
+      vipStatus.active,
+    );
+    const accessToken = createPlaybackAccessToken({
+      movieId: lookup.movieId,
+      previewLimitSeconds,
+      userId: user.id,
+      vipActive: vipStatus.active,
+    });
     const streamCache = lookup.streamCache;
     const cachedStream = streamCache ? cachedStreamResponse(streamCache) : null;
 
     if (cachedStream && streamCache && isCacheFresh(streamCache.checkedAt)) {
-      return NextResponse.json(cachedStream, {
-        headers: {
-          "Cache-Control": "s-maxage=3600, stale-while-revalidate=300",
+      return NextResponse.json(
+        {
+          ...cachedStream,
+          accessToken: accessToken.token,
+          accessTokenExpiresAt: accessToken.expiresAt.toISOString(),
+          paywallDescription: vipSettingsResult.settings.paywallDescription,
+          paywallTitle: vipSettingsResult.settings.paywallTitle,
+          previewLimitSeconds,
+          upgradeLabel: vipSettingsResult.settings.joinVipLabel,
+          upgradeUrl: vipSettingsResult.settings.joinVipUrl,
+          vipActive: vipStatus.active,
+          vipExpiresAt: vipStatus.expiresAt?.toISOString() ?? null,
         },
-      });
+        {
+          headers: {
+            "Cache-Control": "private, no-store",
+          },
+        },
+      );
     }
 
     const stream = await fetchPlayableStream(lookup.sourceUrl, {
@@ -192,15 +232,24 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
+        accessToken: accessToken.token,
+        accessTokenExpiresAt: accessToken.expiresAt.toISOString(),
         iframe: stream.iframe,
         m3u8: stream.m3u8,
         originalUrl: stream.originalUrl,
+        paywallDescription: vipSettingsResult.settings.paywallDescription,
+        paywallTitle: vipSettingsResult.settings.paywallTitle,
+        previewLimitSeconds,
         sources: stream.sources,
         resolvedFrom: stream.resolvedFrom,
+        upgradeLabel: vipSettingsResult.settings.joinVipLabel,
+        upgradeUrl: vipSettingsResult.settings.joinVipUrl,
+        vipActive: vipStatus.active,
+        vipExpiresAt: vipStatus.expiresAt?.toISOString() ?? null,
       },
       {
         headers: {
-          "Cache-Control": "s-maxage=3600, stale-while-revalidate=300",
+          "Cache-Control": "private, no-store",
         },
       },
     );

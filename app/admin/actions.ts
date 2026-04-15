@@ -15,6 +15,7 @@ import {
   type MovieFeedTarget,
 } from "@/lib/movie-sync";
 import { prisma } from "@/lib/prisma";
+import { getVipProgramSettingsSafe } from "@/lib/vip";
 
 function resolveRedirectTarget(
   formData: FormData,
@@ -450,6 +451,17 @@ function readNullableUrlField(formData: FormData, key: string, label: string) {
   }
 }
 
+function readPositiveIntegerField(
+  formData: FormData,
+  key: string,
+  fallback: number,
+) {
+  const rawValue = Number(formData.get(key) ?? fallback);
+  const safeValue = Number.isFinite(rawValue) ? Math.trunc(rawValue) : fallback;
+
+  return Math.max(1, safeValue);
+}
+
 export async function updateTelegramBotSettings(formData: FormData) {
   await requireAdminSession();
 
@@ -518,6 +530,134 @@ export async function updateTelegramBotSettings(formData: FormData) {
 
   redirect(
     `${redirectBasePath}?bot=ok&message=${encodeURIComponent("Konfigurasi bot Telegram berhasil diperbarui.")}`,
+  );
+}
+
+export async function updateVipProgramSettings(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/settings");
+  const settingsResult = await getVipProgramSettingsSafe();
+
+  if (!settingsResult.schemaReady) {
+    redirect(
+      `${redirectBasePath}?vip=error&message=${encodeURIComponent(
+        settingsResult.schemaIssue ??
+          "Database runtime belum siap untuk menyimpan pengaturan VIP.",
+      )}`,
+    );
+  }
+
+  const previewEnabled = formData.get("previewEnabled") === "on";
+  const previewLimitMinutes = readPositiveIntegerField(
+    formData,
+    "previewLimitMinutes",
+    settingsResult.settings.previewLimitMinutes,
+  );
+  const joinVipLabel = readTextField(formData, "joinVipLabel") || "Buka VIP";
+  const joinVipUrl = readRequiredUrlField(formData, "joinVipUrl", "URL tombol VIP");
+  const paywallTitle = readTextField(formData, "paywallTitle") || "Lanjutkan dengan VIP";
+  const paywallDescription = readTextField(formData, "paywallDescription");
+
+  if (paywallDescription.length < 12) {
+    redirect(
+      `${redirectBasePath}?vip=error&message=${encodeURIComponent("Deskripsi paywall minimal 12 karakter.")}`,
+    );
+  }
+
+  await prisma.vipProgramSettings.update({
+    where: { id: settingsResult.settings.id },
+    data: {
+      joinVipLabel,
+      joinVipUrl,
+      paywallDescription,
+      paywallTitle,
+      previewEnabled,
+      previewLimitMinutes,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/settings");
+  revalidatePath("/");
+  revalidatePath("/profile");
+
+  redirect(
+    `${redirectBasePath}?vip=ok&message=${encodeURIComponent("Pengaturan VIP berhasil diperbarui.")}`,
+  );
+}
+
+export async function updateUserVipStatus(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/users");
+  const userId = readTextField(formData, "userId");
+  const intent = readTextField(formData, "intent");
+  const durationDays = readPositiveIntegerField(formData, "vipDays", 30);
+
+  if (!userId) {
+    redirect(
+      `${redirectBasePath}?vip=error&message=${encodeURIComponent("User VIP tidak ditemukan.")}`,
+    );
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, vipExpiresAt: true },
+  });
+
+  if (!user) {
+    redirect(
+      `${redirectBasePath}?vip=error&message=${encodeURIComponent("User VIP tidak ditemukan.")}`,
+    );
+  }
+
+  if (intent === "revoke") {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        vipExpiresAt: null,
+        vipStartedAt: null,
+      },
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/users");
+    revalidatePath("/");
+    revalidatePath("/profile");
+
+    redirect(
+      `${redirectBasePath}?vip=ok&message=${encodeURIComponent(`VIP untuk ${user.name} berhasil dicabut.`)}`,
+    );
+  }
+
+  const baseDate =
+    user.vipExpiresAt && user.vipExpiresAt.getTime() > Date.now()
+      ? user.vipExpiresAt
+      : new Date();
+  const nextExpiresAt = new Date(baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      vipExpiresAt: nextExpiresAt,
+      vipStartedAt: new Date(),
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/users");
+  revalidatePath("/");
+  revalidatePath("/profile");
+
+  redirect(
+    `${redirectBasePath}?vip=ok&message=${encodeURIComponent(
+      `VIP untuk ${user.name} aktif sampai ${new Intl.DateTimeFormat("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(nextExpiresAt)}.`,
+    )}`,
   );
 }
 

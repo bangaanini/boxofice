@@ -3,9 +3,10 @@ import {
   getAffiliateProfileCountSafe,
   getAffiliateProgramSettingsSafe,
 } from "@/lib/affiliate";
+import { getVipProgramSettingsSafe } from "@/lib/vip";
 
 export async function getAdminOverviewData() {
-  const [totalMovies, homeCount, popularCount, newCount, totalUsers, totalFavorites, totalHistory] =
+  const [totalMovies, homeCount, popularCount, newCount, totalUsers, totalFavorites, totalHistory, totalVipUsers] =
     await Promise.all([
     prisma.movie.count(),
     prisma.movie.count({ where: { inHome: true } }),
@@ -14,10 +15,18 @@ export async function getAdminOverviewData() {
     prisma.user.count(),
     prisma.userFavorite.count(),
     prisma.watchHistory.count(),
+    prisma.user.count({
+      where: {
+        vipExpiresAt: {
+          gt: new Date(),
+        },
+      },
+    }),
   ]);
-  const [affiliateProfiles, settings] = await Promise.all([
+  const [affiliateProfiles, settings, vipSettings] = await Promise.all([
     getAffiliateProfileCountSafe(),
     getAffiliateProgramSettingsSafe(),
+    getVipProgramSettingsSafe(),
   ]);
 
   return {
@@ -28,17 +37,24 @@ export async function getAdminOverviewData() {
     homeCount,
     newCount,
     popularCount,
+    totalVipUsers,
     totalAffiliateProfiles: affiliateProfiles.count,
     totalFavorites,
     totalHistory,
     totalMovies,
     totalUsers,
+    vipPreviewLimitMinutes: vipSettings.settings.previewLimitMinutes,
+    vipSchemaIssue: vipSettings.schemaIssue,
+    vipSchemaReady: vipSettings.schemaReady,
   };
 }
 
 export async function getAdminUserTableData(query: string | undefined) {
   const trimmedQuery = query?.trim();
-  const settings = await getAffiliateProgramSettingsSafe();
+  const [settings, vipSettings] = await Promise.all([
+    getAffiliateProgramSettingsSafe(),
+    getVipProgramSettingsSafe(),
+  ]);
 
   try {
     const users = await prisma.user.findMany({
@@ -78,6 +94,8 @@ export async function getAdminUserTableData(query: string | undefined) {
         email: true,
         id: true,
         name: true,
+        vipExpiresAt: true,
+        vipStartedAt: true,
         _count: {
           select: {
             favorites: true,
@@ -117,6 +135,8 @@ export async function getAdminUserTableData(query: string | undefined) {
       affiliateSchemaIssue: settings.schemaIssue,
       affiliateSchemaReady: settings.schemaReady,
       defaultCommissionRate: settings.settings.defaultCommissionRate,
+      vipSchemaIssue: vipSettings.schemaIssue,
+      vipSchemaReady: vipSettings.schemaReady,
       totalUsers: users.length,
       users,
     };
@@ -157,6 +177,8 @@ export async function getAdminUserTableData(query: string | undefined) {
         email: true,
         id: true,
         name: true,
+        vipExpiresAt: true,
+        vipStartedAt: true,
         _count: {
           select: {
             favorites: true,
@@ -174,6 +196,8 @@ export async function getAdminUserTableData(query: string | undefined) {
         "Data affiliate belum siap di database runtime. Kolom referral dan komisi sementara dinonaktifkan sampai migration dijalankan.",
       affiliateSchemaReady: false,
       defaultCommissionRate: settings.settings.defaultCommissionRate,
+      vipSchemaIssue: vipSettings.schemaIssue,
+      vipSchemaReady: vipSettings.schemaReady,
       totalUsers: users.length,
       users: users.map((user) => ({
         ...user,

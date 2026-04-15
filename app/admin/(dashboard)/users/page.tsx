@@ -1,17 +1,21 @@
 import { Search } from "lucide-react";
 
+import { updateUserVipStatus } from "@/app/admin/actions";
 import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
 import { Button } from "@/components/ui/button";
 import { getAdminUserTableData } from "@/lib/admin-dashboard";
+import { isVipActive } from "@/lib/vip";
 
 export const dynamic = "force-dynamic";
 
 type AdminUsersPageProps = {
   searchParams: Promise<{
+    message?: string;
     q?: string;
+    vip?: string;
   }>;
 };
 
@@ -43,12 +47,15 @@ export default async function AdminUsersPage({
     affiliateSchemaReady,
     defaultCommissionRate,
     totalUsers,
+    vipSchemaIssue,
+    vipSchemaReady,
     users,
   } =
     await getAdminUserTableData(query);
 
   const referredUsers = users.filter((user) => user.affiliateReferral).length;
   const affiliateUsers = users.filter((user) => user.affiliateProfile).length;
+  const vipUsers = users.filter((user) => isVipActive(user.vipExpiresAt)).length;
   const totalReferralCommission = users.reduce(
     (sum, user) => sum + (user.affiliateProfile?.totalCommission ?? 0),
     0,
@@ -62,6 +69,30 @@ export default async function AdminUsersPage({
           <p className="mt-2">
             {affiliateSchemaIssue ??
               "Database runtime belum memuat skema affiliate lengkap. Data referred by dan komisi ditampilkan terbatas sementara."}
+          </p>
+        </AdminSurface>
+      ) : null}
+
+      {params.vip ? (
+        <AdminSurface className="text-sm leading-6 text-neutral-200">
+          {params.vip === "error" ? (
+            <span className="text-red-200">
+              {params.message ?? "Status VIP user gagal diperbarui."}
+            </span>
+          ) : (
+            <span className="text-emerald-100">
+              {params.message ?? "Status VIP user berhasil diperbarui."}
+            </span>
+          )}
+        </AdminSurface>
+      ) : null}
+
+      {!vipSchemaReady ? (
+        <AdminSurface className="text-sm leading-6 text-amber-100">
+          <p className="font-semibold text-white">Kolom VIP fallback aktif</p>
+          <p className="mt-2">
+            {vipSchemaIssue ??
+              "Database runtime belum memuat skema VIP lengkap. Kolom VIP akan tampil terbatas sementara."}
           </p>
         </AdminSurface>
       ) : null}
@@ -80,10 +111,7 @@ export default async function AdminUsersPage({
           <AdminMetricCard label="Total user" value={totalUsers} />
           <AdminMetricCard label="User affiliate" value={affiliateUsers} />
           <AdminMetricCard label="Direferensikan" value={referredUsers} />
-          <AdminMetricCard
-            label="Total komisi referral"
-            value={formatCurrency(totalReferralCommission)}
-          />
+          <AdminMetricCard label="User VIP" value={vipUsers} />
         </div>
       </AdminSurface>
 
@@ -116,15 +144,20 @@ export default async function AdminUsersPage({
           <p className="mt-3 text-sm text-neutral-400">
             Menampilkan {users.length} user. Default komisi affiliate saat ini{" "}
             <strong className="text-white">{defaultCommissionRate}%</strong>.
+            Total komisi referral tabel ini{" "}
+            <strong className="text-white">
+              {formatCurrency(totalReferralCommission)}
+            </strong>.
           </p>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1160px] w-full text-left">
+          <table className="min-w-[1360px] w-full text-left">
             <thead className="bg-white/[0.04] text-sm text-neutral-400">
               <tr>
                 <th className="px-5 py-4 font-medium">User</th>
                 <th className="px-5 py-4 font-medium">Referred by</th>
+                <th className="px-5 py-4 font-medium">Status VIP</th>
                 <th className="px-5 py-4 font-medium">Rate komisi</th>
                 <th className="px-5 py-4 font-medium">Komisi referral</th>
                 <th className="px-5 py-4 font-medium">Saldo tersedia</th>
@@ -133,6 +166,7 @@ export default async function AdminUsersPage({
                 <th className="px-5 py-4 font-medium">Referral aktif</th>
                 <th className="px-5 py-4 font-medium">Sesi</th>
                 <th className="px-5 py-4 font-medium">Terdaftar</th>
+                <th className="px-5 py-4 font-medium">Aksi VIP</th>
               </tr>
             </thead>
             <tbody>
@@ -142,6 +176,10 @@ export default async function AdminUsersPage({
                   const referredCode =
                     user.affiliateReferral?.profile.referralCode ?? null;
                   const profile = user.affiliateProfile;
+                  const vipActive = isVipActive(user.vipExpiresAt);
+                  const redirectTo = query
+                    ? `/admin/users?q=${encodeURIComponent(query)}`
+                    : "/admin/users";
 
                   return (
                     <tr
@@ -180,6 +218,16 @@ export default async function AdminUsersPage({
                           <span className="text-neutral-500">-</span>
                         )}
                       </td>
+                      <td className="px-5 py-4 text-sm text-neutral-300">
+                        <p className={vipActive ? "font-semibold text-emerald-200" : "text-neutral-500"}>
+                          {vipActive ? "VIP aktif" : "Free"}
+                        </p>
+                        <p className="mt-1 text-neutral-400">
+                          {user.vipExpiresAt
+                            ? `Sampai ${formatDate(user.vipExpiresAt)}`
+                            : "Belum ada masa aktif"}
+                        </p>
+                      </td>
                       <td className="px-5 py-4 text-sm text-white">
                         {profile?.commissionRate ?? defaultCommissionRate}%
                       </td>
@@ -204,13 +252,51 @@ export default async function AdminUsersPage({
                       <td className="px-5 py-4 text-sm text-neutral-300">
                         {formatDate(user.createdAt)}
                       </td>
+                      <td className="px-5 py-4">
+                        <form
+                          action={updateUserVipStatus}
+                          className="space-y-2 rounded-[16px] border border-white/10 bg-black/20 p-3"
+                        >
+                          <input type="hidden" name="redirectTo" value={redirectTo} />
+                          <input type="hidden" name="userId" value={user.id} />
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              name="vipDays"
+                              min={1}
+                              defaultValue={30}
+                              className="h-10 w-20 rounded-[12px] border border-white/10 bg-black/25 px-3 text-sm text-white outline-none"
+                            />
+                            <span className="text-xs text-neutral-400">hari</span>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              type="submit"
+                              name="intent"
+                              value="grant"
+                              className="h-9 bg-red-600 text-xs text-white hover:bg-red-500"
+                            >
+                              {vipActive ? "Perpanjang VIP" : "Aktifkan VIP"}
+                            </Button>
+                            <Button
+                              type="submit"
+                              name="intent"
+                              value="revoke"
+                              variant="secondary"
+                              className="h-9 border border-white/10 bg-white/10 text-xs text-white hover:bg-white/15"
+                            >
+                              Cabut VIP
+                            </Button>
+                          </div>
+                        </form>
+                      </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={12}
                     className="px-5 py-14 text-center text-neutral-400"
                   >
                     Tidak ada user yang cocok dengan pencarian ini.

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { verifyPlaybackAccessToken } from "@/lib/vip";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -7,11 +9,16 @@ function isPlaylistUrl(url: string) {
   return decodeURIComponent(url).toLowerCase().includes(".m3u8");
 }
 
-function proxiedUrl(url: string) {
-  return `/api/hls?url=${encodeURIComponent(url)}`;
+function proxiedUrl(url: string, token: string) {
+  const params = new URLSearchParams({
+    token,
+    url,
+  });
+
+  return `/api/hls?${params.toString()}`;
 }
 
-function rewritePlaylist(playlist: string, playlistUrl: string) {
+function rewritePlaylist(playlist: string, playlistUrl: string, token: string) {
   return playlist
     .split(/\r?\n/)
     .map((line) => {
@@ -24,20 +31,39 @@ function rewritePlaylist(playlist: string, playlistUrl: string) {
       if (trimmed.startsWith("#")) {
         return line.replace(/URI="([^"]+)"/g, (_match, uri: string) => {
           const absolute = new URL(uri, playlistUrl).toString();
-          return `URI="${proxiedUrl(absolute)}"`;
+          return `URI="${proxiedUrl(absolute, token)}"`;
         });
       }
 
-      return proxiedUrl(new URL(trimmed, playlistUrl).toString());
+      return proxiedUrl(new URL(trimmed, playlistUrl).toString(), token);
     })
     .join("\n");
 }
 
 export async function GET(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get("token");
   const url = request.nextUrl.searchParams.get("url");
 
   if (!url) {
     return NextResponse.json({ error: "Missing url" }, { status: 400 });
+  }
+
+  if (!token) {
+    return NextResponse.json({ error: "Missing playback token" }, { status: 401 });
+  }
+
+  try {
+    verifyPlaybackAccessToken(token);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Token playback tidak valid.",
+      },
+      { status: 402 },
+    );
   }
 
   let upstreamUrl: URL;
@@ -80,7 +106,7 @@ export async function GET(request: NextRequest) {
     contentType.includes("application/vnd.apple")
   ) {
     const playlist = await response.text();
-    const rewritten = rewritePlaylist(playlist, upstreamUrl.toString());
+    const rewritten = rewritePlaylist(playlist, upstreamUrl.toString(), token);
 
     return new NextResponse(rewritten, {
       headers: {

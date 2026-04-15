@@ -8,11 +8,20 @@ export type CachedStreamSource = {
 };
 
 export type CachedStreamResponse = {
+  accessToken?: string;
+  accessTokenExpiresAt?: string;
   iframe?: string;
   m3u8?: string;
   originalUrl?: string;
+  paywallDescription?: string;
+  paywallTitle?: string;
+  previewLimitSeconds?: number;
   resolvedFrom?: string;
   sources: CachedStreamSource[];
+  upgradeLabel?: string;
+  upgradeUrl?: string;
+  vipActive?: boolean;
+  vipExpiresAt?: string | null;
 };
 
 type StreamCacheEntry = {
@@ -21,7 +30,7 @@ type StreamCacheEntry = {
 };
 
 const STREAM_CACHE_TTL_MS = 10 * 60 * 1000;
-const STREAM_CACHE_PREFIX = "boxofice:stream:v3:";
+const STREAM_CACHE_PREFIX = "boxofice:stream:v4:";
 const memoryCache = new Map<string, StreamCacheEntry>();
 
 type StreamLookup = {
@@ -115,8 +124,14 @@ export function writeCachedStream(
     return;
   }
 
+  const tokenExpiry = value.accessTokenExpiresAt
+    ? new Date(value.accessTokenExpiresAt).getTime()
+    : Number.NaN;
+  const safeTtl = Number.isFinite(tokenExpiry)
+    ? Math.max(15_000, Math.min(ttlMs, tokenExpiry - Date.now() - 5_000))
+    : ttlMs;
   const entry = {
-    expiresAt: Date.now() + ttlMs,
+    expiresAt: Date.now() + safeTtl,
     value,
   };
 

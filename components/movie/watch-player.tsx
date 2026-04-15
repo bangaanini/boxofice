@@ -73,8 +73,16 @@ function isHlsSource(source: CachedStreamSource) {
   );
 }
 
-function toMediaSourceUrl(source: CachedStreamSource) {
-  return `/api/hls?url=${encodeURIComponent(source.url)}`;
+function toMediaSourceUrl(source: CachedStreamSource, accessToken?: string) {
+  const params = new URLSearchParams({
+    url: source.url,
+  });
+
+  if (accessToken) {
+    params.set("token", accessToken);
+  }
+
+  return `/api/hls?${params.toString()}`;
 }
 
 function normalizeQuality(value: string | undefined) {
@@ -124,6 +132,17 @@ async function lockLandscapeIfPossible() {
 
 function unlockOrientationIfPossible() {
   screen.orientation?.unlock?.();
+}
+
+function formatPreviewLimit(seconds: number) {
+  if (seconds <= 0) {
+    return "0:00";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function getTelegramWebApp() {
@@ -193,6 +212,7 @@ export function WatchPlayer({
   const [isImmersive, setIsImmersive] = React.useState(false);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [isPortraitViewport, setIsPortraitViewport] = React.useState(false);
+  const [previewEnded, setPreviewEnded] = React.useState(false);
   const [showChrome, setShowChrome] = React.useState(true);
   const [retryCount, setRetryCount] = React.useState(0);
 
@@ -206,6 +226,7 @@ export function WatchPlayer({
     async function loadStream() {
       setError(null);
       setFailedSourceUrls([]);
+      setPreviewEnded(false);
 
       if (!streamCacheKey || (!movieId && !sourceUrl)) {
         setError("Sumber video belum valid.");
@@ -263,6 +284,8 @@ export function WatchPlayer({
   }, [defaultQuality, movieId, retryCount, sourceUrl, streamCacheKey]);
 
   const sources = React.useMemo(() => stream?.sources ?? [], [stream]);
+  const previewLimitSeconds = Math.max(0, stream?.previewLimitSeconds ?? 0);
+  const isVipActive = Boolean(stream?.vipActive);
   const selectedSource =
     sources.find((source) => source.url === selectedSourceUrl) ??
     chooseDefaultSource(sources, defaultQuality) ??
@@ -380,7 +403,7 @@ export function WatchPlayer({
         : null);
     resumeSnapshotRef.current = null;
     initialResumeAppliedRef.current = true;
-    const mediaUrl = toMediaSourceUrl(activeSource);
+    const mediaUrl = toMediaSourceUrl(activeSource, stream?.accessToken);
     const resumeTime = resumeSnapshot?.time ?? 0;
     const hasResumeTarget = resumeTime > 1;
     let hasStartedPlayback = false;
@@ -562,6 +585,7 @@ export function WatchPlayer({
     moveToNextPlayableSource,
     poster,
     selectedSource,
+    stream?.accessToken,
     sources,
   ]);
 
@@ -639,6 +663,39 @@ export function WatchPlayer({
       window.removeEventListener("pagehide", handlePageHide);
     };
   }, [movieId, sources.length]);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+
+    if (!video || isVipActive || previewLimitSeconds <= 0) {
+      return;
+    }
+    const currentVideo = video;
+
+    function handleTimeUpdate() {
+      if (currentVideo.currentTime < previewLimitSeconds) {
+        return;
+      }
+
+      currentVideo.pause();
+      setPreviewEnded(true);
+      revealChrome();
+      clearHideChromeTimer();
+    }
+
+    currentVideo.addEventListener("timeupdate", handleTimeUpdate);
+
+    return () => {
+      currentVideo.removeEventListener("timeupdate", handleTimeUpdate);
+    };
+  }, [
+    clearHideChromeTimer,
+    isVipActive,
+    previewLimitSeconds,
+    revealChrome,
+    retryCount,
+    selectedSourceUrl,
+  ]);
 
   React.useEffect(() => {
     const video = videoRef.current;
@@ -870,6 +927,7 @@ export function WatchPlayer({
       clearCachedStream(streamCacheKey);
     }
 
+    setPreviewEnded(false);
     setRetryCount((value) => value + 1);
   }
 
@@ -1033,6 +1091,46 @@ export function WatchPlayer({
             )}
           >
             <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+          </div>
+        ) : null}
+        {previewEnded && !isVipActive && previewLimitSeconds > 0 ? (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/78 px-4">
+            <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,20,0.96),rgba(8,8,8,0.98))] p-5 text-center shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-200">
+                Preview selesai
+              </p>
+              <h3 className="mt-3 text-2xl font-bold text-white">
+                {stream?.paywallTitle ?? "Lanjutkan dengan VIP"}
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-neutral-300">
+                {stream?.paywallDescription ??
+                  "Upgrade VIP untuk lanjut nonton tanpa batas dan buka semua katalog premium."}
+              </p>
+              <p className="mt-3 text-xs leading-5 text-neutral-500">
+                Batas preview untuk akun gratis: {formatPreviewLimit(previewLimitSeconds)}
+              </p>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  data-haptic="light"
+                  onClick={closePlayer}
+                  className="h-11 border border-white/10 bg-white/10 text-white hover:bg-white/15"
+                >
+                  Kembali ke detail
+                </Button>
+                <Button
+                  asChild
+                  type="button"
+                  data-haptic="medium"
+                  className="h-11 bg-red-600 text-white hover:bg-red-500"
+                >
+                  <a href={stream?.upgradeUrl ?? "/profile"}>
+                    {stream?.upgradeLabel ?? "Buka VIP"}
+                  </a>
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
         {seekFeedback ? (

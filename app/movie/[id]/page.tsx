@@ -14,6 +14,7 @@ import {
 } from "@/lib/movie-feeds";
 import { prisma } from "@/lib/prisma";
 import { requireUserSession } from "@/lib/user-auth";
+import { getVipProgramSettingsSafe, getVipStatus } from "@/lib/vip";
 
 export const dynamic = "force-dynamic";
 
@@ -104,10 +105,11 @@ function RelatedMoviesSection({ movies }: { movies: MovieCard[] }) {
 }
 
 export default async function MoviePage({ params, searchParams }: MoviePageProps) {
-  const [{ id }, query, user] = await Promise.all([
+  const [{ id }, query, user, vipSettingsResult] = await Promise.all([
     params,
     searchParams,
     requireUserSession(),
+    getVipProgramSettingsSafe(),
   ]);
   const movie = await getMovieDetailData(id);
 
@@ -137,6 +139,8 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
     }),
   ]);
   const shouldOpenPlayer = query.play === "1" || query.play === "true";
+  const vipStatus = getVipStatus(user);
+  const vipSettings = vipSettingsResult.settings;
 
   const poster = movie.thumbnail;
   const fallbackSynopsis =
@@ -189,6 +193,13 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
                     {movie.quality}
                   </Badge>
                 ) : null}
+                <Badge className="border-white/10 bg-white/10 text-white">
+                  {vipStatus.active
+                    ? "VIP aktif"
+                    : vipSettings.previewEnabled
+                      ? `Preview ${vipSettings.previewLimitMinutes} menit`
+                      : "Akses standar"}
+                </Badge>
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium text-yellow-300">
                   <Star className="size-4 fill-yellow-400 text-yellow-400" />
                   {movie.rating ?? "N/A"}

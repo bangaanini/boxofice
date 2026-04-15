@@ -18,6 +18,8 @@ export type AuthUser = {
   telegramLastName: string | null;
   telegramPhotoUrl: string | null;
   telegramUsername: string | null;
+  vipExpiresAt: Date | null;
+  vipStartedAt: Date | null;
 };
 
 function normalizeEmail(email: string) {
@@ -99,6 +101,8 @@ export async function registerUser(input: {
       telegramLastName: true,
       telegramPhotoUrl: true,
       telegramUsername: true,
+      vipExpiresAt: true,
+      vipStartedAt: true,
     },
   });
 }
@@ -120,6 +124,8 @@ export async function verifyUserCredentials(input: {
       telegramLastName: true,
       telegramPhotoUrl: true,
       telegramUsername: true,
+      vipExpiresAt: true,
+      vipStartedAt: true,
     },
   });
 
@@ -146,6 +152,8 @@ export async function verifyUserCredentials(input: {
     telegramLastName: user.telegramLastName,
     telegramPhotoUrl: user.telegramPhotoUrl,
     telegramUsername: user.telegramUsername,
+    vipExpiresAt: user.vipExpiresAt,
+    vipStartedAt: user.vipStartedAt,
   } satisfies AuthUser;
 }
 
@@ -190,6 +198,8 @@ export async function upsertTelegramUser(
       telegramLastName: true,
       telegramPhotoUrl: true,
       telegramUsername: true,
+      vipExpiresAt: true,
+      vipStartedAt: true,
     },
   });
 }
@@ -239,6 +249,8 @@ export async function getCurrentUserSession() {
           telegramLastName: true,
           telegramPhotoUrl: true,
           telegramUsername: true,
+          vipExpiresAt: true,
+          vipStartedAt: true,
         },
       },
     },
