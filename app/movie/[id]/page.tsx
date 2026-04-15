@@ -2,6 +2,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Calendar, Clapperboard, Star, Users } from "lucide-react";
 
+import { ImmersiveHidden } from "@/components/feedback/immersive-hidden";
 import { DetailWatchActions } from "@/components/movie/detail-watch-actions";
 import { MovieCardLink } from "@/components/movie/movie-card-link";
 import { SynopsisAccordion } from "@/components/movie/synopsis-accordion";
@@ -258,7 +259,9 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
         </div>
       </section>
 
-      <RelatedMoviesSection movies={relatedMovies} />
+      <ImmersiveHidden>
+        <RelatedMoviesSection movies={relatedMovies} />
+      </ImmersiveHidden>
     </main>
   );
 }
