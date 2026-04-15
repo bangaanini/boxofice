@@ -64,7 +64,7 @@ type FeedDefinition = {
 export const FEED_DEFINITIONS: Record<FeedSlug, FeedDefinition> = {
   home: {
     slug: "home",
-    title: "Pilihan beranda",
+    title: "Pilihan Untukmu",
     subtitle: "Feed home",
     description: "Katalog utama yang tampil di beranda Box Office.",
   },
@@ -78,7 +78,7 @@ export const FEED_DEFINITIONS: Record<FeedSlug, FeedDefinition> = {
     slug: "new",
     title: "Rilis terbaru",
     subtitle: "Feed new",
-    description: "Film yang baru masuk ke feed terbaru LK21.",
+    description: "Film yang baru masuk",
   },
 };
 

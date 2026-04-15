@@ -179,6 +179,31 @@ model TelegramBotSettings {
   updatedAt           DateTime @updatedAt
 }
 
+model CatalogAuditRun {
+  id             String   @id @default(uuid())
+  target         String
+  status         String   @default("running")
+  autoHide       Boolean  @default(true)
+  batchSize      Int
+  totalMovies    Int      @default(0)
+  processedMovies Int     @default(0)
+  completedBatches Int    @default(0)
+  checked        Int      @default(0)
+  playable       Int      @default(0)
+  broken         Int      @default(0)
+  hidden         Int      @default(0)
+  refreshed      Int      @default(0)
+  errorCount     Int      @default(0)
+  messages       String[] @default([])
+  summary        Json     @db.JsonB
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  updatedAt      DateTime @updatedAt
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+}
+
 model AffiliateReferral {
   id               String           @id @default(uuid())
   profileId        String

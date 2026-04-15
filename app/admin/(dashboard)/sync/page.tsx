@@ -1,8 +1,8 @@
 import {
-  auditCatalogFromAdmin,
   cleanupMovieTitlesFromAdmin,
   syncMoviesFromAdmin,
 } from "@/app/admin/actions";
+import { AuditRunner } from "@/components/admin/audit-runner";
 import {
   AdminMetricCard,
   AdminSurface,
@@ -10,6 +10,7 @@ import {
 import { SyncSubmitButton } from "@/components/admin/sync-submit-button";
 import { Button } from "@/components/ui/button";
 import { getAdminOverviewData } from "@/lib/admin-dashboard";
+import { getRecentCatalogAuditRunsSafe } from "@/lib/audit-history";
 import { DEFAULT_SYNC_PAGE, MAX_SYNC_PAGE } from "@/lib/movie-sync";
 
 export const dynamic = "force-dynamic";
@@ -410,8 +411,11 @@ function AuditResultBanner({
 export default async function AdminSyncPage({
   searchParams,
 }: AdminSyncPageProps) {
-  const params = await searchParams;
-  const overview = await getAdminOverviewData();
+  const [params, overview, auditHistory] = await Promise.all([
+    searchParams,
+    getAdminOverviewData(),
+    getRecentCatalogAuditRunsSafe(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -509,49 +513,11 @@ export default async function AdminSyncPage({
           otomatis disembunyikan dari katalog supaya user tidak lagi masuk ke
           detail yang error.
         </p>
-
-        <form action={auditCatalogFromAdmin} className="mt-5 space-y-4">
-          <input type="hidden" name="redirectTo" value="/admin/sync" />
-          <label className="flex items-start gap-3 rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-neutral-300">
-            <input
-              type="checkbox"
-              name="autoHideBroken"
-              value="on"
-              defaultChecked
-              className="mt-1 size-4 rounded border-white/15 bg-black/30"
-            />
-            <span>
-              <strong className="block text-white">
-                Auto hide film yang broken
-              </strong>
-              Kalau dimatikan, audit hanya membuat laporan dan membersihkan cache
-              rusak tanpa mengubah visibilitas film di home.
-            </span>
-          </label>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SyncSubmitButton
-              label="Audit All"
-              pendingLabel="Mengaudit..."
-              target="all"
-            />
-            <SyncSubmitButton
-              label="Audit Home"
-              pendingLabel="Mengaudit..."
-              target="home"
-            />
-            <SyncSubmitButton
-              label="Audit Populer"
-              pendingLabel="Mengaudit..."
-              target="popular"
-            />
-            <SyncSubmitButton
-              label="Audit New"
-              pendingLabel="Mengaudit..."
-              target="new"
-            />
-          </div>
-        </form>
+        <AuditRunner
+          initialHistory={auditHistory.runs}
+          historySchemaIssue={auditHistory.schemaIssue}
+          historySchemaReady={auditHistory.schemaReady}
+        />
       </AdminSurface>
     </div>
   );

@@ -154,7 +154,7 @@ export default async function Home({ searchParams }: HomePageProps) {
 
   const selectedGenre = normalizeQueryValue(genre);
   const selectedYear = normalizeQueryValue(year);
-  const [filters, { homeMovies, popularMovies, newMovies, totalMovies }] =
+  const [filters, { homeMovies, popularMovies, newMovies }] =
     await Promise.all([
       getHomepageFilterOptions(),
       getHomepageMovieData({
@@ -211,7 +211,7 @@ export default async function Home({ searchParams }: HomePageProps) {
           <div className="mt-4 space-y-3">
             <div>
               <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-                Genre
+                Kategori
               </div>
               <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
                 <FilterChip

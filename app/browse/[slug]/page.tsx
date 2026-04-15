@@ -1,10 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
-
 import { MovieCardLink } from "@/components/movie/movie-card-link";
-import { Badge } from "@/components/ui/badge";
+
 import { Button } from "@/components/ui/button";
 import { getFeedPageData, isFeedSlug } from "@/lib/movie-feeds";
 import { requireUserSession } from "@/lib/user-auth";
@@ -24,7 +22,7 @@ export default async function BrowsePage({ params }: BrowsePageProps) {
     notFound();
   }
 
-  const { count, definition, movies } = await getFeedPageData(slug);
+  const { definition, movies } = await getFeedPageData(slug);
   const featured = movies[0] ?? null;
 
   return (
@@ -44,12 +42,6 @@ export default async function BrowsePage({ params }: BrowsePageProps) {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.5)_0%,rgba(0,0,0,0.9)_58%,#000_100%)]" />
 
         <div className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-8 pt-6 sm:px-8 sm:pb-10 lg:px-10">
-          <Button asChild variant="ghost" className="w-fit">
-            <Link href="/" prefetch>
-              <ArrowLeft className="size-4" />
-              Kembali ke beranda
-            </Link>
-          </Button>
 
           <div className="mt-16 max-w-3xl sm:mt-24">
             <p className="text-sm font-semibold text-red-400">{definition.subtitle}</p>
@@ -59,11 +51,6 @@ export default async function BrowsePage({ params }: BrowsePageProps) {
             <p className="mt-4 text-sm leading-6 text-neutral-300 sm:text-lg sm:leading-8">
               {definition.description}
             </p>
-            <div className="mt-5">
-              <Badge className="border-white/15 bg-white/10 px-3 py-1 text-white">
-                {count} judul
-              </Badge>
-            </div>
           </div>
         </div>
       </section>

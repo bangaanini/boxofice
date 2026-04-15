@@ -125,6 +125,17 @@ export type CombinedAuditSummary = {
   errors: string[];
 };
 
+export type MovieAuditTarget = MovieFeedTarget | "all";
+
+export type AuditBatchProgress = {
+  batchCount: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  summary: FeedAuditSummary | CombinedAuditSummary;
+  target: MovieAuditTarget;
+  total: number;
+};
+
 export type TitleCleanupSummary = {
   changed: number;
   scanned: number;
@@ -399,6 +410,16 @@ async function clearStreamCache(movieId: string) {
   });
 }
 
+function resolveAuditWhere(target: MovieAuditTarget) {
+  return target === "all"
+    ? {
+        OR: [{ inHome: true }, { inPopular: true }, { inNew: true }],
+      }
+    : {
+        [FEED_CONFIG[target].dbField]: true,
+      };
+}
+
 async function hideMovieFromCatalog(movieId: string) {
   await prisma.movie.update({
     where: {
@@ -666,16 +687,9 @@ type AuditedMovie = {
 
 async function resolveAuditedMovies(target: MovieFeedTarget | "all") {
   return prisma.movie.findMany({
-    where:
-      target === "all"
-        ? {
-            OR: [{ inHome: true }, { inPopular: true }, { inNew: true }],
-          }
-        : {
-            [FEED_CONFIG[target].dbField]: true,
-          },
+    where: resolveAuditWhere(target),
     orderBy: {
-      updatedAt: "desc",
+      id: "asc",
     },
     select: {
       id: true,
@@ -688,25 +702,75 @@ async function resolveAuditedMovies(target: MovieFeedTarget | "all") {
   });
 }
 
-export async function auditMovieCatalog(
-  target: MovieFeedTarget | "all",
-  options: { autoHide?: boolean } = {},
-): Promise<FeedAuditSummary | CombinedAuditSummary> {
-  const autoHide = options.autoHide ?? true;
-  const movies = await resolveAuditedMovies(target);
-  const targets: Record<MovieFeedTarget, FeedAuditSummary> = {
+async function resolveAuditedMoviesBatch(
+  target: MovieAuditTarget,
+  options: { batchSize: number; cursor?: string | null },
+) {
+  return prisma.movie.findMany({
+    ...(options.cursor
+      ? {
+          cursor: {
+            id: options.cursor,
+          },
+          skip: 1,
+        }
+      : {}),
+    where: resolveAuditWhere(target),
+    orderBy: {
+      id: "asc",
+    },
+    select: {
+      id: true,
+      inHome: true,
+      inNew: true,
+      inPopular: true,
+      sourceUrl: true,
+      title: true,
+    },
+    take: options.batchSize,
+  });
+}
+
+export async function countAuditableMovies(target: MovieAuditTarget) {
+  return prisma.movie.count({
+    where: resolveAuditWhere(target),
+  });
+}
+
+function createAuditTargets() {
+  return {
     home: createAuditSummary("home"),
     popular: createAuditSummary("popular"),
     new: createAuditSummary("new"),
   };
-  const errors: string[] = [];
-  const totals = {
+}
+
+type AuditTotals = {
+  broken: number;
+  checked: number;
+  hidden: number;
+  playable: number;
+  refreshed: number;
+};
+
+function createAuditTotals(): AuditTotals {
+  return {
     broken: 0,
     checked: 0,
     hidden: 0,
     playable: 0,
     refreshed: 0,
   };
+}
+
+async function auditMovies(
+  movies: AuditedMovie[],
+  target: MovieAuditTarget,
+  autoHide: boolean,
+) {
+  const targets = createAuditTargets();
+  const errors: string[] = [];
+  const totals = createAuditTotals();
 
   await runWithConcurrency(
     movies,
@@ -764,20 +828,76 @@ export async function auditMovieCatalog(
     },
   );
 
+  return {
+    errors,
+    targets,
+    totals,
+  };
+}
+
+function finalizeAuditSummary(
+  target: MovieAuditTarget,
+  result: {
+    errors: string[];
+    targets: Record<MovieFeedTarget, FeedAuditSummary>;
+    totals: AuditTotals;
+  },
+): FeedAuditSummary | CombinedAuditSummary {
   if (target === "all") {
     return {
-      totalChecked: totals.checked,
-      totalPlayable: totals.playable,
-      totalBroken: totals.broken,
-      totalHidden: totals.hidden,
-      totalRefreshed: totals.refreshed,
-      totalErrors: errors.length,
-      targets,
-      errors,
+      totalChecked: result.totals.checked,
+      totalPlayable: result.totals.playable,
+      totalBroken: result.totals.broken,
+      totalHidden: result.totals.hidden,
+      totalRefreshed: result.totals.refreshed,
+      totalErrors: result.errors.length,
+      targets: result.targets,
+      errors: result.errors,
     };
   }
 
-  return targets[target];
+  return result.targets[target];
+}
+
+export async function auditMovieCatalog(
+  target: MovieAuditTarget,
+  options: { autoHide?: boolean } = {},
+): Promise<FeedAuditSummary | CombinedAuditSummary> {
+  const autoHide = options.autoHide ?? true;
+  const movies = await resolveAuditedMovies(target);
+  const result = await auditMovies(movies, target, autoHide);
+
+  return finalizeAuditSummary(target, result);
+}
+
+export async function auditMovieCatalogBatch(
+  target: MovieAuditTarget,
+  options: {
+    autoHide?: boolean;
+    batchSize?: number;
+    cursor?: string | null;
+  } = {},
+): Promise<AuditBatchProgress> {
+  const autoHide = options.autoHide ?? true;
+  const batchSize = Math.min(Math.max(options.batchSize ?? 12, 1), 50);
+  const [total, movies] = await Promise.all([
+    countAuditableMovies(target),
+    resolveAuditedMoviesBatch(target, {
+      batchSize,
+      cursor: options.cursor,
+    }),
+  ]);
+  const result = await auditMovies(movies, target, autoHide);
+  const nextCursor = movies[movies.length - 1]?.id ?? null;
+
+  return {
+    batchCount: movies.length,
+    hasMore: Boolean(nextCursor) && movies.length === batchSize,
+    nextCursor,
+    summary: finalizeAuditSummary(target, result),
+    target,
+    total,
+  };
 }
 
 export async function syncAllMovieFeeds(
