@@ -1,9 +1,15 @@
 import { randomBytes } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
-import { getPreferredPartnerBotShareLink } from "@/lib/telegram-partner-bots";
+import {
+  getPreferredPartnerBotShareLink,
+  getPreferredTelegramShareLinksForUser,
+} from "@/lib/telegram-partner-bots";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
-import { buildAffiliateStartParam, buildTelegramBotChatUrlForUsername } from "@/lib/telegram-miniapp";
+import {
+  buildAffiliateStartParam,
+  buildTelegramMiniAppUrlForConfig,
+} from "@/lib/telegram-miniapp";
 
 export const AFFILIATE_MINIMUM_WITHDRAW = 50_000;
 export const DEFAULT_AFFILIATE_COMMISSION_RATE = 25;
@@ -92,6 +98,8 @@ export async function getAffiliateSharePath(
   referralCode: string,
   userId?: string,
 ) {
+  const startParam = buildAffiliateStartParam(referralCode);
+
   if (userId) {
     const partnerShareLink = await getPreferredPartnerBotShareLink({
       referralCode,
@@ -106,10 +114,18 @@ export async function getAffiliateSharePath(
   try {
     const telegram = await getTelegramBotSettingsSafe();
 
-    return buildTelegramBotChatUrlForUsername(
-      telegram.runtime.botUsername,
-      buildAffiliateStartParam(referralCode),
-    );
+    if (userId) {
+      const preferredShareLinks = await getPreferredTelegramShareLinksForUser({
+        startParam,
+        userId,
+      }).catch(() => null);
+
+      if (preferredShareLinks?.miniAppUrl) {
+        return preferredShareLinks.miniAppUrl;
+      }
+    }
+
+    return buildTelegramMiniAppUrlForConfig(telegram.runtime, startParam);
   } catch {
     return `/r/${encodeURIComponent(referralCode)}`;
   }

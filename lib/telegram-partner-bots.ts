@@ -216,7 +216,7 @@ export async function getPreferredPartnerBotShareLink(input: {
       botUsername: partnerBot.botUsername,
       miniAppShortName: partnerBot.miniAppShortName,
       referralCode: input.referralCode,
-    }).startChatUrl;
+    }).miniAppUrl;
   } catch (error) {
     if (isMissingPartnerBotSchemaError(error)) {
       return null;

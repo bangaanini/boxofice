@@ -5,7 +5,10 @@ import {
   saveTelegramReferralIntent,
 } from "@/lib/affiliate";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
-import { buildAffiliateStartParam } from "@/lib/telegram-miniapp";
+import {
+  buildTelegramAppStartParam,
+  extractMovieIdFromStartParam,
+} from "@/lib/telegram-miniapp";
 import {
   buildPartnerBotOwnerSettingsUrl,
   getPartnerBotForWebhook,
@@ -13,6 +16,7 @@ import {
 } from "@/lib/telegram-partner-bots";
 import {
   isStartCommand,
+  parseStartPayload,
   sendTelegramWelcomeMessage,
 } from "@/lib/telegram-webhook";
 
@@ -75,7 +79,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const referralCode = ownerReferralCode;
-  const startParam = buildAffiliateStartParam(ownerReferralCode);
+  const originalStartPayload = parseStartPayload(update?.message?.text);
+  const movieId = extractMovieIdFromStartParam(originalStartPayload);
+  const startParam = buildTelegramAppStartParam({
+    movieId,
+    referralCode: ownerReferralCode,
+  });
 
   await registerAffiliateClick(referralCode).catch(() => undefined);
   await saveTelegramReferralIntent({

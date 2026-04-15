@@ -13,6 +13,20 @@ type BeforeInstallPromptEvent = Event & {
   }>;
 };
 
+type TelegramHomeScreenStatus =
+  | "added"
+  | "checking"
+  | "missed"
+  | "unknown"
+  | "unsupported";
+
+type TelegramWebApp = {
+  addToHomeScreen?: () => void;
+  checkHomeScreenStatus?: (callback?: (status: TelegramHomeScreenStatus) => void) => void;
+  offEvent?: (eventType: string, eventHandler: (...args: unknown[]) => void) => void;
+  onEvent?: (eventType: string, eventHandler: (...args: unknown[]) => void) => void;
+};
+
 function isIosDevice() {
   if (typeof navigator === "undefined") {
     return false;
@@ -40,8 +54,17 @@ function isTelegramMiniApp() {
   }
 
   return Boolean(
-    (window as Window & { Telegram?: { WebApp?: unknown } }).Telegram?.WebApp,
+    (window as Window & { Telegram?: { WebApp?: TelegramWebApp } }).Telegram?.WebApp,
   );
+}
+
+function getTelegramWebApp() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return (window as Window & { Telegram?: { WebApp?: TelegramWebApp } }).Telegram
+    ?.WebApp ?? null;
 }
 
 export function AddToHomeScreenCard() {
@@ -52,6 +75,7 @@ export function AddToHomeScreenCard() {
 
   React.useEffect(() => {
     setIsInstalled(isStandaloneDisplayMode());
+    const telegramWebApp = getTelegramWebApp();
 
     function onBeforeInstallPrompt(event: Event) {
       event.preventDefault();
@@ -64,12 +88,49 @@ export function AddToHomeScreenCard() {
       setFeedback("Aplikasi sudah ditambahkan ke layar utama.");
     }
 
+    function handleTelegramStatus(status?: unknown) {
+      if (status === "added") {
+        setIsInstalled(true);
+        setFeedback("Layar BoxOffice sudah ditambahkan ke layar utama.");
+        return;
+      }
+
+      if (status === "checking") {
+        setFeedback("Telegram sedang menyiapkan pilihan tambah ke layar utama.");
+        return;
+      }
+
+      if (status === "missed") {
+        setFeedback(
+          "Prompt belum diambil. Tekan lagi dan pilih Tambahkan ke layar utama.",
+        );
+        return;
+      }
+
+      if (status === "unsupported") {
+        setFeedback(
+          "Versi Telegram ini belum mendukung tombol homescreen otomatis.",
+        );
+      }
+    }
+
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onInstalled);
+    telegramWebApp?.onEvent?.("homeScreenAdded", onInstalled);
+    telegramWebApp?.onEvent?.(
+      "homeScreenChecked",
+      handleTelegramStatus as (...args: unknown[]) => void,
+    );
+    telegramWebApp?.checkHomeScreenStatus?.(handleTelegramStatus);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onInstalled);
+      telegramWebApp?.offEvent?.("homeScreenAdded", onInstalled);
+      telegramWebApp?.offEvent?.(
+        "homeScreenChecked",
+        handleTelegramStatus as (...args: unknown[]) => void,
+      );
     };
   }, []);
 
@@ -94,9 +155,15 @@ export function AddToHomeScreenCard() {
     }
 
     if (isTelegramMiniApp()) {
-      setFeedback(
-        "Kalau prompt belum muncul, buka menu Telegram atau browser lalu pilih Add to Home Screen.",
-      );
+      const telegramWebApp = getTelegramWebApp();
+
+      if (telegramWebApp?.addToHomeScreen) {
+        telegramWebApp.addToHomeScreen();
+        setFeedback("Telegram sedang membuka prompt homescreen.");
+        return;
+      }
+
+      setFeedback("Telegram di perangkat ini belum membuka prompt homescreen otomatis.");
       return;
     }
 
