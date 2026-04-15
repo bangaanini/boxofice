@@ -207,12 +207,6 @@ export default async function Home({ searchParams }: HomePageProps) {
             </div>
           </div>
 
-          <div className="mt-3 flex items-center gap-2 text-xs text-neutral-400">
-            <span>{totalMovies} judul siap ditonton</span>
-            {(selectedGenre || selectedYear) && (
-              <span className="text-neutral-500">Filter aktif</span>
-            )}
-          </div>
 
           <div className="mt-4 space-y-3">
             <div>
@@ -233,27 +227,6 @@ export default async function Home({ searchParams }: HomePageProps) {
                       genre: genreOption,
                     })}
                     label={genreOption}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-                Tahun
-              </div>
-              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
-                <FilterChip
-                  active={!selectedYear}
-                  href={buildFilterHref(currentFilters, { year: null })}
-                  label="Semua"
-                />
-                {filters.years.map((yearOption) => (
-                  <FilterChip
-                    key={yearOption}
-                    active={selectedYear === yearOption}
-                    href={buildFilterHref(currentFilters, { year: yearOption })}
-                    label={yearOption}
                   />
                 ))}
               </div>
