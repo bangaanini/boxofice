@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { applyAffiliateCommissionForVipOrder } from "@/lib/affiliate";
 import {
   getOrderPaymentMetadata,
   getPaymentGatewaySettingsSafe,
@@ -152,6 +153,9 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
       ? order.user.vipExpiresAt
       : now;
   const nextExpiresAt = addDays(baseDate, order.plan.durationDays);
+  const metadata = getOrderPaymentMetadata(order);
+  const commissionBaseAmount =
+    parseAmount(metadata?.amountReceived) || order.plan.priceAmount;
 
   await prisma.$transaction(async (tx) => {
     await tx.vipPaymentOrder.update({
@@ -174,6 +178,12 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
       },
     });
   });
+
+  await applyAffiliateCommissionForVipOrder({
+    amount: commissionBaseAmount,
+    orderId: order.id,
+    referredUserId: order.user.id,
+  }).catch(() => null);
 
   return order;
 }

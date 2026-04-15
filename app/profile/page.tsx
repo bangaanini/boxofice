@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { MessageCircle, Sparkles, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -145,9 +146,9 @@ export default async function ProfilePage() {
                   asChild
                   className="mt-4 h-11 bg-red-600 text-white hover:bg-red-500"
                 >
-                  <a href={vipSettings.joinVipUrl}>
+                  <Link href="/vip" prefetch>
                     {vipSettings.joinVipLabel}
-                  </a>
+                  </Link>
                 </Button>
               </>
             )}

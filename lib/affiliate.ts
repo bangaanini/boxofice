@@ -30,6 +30,10 @@ function normalizeReferralCode(value: string) {
   return value.trim().toUpperCase();
 }
 
+function roundCommissionAmount(amount: number, rate: number) {
+  return Math.max(0, Math.round((amount * rate) / 100));
+}
+
 function isRecordWithCode(
   error: unknown,
 ): error is { code?: string; message?: string; meta?: unknown } {
@@ -427,4 +431,102 @@ export async function requestAffiliatePayout(input: {
   });
 
   return payout;
+}
+
+export async function applyAffiliateCommissionForVipOrder(input: {
+  amount: number;
+  orderId: string;
+  referredUserId: string;
+}) {
+  const referral = await prisma.affiliateReferral.findUnique({
+    where: { referredUserId: input.referredUserId },
+    select: {
+      activatedAt: true,
+      id: true,
+      profile: {
+        select: {
+          commissionRate: true,
+          id: true,
+        },
+      },
+      status: true,
+    },
+  });
+
+  if (!referral) {
+    return null;
+  }
+
+  const commissionAmount = roundCommissionAmount(
+    input.amount,
+    referral.profile.commissionRate,
+  );
+
+  if (commissionAmount <= 0) {
+    return null;
+  }
+
+  const activityKey = `vip-order:${input.orderId}`;
+  const existingActivity = await prisma.affiliateActivity.findFirst({
+    where: {
+      description: activityKey,
+      profileId: referral.profile.id,
+      type: "commission_earned",
+    },
+    select: { id: true },
+  });
+
+  if (existingActivity) {
+    return null;
+  }
+
+  const activatedAt = referral.activatedAt ?? new Date();
+  const shouldActivateReferral = referral.status !== "active";
+
+  return prisma.$transaction(async (tx) => {
+    await tx.affiliateProfile.update({
+      where: { id: referral.profile.id },
+      data: {
+        activeReferrals: shouldActivateReferral
+          ? {
+              increment: 1,
+            }
+          : undefined,
+        availableBalance: {
+          increment: commissionAmount,
+        },
+        totalCommission: {
+          increment: commissionAmount,
+        },
+      },
+    });
+
+    await tx.affiliateReferral.update({
+      where: { id: referral.id },
+      data: {
+        activatedAt,
+        commissionEarned: {
+          increment: commissionAmount,
+        },
+        status: "active",
+      },
+    });
+
+    await tx.affiliateActivity.create({
+      data: {
+        amount: commissionAmount,
+        description: activityKey,
+        profileId: referral.profile.id,
+        title: shouldActivateReferral
+          ? "Referral VIP pertama berhasil"
+          : "Komisi VIP bertambah",
+        type: "commission_earned",
+      },
+    });
+
+    return {
+      commissionAmount,
+      referralActivated: shouldActivateReferral,
+    };
+  });
 }
