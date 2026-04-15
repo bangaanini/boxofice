@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Clapperboard,
   Home,
@@ -59,6 +60,28 @@ function shouldHideNav(pathname: string) {
 
 export function MobileBottomNav() {
   const pathname = usePathname();
+  const [isImmersivePlayerOpen, setIsImmersivePlayerOpen] = useState(false);
+
+  useEffect(() => {
+    function syncImmersiveState() {
+      setIsImmersivePlayerOpen(
+        document.body.dataset.playerImmersive === "true",
+      );
+    }
+
+    syncImmersiveState();
+    window.addEventListener(
+      "boxofice-immersive-change",
+      syncImmersiveState as EventListener,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "boxofice-immersive-change",
+        syncImmersiveState as EventListener,
+      );
+    };
+  }, []);
 
   if (shouldHideNav(pathname)) {
     return null;
@@ -67,7 +90,13 @@ export function MobileBottomNav() {
   return (
     <>
       <div className="h-20 sm:hidden" />
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[linear-gradient(180deg,rgba(25,18,18,0.96),rgba(8,8,8,0.98))] pb-[calc(env(safe-area-inset-bottom)+6px)] pt-1.5 shadow-[0_-10px_40px_rgba(0,0,0,0.4)] backdrop-blur sm:hidden">
+      <nav
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[linear-gradient(180deg,rgba(25,18,18,0.96),rgba(8,8,8,0.98))] pb-[calc(env(safe-area-inset-bottom)+6px)] pt-1.5 shadow-[0_-10px_40px_rgba(0,0,0,0.4)] backdrop-blur transition-all duration-200 sm:hidden",
+          isImmersivePlayerOpen &&
+            "pointer-events-none translate-y-full opacity-0",
+        )}
+      >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-5 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0))]" />
         <div className="mx-auto grid max-w-xl grid-cols-5 items-end gap-0.5 px-2">
           {items.map((item) => {

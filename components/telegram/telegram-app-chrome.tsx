@@ -77,6 +77,11 @@ export function TelegramAppChrome() {
     const showBackButton = shouldShowBackButton(pathname);
 
     function handleBack() {
+      if (document.body.dataset.playerImmersive === "true") {
+        window.dispatchEvent(new CustomEvent("boxofice-immersive-back"));
+        return;
+      }
+
       if (window.history.length > 1) {
         router.back();
         return;

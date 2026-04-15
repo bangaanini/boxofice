@@ -132,6 +132,19 @@ function getTelegramWebApp() {
   return (window as TelegramWindow).Telegram?.WebApp ?? null;
 }
 
+function notifyImmersiveState(active: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  document.body.dataset.playerImmersive = active ? "true" : "false";
+  window.dispatchEvent(
+    new CustomEvent("boxofice-immersive-change", {
+      detail: { active },
+    }),
+  );
+}
+
 export function WatchPlayer({
   autoPlay = false,
   defaultQuality,
@@ -678,6 +691,7 @@ export function WatchPlayer({
       document.body.style.overflow = "";
       document.documentElement.style.overflow = "";
       unlockOrientationIfPossible();
+      notifyImmersiveState(false);
       revealChrome();
       clearHideChromeTimer();
       return;
@@ -685,12 +699,14 @@ export function WatchPlayer({
 
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
+    notifyImmersiveState(true);
     revealChrome();
     scheduleHideChrome();
 
     return () => {
       document.body.style.overflow = "";
       document.documentElement.style.overflow = "";
+      notifyImmersiveState(false);
       unlockOrientationIfPossible();
       clearHideChromeTimer();
     };
@@ -733,6 +749,24 @@ export function WatchPlayer({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [exitImmersive, isImmersive]);
+
+  React.useEffect(() => {
+    function handleImmersiveBack() {
+      void exitImmersive();
+    }
+
+    window.addEventListener(
+      "boxofice-immersive-back",
+      handleImmersiveBack as EventListener,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "boxofice-immersive-back",
+        handleImmersiveBack as EventListener,
+      );
+    };
+  }, [exitImmersive]);
 
   function seekBy(seconds: number) {
     const video = videoRef.current;
