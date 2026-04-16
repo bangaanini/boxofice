@@ -1,29 +1,21 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
-import Link from "next/link";
 import {
   Loader2,
-  Play,
   Search,
   Sparkles,
-  Star,
   X,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { MovieCardLink } from "@/components/movie/movie-card-link";
 import { Button } from "@/components/ui/button";
 import type { NormalizedMovieMetadata } from "@/lib/movie-api";
-import {
-  getSourceStreamCacheKey,
-  prefetchCachedStream,
-} from "@/lib/stream-cache-client";
 import { cn } from "@/lib/utils";
 
 type SearchResponse = {
   fetched: number;
-  movies: NormalizedMovieMetadata[];
+  movies: SearchMovie[];
   page: number;
   totalPages?: number;
 };
@@ -35,32 +27,15 @@ type UpstreamSearchProps = {
   initialPage?: number;
 };
 
+type SearchMovie = NormalizedMovieMetadata & {
+  movieId?: string | null;
+};
+
 const searchCache = new Map<string, SearchResponse>();
 const quickSearches = ["Action", "Horror", "Korea", "Romance"];
 
 function getCacheKey(query: string, page: number) {
   return `${query.trim().toLowerCase()}::${page}`;
-}
-
-function buildWatchHref(movie: NormalizedMovieMetadata) {
-  const params = new URLSearchParams({
-    sourceUrl: movie.sourceUrl,
-    title: movie.title,
-  });
-
-  if (movie.thumbnail) {
-    params.set("poster", movie.thumbnail);
-  }
-
-  if (movie.quality) {
-    params.set("quality", movie.quality);
-  }
-
-  if (movie.rating) {
-    params.set("rating", movie.rating);
-  }
-
-  return `/watch/source?${params.toString()}`;
 }
 
 function syncSearchUrl(query: string, page: number) {
@@ -91,88 +66,40 @@ function syncSearchUrl(query: string, page: number) {
   );
 }
 
-function warmStream(movie: NormalizedMovieMetadata) {
-  void prefetchCachedStream({
-    cacheKey: getSourceStreamCacheKey(movie.sourceUrl),
-    sourceUrl: movie.sourceUrl,
-  }).catch(() => undefined);
-}
-
 function SearchSkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-      {Array.from({ length: 12 }).map((_, index) => (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      {Array.from({ length: 10 }).map((_, index) => (
         <div key={index} className="space-y-3">
-          <div className="aspect-[2/3] animate-pulse rounded-md bg-neutral-900 ring-1 ring-white/10" />
-          <div className="h-3 w-3/4 animate-pulse rounded-full bg-neutral-900" />
-          <div className="h-3 w-1/2 animate-pulse rounded-full bg-neutral-900" />
+          <div className="aspect-[2/3] animate-pulse rounded-[18px] bg-neutral-900 ring-1 ring-white/10" />
         </div>
       ))}
     </div>
   );
 }
 
-function ResultCard({ movie }: { movie: NormalizedMovieMetadata }) {
+function buildMovieHref(movie: SearchMovie) {
+  if (movie.movieId) {
+    return `/movie/${movie.movieId}`;
+  }
+
+  return `/movie/source?sourceUrl=${encodeURIComponent(movie.sourceUrl)}`;
+}
+
+function ResultCard({ movie }: { movie: SearchMovie }) {
   return (
-    <Link
-      href={buildWatchHref(movie)}
+    <MovieCardLink
+      movie={{
+        id: movie.movieId ?? movie.sourceUrl,
+        quality: movie.quality ?? null,
+        rating: movie.rating ?? null,
+        thumbnail: movie.thumbnail ?? null,
+        title: movie.title,
+      }}
+      href={buildMovieHref(movie)}
       prefetch={false}
-      onPointerDown={() => warmStream(movie)}
-      className="group outline-none transition-transform active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-red-300 sm:hover:-translate-y-1"
-    >
-      <div className="relative aspect-[2/3] overflow-hidden rounded-md bg-neutral-900 shadow-xl shadow-black/40 ring-1 ring-white/10">
-        {movie.thumbnail ? (
-          <Image
-            src={movie.thumbnail}
-            alt={`${movie.title} poster`}
-            fill
-            unoptimized
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 170px"
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center px-3 text-center text-sm text-neutral-400">
-            Poster belum tersedia
-          </div>
-        )}
-
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/35 to-transparent p-2.5">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {movie.quality ? (
-              <Badge className="border-red-300/30 bg-red-600 text-white">
-                {movie.quality}
-              </Badge>
-            ) : null}
-            {movie.year ? (
-              <Badge variant="secondary" className="bg-black/60">
-                {movie.year}
-              </Badge>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-2 px-1.5 py-3">
-        <h3 className="line-clamp-2 min-h-9 text-xs font-semibold leading-[18px] text-white sm:min-h-10 sm:text-sm sm:leading-5">
-          {movie.title}
-        </h3>
-        <div className="flex items-center justify-between gap-2 text-xs text-neutral-400">
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-400" />
-            <span className="truncate">{movie.rating ?? "N/A"}</span>
-          </span>
-          <span className="inline-flex items-center gap-1 font-medium text-red-300">
-            <Play className="size-3.5 fill-current" />
-            Tonton
-          </span>
-        </div>
-        {movie.genre ? (
-          <p className="line-clamp-1 text-[11px] text-neutral-500">
-            {movie.genre}
-          </p>
-        ) : null}
-      </div>
-    </Link>
+      className="sm:hover:-translate-y-1"
+    />
   );
 }
 
@@ -410,7 +337,7 @@ export function UpstreamSearch({
         ) : null}
 
         {hasResults ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {result?.movies.map((movie) => (
               <ResultCard key={movie.sourceUrl} movie={movie} />
             ))}

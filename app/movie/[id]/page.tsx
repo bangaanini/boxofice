@@ -171,7 +171,7 @@ function RelatedMoviesSection({ movies }: { movies: MovieCard[] }) {
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-8 sm:pb-12 sm:pt-8 lg:px-10">
+    <section className="mx-auto w-full max-w-7xl px-4 pb-28 pt-1 sm:px-8 sm:pb-12 sm:pt-4 lg:px-10">
       <div className="mb-3 flex items-center justify-between gap-4 sm:mb-4">
         <h2 className="text-xl font-bold text-white sm:text-2xl">
           Film serupa
@@ -291,7 +291,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <section className="relative isolate overflow-hidden pb-24 sm:min-h-screen sm:pb-0">
+      <section className="relative isolate overflow-hidden">
         {poster ? (
           <Image
             src={poster}
@@ -299,80 +299,16 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
             fill
             unoptimized
             sizes="100vw"
-            className="scale-110 object-cover opacity-20 blur-xl sm:opacity-25"
+            className="object-cover object-center"
             priority
           />
         ) : null}
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.1)_0%,#000_62%,#000_100%)] sm:bg-[linear-gradient(90deg,#000_0%,rgba(0,0,0,0.86)_32%,rgba(0,0,0,0.48)_68%,rgba(0,0,0,0.9)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_28%,rgba(0,0,0,0.58)_58%,rgba(0,0,0,0.92)_82%,#000_100%)] sm:bg-[linear-gradient(90deg,rgba(0,0,0,0.18)_0%,rgba(0,0,0,0.42)_28%,rgba(0,0,0,0.7)_56%,rgba(0,0,0,0.96)_100%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-44 bg-[linear-gradient(180deg,transparent_0%,rgba(0,0,0,0.58)_26%,#000_100%)] sm:h-56" />
 
-        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col px-4 pb-6 pt-3 sm:min-h-screen sm:px-8 sm:py-6 lg:px-10">
-          <div className="grid flex-1 gap-4 pt-2 sm:items-center sm:gap-10 sm:py-10 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="relative mx-auto w-full max-w-[315px] sm:hidden">
-              <div className="relative aspect-[2/3] overflow-hidden rounded-md bg-neutral-950 shadow-2xl shadow-black/70 ring-1 ring-white/15">
-                {poster ? (
-                  <Image
-                    src={poster}
-                    alt={`${movie.title} poster`}
-                    fill
-                    unoptimized
-                    sizes="(max-width: 640px) 82vw, 315px"
-                    className="object-contain"
-                    priority
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center px-4 text-center text-sm text-neutral-400">
-                    Poster belum tersedia
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="max-w-3xl space-y-3 sm:space-y-7">
-              <div className="flex flex-wrap items-center gap-3">
-                {movie.quality ? (
-                  <Badge className="border-red-300/30 bg-red-600 text-white">
-                    {movie.quality}
-                  </Badge>
-                ) : null}
-                <Badge className="border-white/10 bg-white/10 text-white">
-                  {vipStatus.active
-                    ? "VIP aktif"
-                    : vipSettings.previewEnabled
-                      ? `Preview ${vipSettings.previewLimitMinutes} menit`
-                      : "Akses standar"}
-                </Badge>
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-yellow-300">
-                  <Star className="size-4 fill-yellow-400 text-yellow-400" />
-                  {movie.rating ?? "N/A"}
-                </span>
-                {movie.year ? (
-                  <span className="text-sm text-neutral-300">{movie.year}</span>
-                ) : null}
-                {releaseDate ? (
-                  <span className="inline-flex items-center gap-1.5 text-sm text-neutral-300">
-                    <Calendar className="size-4" />
-                    {releaseDate}
-                  </span>
-                ) : null}
-                {movie.duration ? (
-                  <span className="text-sm text-neutral-300">
-                    {movie.duration}
-                  </span>
-                ) : null}
-              </div>
-
-              <div>
-                <h1 className="max-w-4xl text-3xl font-black leading-tight text-white sm:text-6xl sm:leading-none lg:text-7xl">
-                  {movie.title}
-                </h1>
-              </div>
-
-              {movie.genre ? (
-                <p className="text-sm font-medium text-neutral-400">
-                  {movie.genre}
-                </p>
-              ) : null}
-
+        <div className="relative z-10 mx-auto flex min-h-[76svh] w-full max-w-7xl flex-col justify-end px-4 pb-6 pt-[calc(env(safe-area-inset-top)+28px)] sm:min-h-[92svh] sm:px-8 sm:pb-10 sm:pt-[calc(env(safe-area-inset-top)+48px)] lg:px-10">
+          <div className="max-w-3xl space-y-3 sm:space-y-5">
+            <div className="rounded-[24px] border border-white/10 bg-black/10 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur-[2px] sm:max-w-2xl sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-0">
               <DetailWatchActions
                 authBotChatUrl={authBotChatUrl}
                 authMiniAppUrl={authMiniAppUrl}
@@ -386,34 +322,58 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
                 telegramShareUrl={telegramShareUrl}
                 title={movie.title}
               />
-
-              <SynopsisAccordion text={fallbackSynopsis} />
-
-              <MovieCredits actors={movie.actors} directors={movie.directors} />
             </div>
 
-            <aside className="hidden lg:block">
-              <div className="overflow-hidden rounded-md bg-neutral-950 shadow-2xl shadow-red-950/30 ring-1 ring-white/15">
-                <div className="relative aspect-[2/3] bg-neutral-900">
-                  {poster ? (
-                    <Image
-                      src={poster}
-                      alt={`${movie.title} poster`}
-                      fill
-                      unoptimized
-                      sizes="340px"
-                      className="object-cover"
-                      priority
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center px-4 text-center text-sm text-neutral-400">
-                      Poster belum tersedia
-                    </div>
-                  )}
-                </div>
-              </div>
-            </aside>
+            <div className="flex flex-wrap items-center gap-3">
+              {movie.quality ? (
+                <Badge className="border-red-300/30 bg-red-600 text-white">
+                  {movie.quality}
+                </Badge>
+              ) : null}
+              <Badge className="border-white/10 bg-white/10 text-white">
+                {vipStatus.active
+                  ? "VIP aktif"
+                  : vipSettings.previewEnabled
+                    ? `Preview ${vipSettings.previewLimitMinutes} menit`
+                    : "Akses standar"}
+              </Badge>
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-yellow-300">
+                <Star className="size-4 fill-yellow-400 text-yellow-400" />
+                {movie.rating ?? "N/A"}
+              </span>
+              {movie.year ? (
+                <span className="text-sm text-neutral-300">{movie.year}</span>
+              ) : null}
+              {releaseDate ? (
+                <span className="inline-flex items-center gap-1.5 text-sm text-neutral-300">
+                  <Calendar className="size-4" />
+                  {releaseDate}
+                </span>
+              ) : null}
+              {movie.duration ? (
+                <span className="text-sm text-neutral-300">{movie.duration}</span>
+              ) : null}
+            </div>
+
+            <div>
+              <h1 className="max-w-4xl text-3xl font-black leading-tight text-white drop-shadow-[0_8px_24px_rgba(0,0,0,0.65)] sm:text-6xl sm:leading-none lg:text-7xl">
+                {movie.title}
+              </h1>
+            </div>
+
+            {movie.genre ? (
+              <p className="max-w-2xl text-sm font-medium text-neutral-200 sm:text-base">
+                {movie.genre}
+              </p>
+            ) : null}
           </div>
+        </div>
+      </section>
+
+      <section className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-6 pt-3 sm:px-8 sm:pb-8 sm:pt-5 lg:px-10">
+        <div className="max-w-3xl space-y-5 sm:space-y-6">
+          <SynopsisAccordion text={fallbackSynopsis} />
+          <MovieCredits actors={movie.actors} directors={movie.directors} />
         </div>
       </section>
 

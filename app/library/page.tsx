@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Bookmark, Clock3, Play, Star } from "lucide-react";
+import { Bookmark, Clock3, Play } from "lucide-react";
 
+import { MovieCardLink } from "@/components/movie/movie-card-link";
 import { Badge } from "@/components/ui/badge";
 import { requireUserSession } from "@/lib/user-auth";
 import { prisma } from "@/lib/prisma";
@@ -134,25 +135,19 @@ function CollectionGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5 xl:grid-cols-6">
       {favorites.map((favorite) => (
-        <Link
+        <div
           key={favorite.movie.id}
-          href={`/movie/${favorite.movie.id}`}
-          prefetch
-          className="group outline-none transition-transform active:scale-[0.98] sm:hover:-translate-y-1"
         >
-          <MoviePoster movie={favorite.movie} />
-          <div className="space-y-2 px-1 py-3">
-            <h2 className="line-clamp-2 min-h-9 text-sm font-semibold leading-[18px] text-white">
-              {favorite.movie.title}
-            </h2>
-            <p className="inline-flex items-center gap-1 text-xs text-neutral-400">
-              <Star className="size-3.5 fill-yellow-400 text-yellow-400" />
-              {favorite.movie.rating ?? "N/A"}
-            </p>
-          </div>
-        </Link>
+          <MovieCardLink
+            movie={favorite.movie}
+            className="sm:hover:-translate-y-1"
+          />
+          <p className="px-1.5 pt-2 text-[11px] text-neutral-500">
+            Disimpan {formatWatchedDate(favorite.createdAt)}
+          </p>
+        </div>
       ))}
     </div>
   );

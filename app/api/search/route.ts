@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { fetchSearch, MovieApiError } from "@/lib/movie-api";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,11 +29,39 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await fetchSearch(query, page);
+    const sourceUrls = Array.from(
+      new Set(
+        result.movies
+          .map((movie) => movie.sourceUrl)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    const existingMovies = sourceUrls.length
+      ? await prisma.movie
+          .findMany({
+            where: {
+              sourceUrl: {
+                in: sourceUrls,
+              },
+            },
+            select: {
+              id: true,
+              sourceUrl: true,
+            },
+          })
+          .catch(() => [])
+      : [];
+    const movieIdBySource = new Map(
+      existingMovies.map((movie) => [movie.sourceUrl, movie.id]),
+    );
 
     return NextResponse.json(
       {
         fetched: result.fetched,
-        movies: result.movies,
+        movies: result.movies.map((movie) => ({
+          ...movie,
+          movieId: movieIdBySource.get(movie.sourceUrl) ?? null,
+        })),
         page: result.page ?? page,
         totalPages: result.totalPages,
       },

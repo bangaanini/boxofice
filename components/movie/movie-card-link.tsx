@@ -9,13 +9,20 @@ import type { MovieCard } from "@/lib/movie-feeds";
 type MovieCardLinkProps = {
   movie: MovieCard;
   className?: string;
+  href?: string;
+  prefetch?: boolean;
 };
 
-function MovieCardLinkComponent({ movie, className }: MovieCardLinkProps) {
+function MovieCardLinkComponent({
+  movie,
+  className,
+  href,
+  prefetch = true,
+}: MovieCardLinkProps) {
   return (
     <Link
-      href={`/movie/${movie.id}`}
-      prefetch
+      href={href ?? `/movie/${movie.id}`}
+      prefetch={prefetch}
       data-haptic="light"
       className={cn(
         "group block outline-none transition-transform active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-red-300",
@@ -63,6 +70,8 @@ export const MovieCardLink = React.memo(
   MovieCardLinkComponent,
   (previous, next) =>
     previous.className === next.className &&
+    previous.href === next.href &&
+    previous.prefetch === next.prefetch &&
     previous.movie.id === next.movie.id &&
     previous.movie.title === next.movie.title &&
     previous.movie.thumbnail === next.movie.thumbnail &&

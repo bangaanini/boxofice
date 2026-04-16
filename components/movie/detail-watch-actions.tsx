@@ -1,6 +1,4 @@
 "use client";
-
-import Link from "next/link";
 import * as React from "react";
 import { Play } from "lucide-react";
 
@@ -134,17 +132,6 @@ export function DetailWatchActions({
           telegramShareUrl={telegramShareUrl}
           title={title}
         />
-        <Button
-          asChild
-          size="lg"
-          variant="secondary"
-          data-haptic="light"
-          className="hidden h-12 border border-white/10 bg-white/10 px-7 text-white hover:bg-white/15 sm:inline-flex"
-        >
-          <Link href="/" prefetch>
-            Jelajahi lagi
-          </Link>
-        </Button>
       </div>
 
       {isPlayerOpen ? (

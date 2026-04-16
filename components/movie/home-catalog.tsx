@@ -186,7 +186,7 @@ export function HomeCatalog({
   return (
     <section className="mx-auto w-full max-w-7xl px-4 pb-28 pt-2 sm:px-8 sm:pb-10 sm:pt-4 lg:px-10">
       {movies.length ? (
-        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5 xl:grid-cols-6">
           {movies.map((movie) => (
             <MovieCardLink key={movie.id} movie={movie} />
           ))}
@@ -233,7 +233,7 @@ export function HomeCatalog({
       ) : null}
 
       {isNearBottom && !isLoadingMore && nextOffset !== null ? (
-        <div className="mt-4 grid grid-cols-3 gap-2.5 opacity-60 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+        <div className="mt-4 grid grid-cols-2 gap-3 opacity-60 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5 xl:grid-cols-6">
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index}>
               <Skeleton className="aspect-[2/3] w-full rounded-[18px] bg-white/10" />
