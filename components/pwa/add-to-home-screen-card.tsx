@@ -179,6 +179,10 @@ export function AddToHomeScreenCard() {
     );
   }
 
+  if (isInstalled) {
+    return null;
+  }
+
   return (
     <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.05] p-4">
       <p className="inline-flex items-center gap-2 text-sm font-semibold text-white">

@@ -17,6 +17,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import {
   getEnvPublicAppUrl,
+  getSeoMetadataSnapshot,
   getTelegramBotSettingsSafe,
 } from "@/lib/telegram-bot-settings";
 import { getPreferredTelegramShareLinksForUser } from "@/lib/telegram-partner-bots";
@@ -85,7 +86,10 @@ export async function generateMetadata({
   params,
 }: Pick<MoviePageProps, "params">): Promise<Metadata> {
   const { id } = await params;
-  const movie = await getMovieDetailData(id);
+  const [movie, telegram] = await Promise.all([
+    getMovieDetailData(id),
+    getTelegramBotSettingsSafe(),
+  ]);
 
   if (!movie) {
     return {
@@ -93,9 +97,10 @@ export async function generateMetadata({
     };
   }
 
+  const seo = getSeoMetadataSnapshot(telegram.settings);
   const title = movie.year ? `${movie.title} (${movie.year})` : movie.title;
   const description = buildMovieDescription(movie);
-  const canonicalUrl = `${getEnvPublicAppUrl()}/movie/${movie.id}`;
+  const canonicalUrl = `${telegram.runtime.publicAppUrl || getEnvPublicAppUrl()}/movie/${movie.id}`;
 
   return {
     title,
@@ -106,6 +111,7 @@ export async function generateMetadata({
     openGraph: {
       title,
       description,
+      siteName: seo.brandName,
       type: "video.movie",
       url: canonicalUrl,
       images: movie.thumbnail

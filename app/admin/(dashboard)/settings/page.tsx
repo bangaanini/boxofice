@@ -143,6 +143,24 @@ export default async function AdminSettingsPage({
 
             <div className="grid gap-4 md:grid-cols-2">
               <Field
+                defaultValue={telegramSettings.brandName}
+                label="Nama brand"
+                name="brandName"
+                placeholder="Layar BoxOffice"
+              />
+              <Field
+                defaultValue={telegramSettings.appShortName}
+                label="Nama singkat app"
+                name="appShortName"
+                placeholder="Layar BoxOffice"
+              />
+              <Field
+                defaultValue={telegramSettings.seoTitle}
+                label="Judul SEO"
+                name="seoTitle"
+                placeholder="Layar BoxOffice"
+              />
+              <Field
                 defaultValue={telegramSettings.botToken ?? ""}
                 label="Bot token"
                 name="botToken"
@@ -175,9 +193,41 @@ export default async function AdminSettingsPage({
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-neutral-300">
+                Deskripsi SEO
+              </label>
+              <textarea
+                name="seoDescription"
+                defaultValue={telegramSettings.seoDescription}
+                rows={4}
+                className="mt-2 w-full rounded-[20px] border border-white/10 bg-black/25 px-4 py-4 text-sm leading-7 text-white outline-none placeholder:text-neutral-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-300">
+                Keyword SEO
+              </label>
+              <textarea
+                name="seoKeywords"
+                defaultValue={telegramSettings.seoKeywords ?? ""}
+                rows={3}
+                placeholder="layar boxoffice, telegram mini app, nonton film telegram"
+                className="mt-2 w-full rounded-[20px] border border-white/10 bg-black/25 px-4 py-4 text-sm leading-7 text-white outline-none placeholder:text-neutral-500"
+              />
+              <p className="mt-2 text-sm leading-6 text-neutral-400">
+                Pisahkan keyword dengan koma atau baris baru. Metadata share
+                tetap memakai file OG yang sudah ada di project.
+              </p>
+            </div>
+
             <div className="rounded-[20px] border border-white/10 bg-black/20 p-4 text-sm leading-6 text-neutral-300">
               <p className="font-semibold text-white">Nilai aktif saat ini</p>
               <div className="mt-3 grid gap-2">
+                <p>
+                  Brand: <span className="text-white">{telegramSettings.brandName}</span>
+                </p>
                 <p>
                   Bot aktif: <span className="text-white">@{telegramRuntime.botUsername}</span>
                 </p>
@@ -237,6 +287,20 @@ export default async function AdminSettingsPage({
             <p className="text-sm font-semibold text-orange-200">
               Preview bot
             </p>
+            <div className="mt-4 rounded-[20px] border border-white/10 bg-black/25 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-neutral-500">
+                Preview SEO
+              </p>
+              <p className="mt-3 text-lg font-semibold text-white">
+                {telegramSettings.seoTitle}
+              </p>
+              <p className="mt-2 text-sm text-orange-200">
+                {telegramRuntime.publicAppUrl.replace(/^https?:\/\//, "")}
+              </p>
+              <p className="mt-3 text-sm leading-6 text-neutral-400">
+                {telegramSettings.seoDescription}
+              </p>
+            </div>
             <div className="mt-4 space-y-3 rounded-[24px] border border-white/10 bg-[#1f2c3a] p-4">
               <div className="rounded-[18px] bg-[#2c3947] p-4 text-sm leading-7 text-white">
                 {telegramSettings.welcomeMessage

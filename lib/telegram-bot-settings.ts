@@ -5,10 +5,12 @@ import {
 } from "@/lib/telegram-miniapp";
 
 export type TelegramBotSettingsSnapshot = {
+  appShortName: string;
   affiliateGroupLabel: string;
   affiliateGroupUrl: string;
   affiliateLabel: string;
   affiliateUrl: string;
+  brandName: string;
   botToken: string | null;
   botUsername: string | null;
   channelLabel: string;
@@ -19,6 +21,9 @@ export type TelegramBotSettingsSnapshot = {
   openAppLabel: string;
   openAppUrl: string;
   publicAppUrl: string | null;
+  seoDescription: string;
+  seoKeywords: string | null;
+  seoTitle: string;
   searchLabel: string;
   searchUrl: string;
   slug: string;
@@ -40,6 +45,14 @@ export type TelegramBotSettingsResult = {
   schemaIssue: string | null;
   schemaReady: boolean;
   settings: TelegramBotSettingsSnapshot;
+};
+
+export type SeoMetadataSnapshot = {
+  appShortName: string;
+  brandName: string;
+  description: string;
+  keywords: string[];
+  title: string;
 };
 
 function isRecordWithCode(
@@ -103,12 +116,16 @@ function getEnvRuntimeConfig(): TelegramBotRuntime {
 
 function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
   const runtime = getEnvRuntimeConfig();
+  const defaultSeoDescription =
+    "Layar BoxOffice adalah Mini App Telegram untuk nonton film Box Office, cari judul favorit, buka akses VIP, dan jalankan affiliate langsung dari Telegram.";
 
   return {
+    appShortName: "Layar BoxOffice",
     affiliateGroupLabel: "🏠 Group Affiliate",
     affiliateGroupUrl: buildTelegramBotChatUrlForUsername(runtime.botUsername),
     affiliateLabel: "💰 Gabung Affiliate",
     affiliateUrl: `${runtime.publicAppUrl}/affiliate`,
+    brandName: "Layar BoxOffice",
     botToken: null,
     botUsername: null,
     channelLabel: "🎥 Film Box Office",
@@ -119,6 +136,10 @@ function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
     openAppLabel: "🎬 Buka",
     openAppUrl: runtime.publicAppUrl,
     publicAppUrl: null,
+    seoDescription: defaultSeoDescription,
+    seoKeywords:
+      "layar boxoffice, telegram mini app, nonton film telegram, film box office, vip film, affiliate telegram",
+    seoTitle: "Layar BoxOffice",
     searchLabel: "🔎 Cari Judul",
     searchUrl: `${runtime.publicAppUrl}/search`,
     slug: "default",
@@ -241,10 +262,12 @@ export async function ensureTelegramBotSettings() {
 
   return prisma.telegramBotSettings.create({
     data: {
+      appShortName: defaults.appShortName,
       affiliateGroupLabel: defaults.affiliateGroupLabel,
       affiliateGroupUrl: defaults.affiliateGroupUrl,
       affiliateLabel: defaults.affiliateLabel,
       affiliateUrl: defaults.affiliateUrl,
+      brandName: defaults.brandName,
       botToken: defaults.botToken,
       botUsername: defaults.botUsername,
       channelLabel: defaults.channelLabel,
@@ -253,6 +276,9 @@ export async function ensureTelegramBotSettings() {
       openAppLabel: defaults.openAppLabel,
       openAppUrl: defaults.openAppUrl,
       publicAppUrl: defaults.publicAppUrl,
+      seoDescription: defaults.seoDescription,
+      seoKeywords: defaults.seoKeywords,
+      seoTitle: defaults.seoTitle,
       searchLabel: defaults.searchLabel,
       searchUrl: defaults.searchUrl,
       supportLabel: defaults.supportLabel,
@@ -310,4 +336,25 @@ export function renderTelegramWelcomeMessage(
         ? `@${input.username.trim().replace(/^@/, "")}`
         : "teman",
     );
+}
+
+export function getSeoMetadataSnapshot(
+  settings: Pick<
+    TelegramBotSettingsSnapshot,
+    "appShortName" | "brandName" | "seoDescription" | "seoKeywords" | "seoTitle"
+  >,
+): SeoMetadataSnapshot {
+  const description = settings.seoDescription.trim();
+  const keywords = settings.seoKeywords
+    ?.split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean) ?? [];
+
+  return {
+    appShortName: settings.appShortName.trim() || settings.brandName.trim() || "Layar BoxOffice",
+    brandName: settings.brandName.trim() || "Layar BoxOffice",
+    description,
+    keywords,
+    title: settings.seoTitle.trim() || settings.brandName.trim() || "Layar BoxOffice",
+  };
 }

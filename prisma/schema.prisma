@@ -177,6 +177,11 @@ model TelegramBotSettings {
   webhookSecret       String?
   publicAppUrl        String?  @db.Text
   miniAppShortName    String?
+  brandName           String   @default("Layar BoxOffice")
+  appShortName        String   @default("Layar BoxOffice")
+  seoTitle            String   @default("Layar BoxOffice")
+  seoDescription      String   @default("Layar BoxOffice adalah Mini App Telegram untuk nonton film Box Office, cari judul favorit, buka akses VIP, dan jalankan affiliate langsung dari Telegram.")
+  seoKeywords         String?  @db.Text
   welcomeMessage      String   @db.Text
   openAppLabel        String
   openAppUrl          String   @db.Text

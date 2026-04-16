@@ -514,6 +514,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
   }
 
   const welcomeMessage = readTextField(formData, "welcomeMessage");
+  const seoDescription = readTextField(formData, "seoDescription");
 
   if (welcomeMessage.length < 20) {
     redirect(
@@ -521,7 +522,14 @@ export async function updateTelegramBotSettings(formData: FormData) {
     );
   }
 
+  if (seoDescription.length < 40) {
+    redirect(
+      `${redirectBasePath}?bot=error&message=${encodeURIComponent("Deskripsi SEO minimal 40 karakter.")}`,
+    );
+  }
+
   const payload = {
+    appShortName: readTextField(formData, "appShortName") || "Layar BoxOffice",
     affiliateGroupLabel: readTextField(formData, "affiliateGroupLabel") || "🏠 Group Affiliate",
     affiliateGroupUrl: readRequiredUrlField(
       formData,
@@ -536,6 +544,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
       "URL tombol affiliate",
       redirectBasePath,
     ),
+    brandName: readTextField(formData, "brandName") || "Layar BoxOffice",
     botToken: readNullableTextField(formData, "botToken"),
     botUsername: readNullableTextField(formData, "botUsername"),
     channelLabel: readTextField(formData, "channelLabel") || "🎥 Film Box Office",
@@ -559,6 +568,9 @@ export async function updateTelegramBotSettings(formData: FormData) {
       "Public App URL",
       redirectBasePath,
     ),
+    seoDescription,
+    seoKeywords: readNullableTextField(formData, "seoKeywords"),
+    seoTitle: readTextField(formData, "seoTitle") || "Layar BoxOffice",
     searchLabel: readTextField(formData, "searchLabel") || "🔎 Cari Judul",
     searchUrl: readRequiredUrlField(
       formData,
