@@ -223,6 +223,7 @@ export function WatchPlayer({
   const hlsRef = React.useRef<Hls | null>(null);
   const hideChromeTimeoutRef = React.useRef<number | null>(null);
   const lastTapRef = React.useRef<{ time: number; x: number } | null>(null);
+  const dismissedRotateSourceUrlRef = React.useRef<string | null>(null);
   const resumeSnapshotRef = React.useRef<{
     time: number;
     shouldPlay: boolean;
@@ -250,6 +251,7 @@ export function WatchPlayer({
   const [isPortraitViewport, setIsPortraitViewport] = React.useState(false);
   const [previewEnded, setPreviewEnded] = React.useState(false);
   const [showChrome, setShowChrome] = React.useState(true);
+  const [showRotateGate, setShowRotateGate] = React.useState(false);
   const [retryCount, setRetryCount] = React.useState(0);
 
   const requestClose = React.useCallback(() => {
@@ -263,6 +265,8 @@ export function WatchPlayer({
       setError(null);
       setFailedSourceUrls([]);
       setPreviewEnded(false);
+      setShowRotateGate(false);
+      dismissedRotateSourceUrlRef.current = null;
 
       if (!streamCacheKey || (!movieId && !sourceUrl)) {
         setError("Sumber video belum valid.");
@@ -404,6 +408,7 @@ export function WatchPlayer({
       setFailedSourceUrls(nextFailedUrls);
 
       if (nextSource) {
+        dismissedRotateSourceUrlRef.current = null;
         setSelectedSourceUrl(nextSource.url);
         return;
       }
@@ -701,6 +706,41 @@ export function WatchPlayer({
   }, [movieId, sources.length]);
 
   React.useEffect(() => {
+    if (!selectedSourceUrl || previewEnded) {
+      setShowRotateGate(false);
+      return;
+    }
+
+    if (dismissedRotateSourceUrlRef.current === selectedSourceUrl) {
+      setShowRotateGate(false);
+      return;
+    }
+
+    setShowRotateGate(true);
+  }, [previewEnded, selectedSourceUrl]);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    function handlePlaying() {
+      if (selectedSourceUrl) {
+        dismissedRotateSourceUrlRef.current = selectedSourceUrl;
+      }
+      setShowRotateGate(false);
+    }
+
+    video.addEventListener("playing", handlePlaying);
+
+    return () => {
+      video.removeEventListener("playing", handlePlaying);
+    };
+  }, [selectedSourceUrl]);
+
+  React.useEffect(() => {
     const video = videoRef.current;
 
     if (!video || isVipActive || previewLimitSeconds <= 0) {
@@ -715,6 +755,7 @@ export function WatchPlayer({
 
       currentVideo.pause();
       setPreviewEnded(true);
+      setShowRotateGate(false);
       revealChrome();
       clearHideChromeTimer();
     }
@@ -979,6 +1020,7 @@ export function WatchPlayer({
       time: video?.currentTime ?? 0,
       shouldPlay: video ? !video.paused : false,
     };
+    dismissedRotateSourceUrlRef.current = null;
     setSelectedSourceUrl(source.url);
     pulseChrome();
   }
@@ -988,6 +1030,7 @@ export function WatchPlayer({
       clearCachedStream(streamCacheKey);
     }
 
+    dismissedRotateSourceUrlRef.current = null;
     setPreviewEnded(false);
     setRetryCount((value) => value + 1);
   }
@@ -1144,6 +1187,47 @@ export function WatchPlayer({
             )}
           >
             <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+          </div>
+        ) : null}
+        {showRotateGate && !previewEnded ? (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/72 px-4">
+            <div className="w-full max-w-md rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,20,0.96),rgba(8,8,8,0.98))] p-5 text-center shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-200">
+                Sebelum mulai nonton
+              </p>
+              <h3 className="mt-3 text-2xl font-bold text-white">
+                Aktifkan auto-rotate bila bisa
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-neutral-300">
+                Saat mode fullscreen, film landscape akan tampil paling pas jika auto-rotate aktif. Kamu tetap bisa lanjut nonton sekarang.
+              </p>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  data-haptic="light"
+                  onClick={() => {
+                    dismissedRotateSourceUrlRef.current = selectedSourceUrl;
+                    setShowRotateGate(false);
+                  }}
+                  className="h-11 border border-white/10 bg-white/10 text-white hover:bg-white/15"
+                >
+                  Lanjutkan
+                </Button>
+                <Button
+                  type="button"
+                  data-haptic="medium"
+                  onClick={() => {
+                    dismissedRotateSourceUrlRef.current = selectedSourceUrl;
+                    setShowRotateGate(false);
+                    void toggleFullscreen();
+                  }}
+                  className="h-11 bg-red-600 text-white hover:bg-red-500"
+                >
+                  Buka fullscreen
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
         {previewEnded && !isVipActive && previewLimitSeconds > 0 ? (
