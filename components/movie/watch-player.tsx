@@ -39,20 +39,6 @@ type PointerArea = {
   rawWidth: number;
 };
 
-type OrientationLockValue =
-  | "any"
-  | "landscape"
-  | "landscape-primary"
-  | "landscape-secondary"
-  | "natural"
-  | "portrait"
-  | "portrait-primary"
-  | "portrait-secondary";
-
-type ScreenOrientationWithLock = ScreenOrientation & {
-  lock?: (orientation: OrientationLockValue) => Promise<void>;
-};
-
 type VideoElementWithFastSeek = HTMLVideoElement & {
   fastSeek?: (time: number) => void;
   webkitEnterFullscreen?: () => void;
@@ -125,16 +111,6 @@ function chooseDefaultSource(
   }
 
   return sources[0];
-}
-
-async function lockLandscapeIfPossible() {
-  const orientation = screen.orientation as ScreenOrientationWithLock | undefined;
-
-  if (!orientation?.lock) {
-    return;
-  }
-
-  await orientation.lock("landscape").catch(() => undefined);
 }
 
 function unlockOrientationIfPossible() {
@@ -371,7 +347,6 @@ export function WatchPlayer({
       telegram.requestFullscreen();
     }
 
-    await lockLandscapeIfPossible();
     scheduleHideChrome();
   }, [revealChrome, scheduleHideChrome]);
 
