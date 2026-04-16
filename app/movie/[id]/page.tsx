@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Calendar, Clapperboard, Star, Users } from "lucide-react";
 
 import { ImmersiveHidden } from "@/components/feedback/immersive-hidden";
@@ -293,7 +293,10 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
         authStartParam,
       )
     : null;
-  const playerMountId = `movie-player-${movie.id}`;
+
+  if (Boolean(user) && shouldOpenPlayer) {
+    redirect(`/watch/${movie.id}`);
+  }
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -320,10 +323,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
                 authBotChatUrl={authBotChatUrl}
                 authMiniAppUrl={authMiniAppUrl}
                 initialSaved={Boolean(favorite)}
-                initialOpen={Boolean(user) && shouldOpenPlayer}
                 movieId={movie.id}
-                playerMountId={playerMountId}
-                poster={poster}
                 requiresAuth={!user}
                 shareText={shareDescription}
                 shareUrl={shareUrl.toString()}
@@ -381,7 +381,6 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
 
       <section className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-6 pt-3 sm:px-8 sm:pb-8 sm:pt-5 lg:px-10">
         <div className="max-w-3xl space-y-5 sm:space-y-6">
-          <div id={playerMountId} className="scroll-mt-24" />
           <SynopsisAccordion text={fallbackSynopsis} />
           <MovieCredits actors={movie.actors} directors={movie.directors} />
         </div>

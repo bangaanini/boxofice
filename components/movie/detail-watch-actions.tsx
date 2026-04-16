@@ -1,10 +1,10 @@
 "use client";
+
 import * as React from "react";
-import { createPortal } from "react-dom";
-import { Play } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { MovieActionButtons } from "@/components/movie/movie-action-buttons";
-import { WatchPlayer } from "@/components/movie/watch-player";
 import { Button } from "@/components/ui/button";
 import {
   getMovieStreamCacheKey,
@@ -15,10 +15,7 @@ type DetailWatchActionsProps = {
   authBotChatUrl?: string | null;
   authMiniAppUrl?: string | null;
   initialSaved: boolean;
-  initialOpen?: boolean;
   movieId: string;
-  playerMountId?: string;
-  poster?: string | null;
   requiresAuth?: boolean;
   shareText?: string;
   shareUrl?: string;
@@ -30,125 +27,81 @@ export function DetailWatchActions({
   authBotChatUrl,
   authMiniAppUrl,
   initialSaved,
-  initialOpen = false,
   movieId,
-  playerMountId,
-  poster,
   requiresAuth = false,
   shareText,
   shareUrl,
   telegramShareUrl,
   title,
 }: DetailWatchActionsProps) {
-  const playerRef = React.useRef<HTMLDivElement | null>(null);
-  const [isPlayerOpen, setIsPlayerOpen] = React.useState(initialOpen);
-  const [immersiveRequestId, setImmersiveRequestId] = React.useState(
-    initialOpen ? 1 : 0,
-  );
-  const [portalTarget, setPortalTarget] = React.useState<HTMLElement | null>(
-    null,
-  );
-
-  const closePlayer = React.useCallback(() => {
-    setIsPlayerOpen(false);
-  }, []);
+  const router = useRouter();
+  const [isOpening, setIsOpening] = React.useState(false);
 
   React.useEffect(() => {
-    if (initialOpen) {
-      setIsPlayerOpen(true);
-    }
-  }, [initialOpen]);
-
-  React.useEffect(() => {
-    if (!playerMountId || typeof document === "undefined") {
-      setPortalTarget(null);
+    if (requiresAuth) {
       return;
     }
 
-    setPortalTarget(document.getElementById(playerMountId));
-  }, [playerMountId]);
+    router.prefetch(`/watch/${movieId}`);
 
-  React.useEffect(() => {
-    const warmupId = window.setTimeout(() => {
+    const scheduleWarmup = () => {
       void prefetchCachedStream({
         cacheKey: getMovieStreamCacheKey(movieId),
         movieId,
       }).catch(() => undefined);
       void import("hls.js").catch(() => undefined);
-    }, 350);
-
-    return () => {
-      window.clearTimeout(warmupId);
     };
-  }, [movieId]);
 
-  React.useEffect(() => {
-    if (!isPlayerOpen) {
-      return;
+    const idleScheduler = window.requestIdleCallback;
+
+    if (typeof idleScheduler === "function") {
+      const idleId = idleScheduler(scheduleWarmup, {
+        timeout: 1200,
+      });
+
+      return () => {
+        window.cancelIdleCallback(idleId);
+      };
     }
 
-    const scrollId = window.setTimeout(() => {
-      playerRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 0);
+    const timeoutId = window.setTimeout(scheduleWarmup, 300);
 
     return () => {
-      window.clearTimeout(scrollId);
+      window.clearTimeout(timeoutId);
     };
-  }, [isPlayerOpen]);
+  }, [movieId, requiresAuth, router]);
 
-  function playInline() {
+  function handleWatch() {
     if (requiresAuth) {
       window.location.href = authMiniAppUrl || authBotChatUrl || "/admin/login";
       return;
     }
 
-    if (isPlayerOpen) {
-      setImmersiveRequestId((value) => value + 1);
-      playerRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-      return;
-    }
-
-    setImmersiveRequestId((value) => value + 1);
-    setIsPlayerOpen(true);
+    setIsOpening(true);
+    router.push(`/watch/${movieId}`);
   }
 
-  const playerContent = isPlayerOpen ? (
-    <div ref={playerRef} className="pt-1">
-      <WatchPlayer
-        key={movieId}
-        autoPlay
-        defaultQuality="480p"
-        immersiveRequestId={immersiveRequestId}
-        movieId={movieId}
-        onRequestClose={closePlayer}
-        poster={poster}
-      />
-    </div>
-  ) : null;
-
   return (
-    <>
-      <div className="space-y-3">
+    <div className="space-y-3">
       <div className="grid gap-2 sm:flex sm:flex-wrap sm:gap-3">
         <div className="sm:w-auto">
           <Button
             type="button"
             size="lg"
-            onClick={playInline}
+            onClick={handleWatch}
+            disabled={isOpening}
             data-haptic="medium"
             className="h-12 w-full bg-red-600 px-7 text-white hover:bg-red-500 sm:w-auto"
           >
-            <Play className="size-4 fill-current" />
+            {isOpening ? (
+              <RefreshCw className="size-4 animate-spin" />
+            ) : (
+              <Play className="size-4 fill-current" />
+            )}
             {requiresAuth
               ? "Buka di Telegram"
-              : isPlayerOpen
-                ? "Putar lagi"
+              : isOpening
+                ? "Membuka..."
                 : "Tonton"}
           </Button>
         </div>
@@ -163,13 +116,6 @@ export function DetailWatchActions({
           title={title}
         />
       </div>
-      </div>
-
-      {playerContent
-        ? portalTarget
-          ? createPortal(playerContent, portalTarget)
-          : playerContent
-        : null}
-    </>
+    </div>
   );
 }
