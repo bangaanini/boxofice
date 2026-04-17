@@ -1,5 +1,9 @@
 import { sendTelegramBotMessage } from "@/lib/telegram-bot-api";
 import {
+  isDynamicTelegramDeepLink,
+  isTelegramHostname,
+} from "@/lib/telegram-link-policy";
+import {
   renderTelegramWelcomeMessage,
   type TelegramBotSettingsSnapshot,
 } from "@/lib/telegram-bot-settings";
@@ -50,8 +54,8 @@ function sanitizeAbsoluteUrl(value: string) {
     }
 
     if (
-      (url.hostname === "t.me" || url.hostname === "telegram.me") &&
-      (!url.pathname || url.pathname === "/" || url.searchParams.has("startapp"))
+      isTelegramHostname(url.hostname) &&
+      (!url.pathname || url.pathname === "/" || isDynamicTelegramDeepLink(url))
     ) {
       return null;
     }

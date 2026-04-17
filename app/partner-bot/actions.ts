@@ -13,6 +13,7 @@ import {
   PARTNER_BOT_OVERRIDE_KEYS,
   type PartnerBotSettingsOverrides,
 } from "@/lib/telegram-partner-bots";
+import { isDynamicTelegramDeepLink } from "@/lib/telegram-link-policy";
 import { requireUserSession } from "@/lib/user-auth";
 
 type PartnerBotOverrideKey = (typeof PARTNER_BOT_OVERRIDE_KEYS)[number];
@@ -56,13 +57,10 @@ function validateOptionalUrl(value: string, label: string, botId: string) {
       throw new Error("invalid_protocol");
     }
 
-    if (
-      (url.hostname === "t.me" || url.hostname === "telegram.me") &&
-      url.searchParams.has("startapp")
-    ) {
+    if (isDynamicTelegramDeepLink(url)) {
       redirectToPartnerSettings({
         botId,
-        message: `${label} tidak boleh memakai link t.me dengan startapp. Gunakan URL web app langsung.`,
+        message: `${label} tidak boleh memakai dynamic deep link Telegram. Gunakan link bot biasa atau URL web app langsung.`,
         status: "error",
       });
     }

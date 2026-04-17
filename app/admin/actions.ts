@@ -13,6 +13,7 @@ import { clearAdminSessionCookie, requireAdminSession } from "@/lib/admin-sessio
 import { getPaymentGatewaySettingsSafe } from "@/lib/payments";
 import { getTelegramBotProfile } from "@/lib/telegram-bot-api";
 import { sendTelegramUserMessage } from "@/lib/telegram-bot";
+import { isDynamicTelegramDeepLink } from "@/lib/telegram-link-policy";
 import {
   buildLegacyInlineButtonsFromSettings,
   getTelegramBotSettingsSafe,
@@ -554,13 +555,10 @@ function readInlineButtonUrlField(
       throw new Error("invalid_protocol");
     }
 
-    if (
-      (url.hostname === "t.me" || url.hostname === "telegram.me") &&
-      url.searchParams.has("startapp")
-    ) {
+    if (isDynamicTelegramDeepLink(url)) {
       redirect(
         `${redirectBasePath}?${statusKey}=error&message=${encodeURIComponent(
-          `${label} tidak boleh memakai link t.me dengan startapp. Gunakan URL web app langsung.`,
+          `${label} tidak boleh memakai dynamic deep link Telegram. Gunakan link bot biasa atau URL web app langsung.`,
         )}`,
       );
     }
