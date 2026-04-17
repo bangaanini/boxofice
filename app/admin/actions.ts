@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { Prisma } from "@/app/generated/prisma/client";
 import {
   ensureAffiliateProfile,
   getAffiliateProgramSettingsSafe,
@@ -12,7 +13,11 @@ import { clearAdminSessionCookie, requireAdminSession } from "@/lib/admin-sessio
 import { getPaymentGatewaySettingsSafe } from "@/lib/payments";
 import { getTelegramBotProfile } from "@/lib/telegram-bot-api";
 import { sendTelegramUserMessage } from "@/lib/telegram-bot";
-import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
+import {
+  buildLegacyInlineButtonsFromSettings,
+  getTelegramBotSettingsSafe,
+  type TelegramInlineButtonConfig,
+} from "@/lib/telegram-bot-settings";
 import { createPartnerBotWebhookSecret } from "@/lib/telegram-partner-bots";
 import {
   auditMovieCatalog,
@@ -581,6 +586,57 @@ function slugify(input: string) {
     .slice(0, 64);
 }
 
+function readTelegramInlineButtons(
+  formData: FormData,
+  redirectBasePath: string,
+): TelegramInlineButtonConfig[] {
+  const buttons: TelegramInlineButtonConfig[] = [];
+
+  for (let index = 0; index < 10; index += 1) {
+    const buttonNumber = index + 1;
+    const label = readTextField(formData, `buttonLabel_${buttonNumber}`);
+    const url = readTextField(formData, `buttonUrl_${buttonNumber}`);
+    const enabled = formData.get(`buttonEnabled_${buttonNumber}`) === "on";
+
+    if (enabled && !label) {
+      redirect(
+        `${redirectBasePath}?botUi=error&message=${encodeURIComponent(
+          `Label tombol ${buttonNumber} wajib diisi jika tombol diaktifkan.`,
+        )}`,
+      );
+    }
+
+    let normalizedUrl = url;
+
+    if (enabled && !url) {
+      redirect(
+        `${redirectBasePath}?botUi=error&message=${encodeURIComponent(
+          `URL tombol ${buttonNumber} wajib diisi jika tombol diaktifkan.`,
+        )}`,
+      );
+    }
+
+    if (url) {
+      normalizedUrl = readRequiredUrlField(
+        formData,
+        `buttonUrl_${buttonNumber}`,
+        `URL tombol ${buttonNumber}`,
+        redirectBasePath,
+        "botUi",
+      );
+    }
+
+    buttons.push({
+      enabled: enabled && Boolean(label && normalizedUrl),
+      id: `button${buttonNumber}`,
+      label,
+      url: normalizedUrl,
+    });
+  }
+
+  return buttons;
+}
+
 export async function updateTelegramBotSettings(formData: FormData) {
   await requireAdminSession();
 
@@ -596,14 +652,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
     );
   }
 
-  const welcomeMessage = readTextField(formData, "welcomeMessage");
   const seoDescription = readTextField(formData, "seoDescription");
-
-  if (welcomeMessage.length < 20) {
-    redirect(
-      `${redirectBasePath}?bot=error&message=${encodeURIComponent("Pesan sambutan minimal 20 karakter.")}`,
-    );
-  }
 
   if (seoDescription.length < 40) {
     redirect(
@@ -613,39 +662,11 @@ export async function updateTelegramBotSettings(formData: FormData) {
 
   const payload = {
     appShortName: readTextField(formData, "appShortName") || "Layar Box Office",
-    affiliateGroupLabel: readTextField(formData, "affiliateGroupLabel") || "🏠 Group Affiliate",
-    affiliateGroupUrl: readRequiredUrlField(
-      formData,
-      "affiliateGroupUrl",
-      "URL group affiliate",
-      redirectBasePath,
-    ),
-    affiliateLabel: readTextField(formData, "affiliateLabel") || "💰 Gabung Affiliate",
-    affiliateUrl: readRequiredUrlField(
-      formData,
-      "affiliateUrl",
-      "URL tombol affiliate",
-      redirectBasePath,
-    ),
     brandName: readTextField(formData, "brandName") || "Layar Box Office",
     botToken: readNullableTextField(formData, "botToken"),
     botUsername: readNullableTextField(formData, "botUsername"),
-    channelLabel: readTextField(formData, "channelLabel") || "🎥 Layar Box Office",
-    channelUrl: readRequiredUrlField(
-      formData,
-      "channelUrl",
-      "URL channel film",
-      redirectBasePath,
-    ),
     miniAppShortName: readNullableTextField(formData, "miniAppShortName"),
     ownerTelegramId: readNullableTextField(formData, "ownerTelegramId"),
-    openAppLabel: readTextField(formData, "openAppLabel") || "🎬 Buka",
-    openAppUrl: readRequiredUrlField(
-      formData,
-      "openAppUrl",
-      "URL tombol buka",
-      redirectBasePath,
-    ),
     publicAppUrl: readNullableUrlField(
       formData,
       "publicAppUrl",
@@ -655,29 +676,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
     seoDescription,
     seoKeywords: readNullableTextField(formData, "seoKeywords"),
     seoTitle: readTextField(formData, "seoTitle") || "Layar Box Office",
-    searchLabel: readTextField(formData, "searchLabel") || "🔎 Cari Judul",
-    searchUrl: readRequiredUrlField(
-      formData,
-      "searchUrl",
-      "URL tombol cari",
-      redirectBasePath,
-    ),
-    supportLabel: readTextField(formData, "supportLabel") || "📞 Hubungi Admin",
-    supportUrl: readRequiredUrlField(
-      formData,
-      "supportUrl",
-      "URL support admin",
-      redirectBasePath,
-    ),
-    vipLabel: readTextField(formData, "vipLabel") || "💎 Join VIP",
-    vipUrl: readRequiredUrlField(
-      formData,
-      "vipUrl",
-      "URL tombol VIP",
-      redirectBasePath,
-    ),
     webhookSecret: readNullableTextField(formData, "webhookSecret"),
-    welcomeMessage,
   };
 
   await prisma.telegramBotSettings.update({
@@ -690,6 +689,123 @@ export async function updateTelegramBotSettings(formData: FormData) {
 
   redirect(
     `${redirectBasePath}?bot=ok&message=${encodeURIComponent("Konfigurasi bot Telegram berhasil diperbarui.")}`,
+  );
+}
+
+export async function updateTelegramBotPresentationSettings(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/bot-message");
+  const settingsResult = await getTelegramBotSettingsSafe();
+
+  if (!settingsResult.schemaReady) {
+    redirect(
+      `${redirectBasePath}?botUi=error&message=${encodeURIComponent(
+        settingsResult.schemaIssue ??
+          "Database runtime belum siap untuk menyimpan pesan bot.",
+      )}`,
+    );
+  }
+
+  const welcomeMessage = readTextField(formData, "welcomeMessage");
+
+  if (welcomeMessage.length < 20) {
+    redirect(
+      `${redirectBasePath}?botUi=error&message=${encodeURIComponent(
+        "Pesan sambutan minimal 20 karakter.",
+      )}`,
+    );
+  }
+
+  const inlineButtons = readTelegramInlineButtons(formData, redirectBasePath);
+  const hasActiveButton = inlineButtons.some((button) => button.enabled);
+
+  if (!hasActiveButton) {
+    redirect(
+      `${redirectBasePath}?botUi=error&message=${encodeURIComponent(
+        "Minimal aktifkan satu tombol inline.",
+      )}`,
+    );
+  }
+
+  const legacyButtons = buildLegacyInlineButtonsFromSettings({
+    affiliateGroupLabel: settingsResult.settings.affiliateGroupLabel,
+    affiliateGroupUrl: settingsResult.settings.affiliateGroupUrl,
+    affiliateLabel: settingsResult.settings.affiliateLabel,
+    affiliateUrl: settingsResult.settings.affiliateUrl,
+    channelLabel: settingsResult.settings.channelLabel,
+    channelUrl: settingsResult.settings.channelUrl,
+    openAppLabel: settingsResult.settings.openAppLabel,
+    openAppUrl: settingsResult.settings.openAppUrl,
+    searchLabel: settingsResult.settings.searchLabel,
+    searchUrl: settingsResult.settings.searchUrl,
+    supportLabel: settingsResult.settings.supportLabel,
+    supportUrl: settingsResult.settings.supportUrl,
+    vipLabel: settingsResult.settings.vipLabel,
+    vipUrl: settingsResult.settings.vipUrl,
+  });
+
+  const data = {
+    inlineButtons: inlineButtons as unknown as Prisma.InputJsonValue,
+    welcomeMessage,
+    ...(inlineButtons[0]
+      ? {
+          openAppLabel: inlineButtons[0].label || legacyButtons[0].label,
+          openAppUrl: inlineButtons[0].url || legacyButtons[0].url,
+        }
+      : {}),
+    ...(inlineButtons[1]
+      ? {
+          searchLabel: inlineButtons[1].label || legacyButtons[1].label,
+          searchUrl: inlineButtons[1].url || legacyButtons[1].url,
+        }
+      : {}),
+    ...(inlineButtons[2]
+      ? {
+          affiliateLabel: inlineButtons[2].label || legacyButtons[2].label,
+          affiliateUrl: inlineButtons[2].url || legacyButtons[2].url,
+        }
+      : {}),
+    ...(inlineButtons[3]
+      ? {
+          affiliateGroupLabel:
+            inlineButtons[3].label || legacyButtons[3].label,
+          affiliateGroupUrl: inlineButtons[3].url || legacyButtons[3].url,
+        }
+      : {}),
+    ...(inlineButtons[4]
+      ? {
+          channelLabel: inlineButtons[4].label || legacyButtons[4].label,
+          channelUrl: inlineButtons[4].url || legacyButtons[4].url,
+        }
+      : {}),
+    ...(inlineButtons[5]
+      ? {
+          supportLabel: inlineButtons[5].label || legacyButtons[5].label,
+          supportUrl: inlineButtons[5].url || legacyButtons[5].url,
+        }
+      : {}),
+    ...(inlineButtons[6]
+      ? {
+          vipLabel: inlineButtons[6].label || legacyButtons[6].label,
+          vipUrl: inlineButtons[6].url || legacyButtons[6].url,
+        }
+      : {}),
+  };
+
+  await prisma.telegramBotSettings.update({
+    where: { id: settingsResult.settings.id },
+    data,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/bot-message");
+
+  redirect(
+    `${redirectBasePath}?botUi=ok&message=${encodeURIComponent(
+      "Pesan bot dan inline keyboard berhasil diperbarui.",
+    )}`,
   );
 }
 

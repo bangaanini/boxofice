@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import {
   AdminMetricCard,
   AdminSurface,
@@ -15,18 +17,6 @@ type AdminSettingsPageProps = {
     message?: string;
   }>;
 };
-
-function PreviewButton({
-  label,
-}: {
-  label: string;
-}) {
-  return (
-    <div className="rounded-[16px] border border-white/10 bg-[#253140] px-4 py-3 text-center text-sm font-semibold text-white">
-      {label}
-    </div>
-  );
-}
 
 function Field({
   defaultValue,
@@ -254,39 +244,6 @@ export default async function AdminSettingsPage({
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-neutral-300">
-                Pesan sambutan bot
-              </label>
-              <textarea
-                name="welcomeMessage"
-                defaultValue={telegramSettings.welcomeMessage}
-                rows={12}
-                className="mt-2 w-full rounded-[20px] border border-white/10 bg-black/25 px-4 py-4 text-sm leading-7 text-white outline-none placeholder:text-neutral-500"
-              />
-              <p className="mt-2 text-sm leading-6 text-neutral-400">
-                Pakai placeholder <code className="rounded bg-black/30 px-1.5 py-0.5 text-neutral-200">{`{first_name}`}</code> atau{" "}
-                <code className="rounded bg-black/30 px-1.5 py-0.5 text-neutral-200">{`{username}`}</code>.
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field defaultValue={telegramSettings.openAppLabel} label="Tombol buka" name="openAppLabel" />
-              <Field defaultValue={telegramSettings.openAppUrl} label="URL tombol buka" name="openAppUrl" type="url" />
-              <Field defaultValue={telegramSettings.searchLabel} label="Tombol cari judul" name="searchLabel" />
-              <Field defaultValue={telegramSettings.searchUrl} label="URL tombol cari" name="searchUrl" type="url" />
-              <Field defaultValue={telegramSettings.affiliateLabel} label="Tombol affiliate" name="affiliateLabel" />
-              <Field defaultValue={telegramSettings.affiliateUrl} label="URL tombol affiliate" name="affiliateUrl" type="url" />
-              <Field defaultValue={telegramSettings.affiliateGroupLabel} label="Channel / grup affiliate" name="affiliateGroupLabel" />
-              <Field defaultValue={telegramSettings.affiliateGroupUrl} label="URL grup affiliate" name="affiliateGroupUrl" type="url" />
-              <Field defaultValue={telegramSettings.channelLabel} label="Channel film" name="channelLabel" />
-              <Field defaultValue={telegramSettings.channelUrl} label="URL channel film" name="channelUrl" type="url" />
-              <Field defaultValue={telegramSettings.supportLabel} label="Support admin" name="supportLabel" />
-              <Field defaultValue={telegramSettings.supportUrl} label="URL support admin" name="supportUrl" type="url" />
-              <Field defaultValue={telegramSettings.vipLabel} label="Tombol VIP" name="vipLabel" />
-              <Field defaultValue={telegramSettings.vipUrl} label="URL tombol VIP" name="vipUrl" type="url" />
-            </div>
-
             <PendingSubmitButton
               pendingLabel="Menyimpan..."
               className="h-11 bg-red-600 text-white hover:bg-red-500"
@@ -299,40 +256,21 @@ export default async function AdminSettingsPage({
         <div className="space-y-6">
           <AdminSurface>
             <p className="text-sm font-semibold text-orange-200">
-              Preview bot
+              Pisahkan konten bot
             </p>
-            <div className="mt-4 rounded-[20px] border border-white/10 bg-black/25 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-neutral-500">
-                Preview SEO
-              </p>
-              <p className="mt-3 text-lg font-semibold text-white">
-                {telegramSettings.seoTitle}
-              </p>
-              <p className="mt-2 text-sm text-orange-200">
-                {telegramRuntime.publicAppUrl.replace(/^https?:\/\//, "")}
-              </p>
-              <p className="mt-3 text-sm leading-6 text-neutral-400">
-                {telegramSettings.seoDescription}
-              </p>
-            </div>
-            <div className="mt-4 space-y-3 rounded-[24px] border border-white/10 bg-[#1f2c3a] p-4">
-              <div className="rounded-[18px] bg-[#2c3947] p-4 text-sm leading-7 text-white">
-                {telegramSettings.welcomeMessage
-                  .replace(/\{first_name\}/gi, "Aan Hendri")
-                  .replace(/\{username\}/gi, "@aanhendri")}
-              </div>
-              <PreviewButton label={telegramSettings.openAppLabel} />
-              <PreviewButton label={telegramSettings.searchLabel} />
-              <PreviewButton label={telegramSettings.affiliateLabel} />
-              <div className="grid grid-cols-2 gap-2">
-                <PreviewButton label={telegramSettings.affiliateGroupLabel} />
-                <PreviewButton label={telegramSettings.channelLabel} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <PreviewButton label={telegramSettings.supportLabel} />
-                <PreviewButton label={telegramSettings.vipLabel} />
-              </div>
-            </div>
+            <h3 className="mt-2 text-xl font-bold text-white">
+              Pesan sambutan dan inline keyboard sekarang punya halaman sendiri
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-neutral-400">
+              Supaya pengaturan bot utama tetap ringkas, edit pesan sambutan dan
+              tombol inline dari halaman terpisah dengan preview live.
+            </p>
+            <Link
+              href="/admin/bot-message"
+              className="mt-5 inline-flex h-11 items-center justify-center rounded-[16px] bg-red-600 px-5 text-sm font-semibold text-white transition hover:bg-red-500"
+            >
+              Buka editor pesan bot
+            </Link>
           </AdminSurface>
 
           <AdminSurface>

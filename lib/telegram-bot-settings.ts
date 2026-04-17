@@ -4,6 +4,13 @@ import {
   type TelegramRuntimeConfig,
 } from "@/lib/telegram-miniapp";
 
+export type TelegramInlineButtonConfig = {
+  enabled: boolean;
+  id: string;
+  label: string;
+  url: string;
+};
+
 export type TelegramBotSettingsSnapshot = {
   appShortName: string;
   affiliateGroupLabel: string;
@@ -17,6 +24,7 @@ export type TelegramBotSettingsSnapshot = {
   channelUrl: string;
   createdAt: Date;
   id: string;
+  inlineButtons: TelegramInlineButtonConfig[];
   miniAppShortName: string | null;
   ownerTelegramId: string | null;
   openAppLabel: string;
@@ -56,6 +64,13 @@ export type SeoMetadataSnapshot = {
   title: string;
 };
 
+type TelegramBotSettingsRecord = Omit<
+  TelegramBotSettingsSnapshot,
+  "inlineButtons"
+> & {
+  inlineButtons: unknown;
+};
+
 function isRecordWithCode(
   error: unknown,
 ): error is { code?: string; message?: string } {
@@ -74,7 +89,8 @@ function isMissingTelegramBotSchemaError(error: unknown) {
   return (
     typeof error.message === "string" &&
     (error.message.includes("TelegramBotSettings") ||
-      error.message.includes("ownerTelegramId"))
+      error.message.includes("ownerTelegramId") ||
+      error.message.includes("inlineButtons"))
   );
 }
 
@@ -106,6 +122,126 @@ export function getEnvPublicAppUrl() {
   );
 }
 
+const TELEGRAM_INLINE_BUTTON_SLOT_IDS = Array.from(
+  { length: 10 },
+  (_, index) => `button${index + 1}`,
+);
+
+type LegacyButtonFieldMap = {
+  labelKey:
+    | "affiliateGroupLabel"
+    | "affiliateLabel"
+    | "channelLabel"
+    | "openAppLabel"
+    | "searchLabel"
+    | "supportLabel"
+    | "vipLabel";
+  urlKey:
+    | "affiliateGroupUrl"
+    | "affiliateUrl"
+    | "channelUrl"
+    | "openAppUrl"
+    | "searchUrl"
+    | "supportUrl"
+    | "vipUrl";
+};
+
+const LEGACY_INLINE_BUTTON_FIELD_MAP: LegacyButtonFieldMap[] = [
+  { labelKey: "openAppLabel", urlKey: "openAppUrl" },
+  { labelKey: "searchLabel", urlKey: "searchUrl" },
+  { labelKey: "affiliateLabel", urlKey: "affiliateUrl" },
+  { labelKey: "affiliateGroupLabel", urlKey: "affiliateGroupUrl" },
+  { labelKey: "channelLabel", urlKey: "channelUrl" },
+  { labelKey: "supportLabel", urlKey: "supportUrl" },
+  { labelKey: "vipLabel", urlKey: "vipUrl" },
+];
+
+function createEmptyInlineButton(index: number): TelegramInlineButtonConfig {
+  return {
+    enabled: false,
+    id: TELEGRAM_INLINE_BUTTON_SLOT_IDS[index] ?? `button${index + 1}`,
+    label: "",
+    url: "",
+  };
+}
+
+type TelegramLegacyButtonFields = Pick<
+  TelegramBotSettingsSnapshot,
+  | "affiliateGroupLabel"
+  | "affiliateGroupUrl"
+  | "affiliateLabel"
+  | "affiliateUrl"
+  | "channelLabel"
+  | "channelUrl"
+  | "openAppLabel"
+  | "openAppUrl"
+  | "searchLabel"
+  | "searchUrl"
+  | "supportLabel"
+  | "supportUrl"
+  | "vipLabel"
+  | "vipUrl"
+>;
+
+export function buildLegacyInlineButtonsFromSettings(
+  settings: TelegramLegacyButtonFields,
+): TelegramInlineButtonConfig[] {
+  return TELEGRAM_INLINE_BUTTON_SLOT_IDS.map((buttonId, index) => {
+    const legacyMap = LEGACY_INLINE_BUTTON_FIELD_MAP[index];
+
+    if (!legacyMap) {
+      return createEmptyInlineButton(index);
+    }
+
+    const label = settings[legacyMap.labelKey]?.trim() ?? "";
+    const url = settings[legacyMap.urlKey]?.trim() ?? "";
+
+    return {
+      enabled: Boolean(label && url),
+      id: buttonId,
+      label,
+      url,
+    };
+  });
+}
+
+function normalizeInlineButtons(
+  value: unknown,
+  fallbackButtons: TelegramInlineButtonConfig[],
+): TelegramInlineButtonConfig[] {
+  if (!Array.isArray(value)) {
+    return fallbackButtons;
+  }
+
+  return TELEGRAM_INLINE_BUTTON_SLOT_IDS.map((buttonId, index) => {
+    const fallback = fallbackButtons[index] ?? createEmptyInlineButton(index);
+    const rawButton = value[index];
+
+    if (!rawButton || typeof rawButton !== "object" || Array.isArray(rawButton)) {
+      return fallback;
+    }
+
+    const input = rawButton as Record<string, unknown>;
+    const label =
+      typeof input.label === "string" ? input.label.trim() : fallback.label;
+    const url = typeof input.url === "string" ? input.url.trim() : fallback.url;
+    const hasContent = Boolean(label && url);
+
+    return {
+      enabled:
+        typeof input.enabled === "boolean"
+          ? input.enabled && hasContent
+          : fallback.enabled && hasContent,
+      id:
+        typeof input.id === "string" && input.id.trim()
+          ? input.id.trim()
+          : buttonId,
+      label,
+      url,
+    };
+  });
+}
+
 function getEnvRuntimeConfig(): TelegramBotRuntime {
   return {
     botToken: getOptionalEnv("TELEGRAM_BOT_TOKEN") || "",
@@ -120,8 +256,7 @@ function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
   const runtime = getEnvRuntimeConfig();
   const defaultSeoDescription =
     "Layar Box Office adalah Mini App Telegram untuk nonton film box office terupdate, cari judul favorit, buka akses VIP, dan jalankan affiliate langsung dari Telegram.";
-
-  return {
+  const defaults = {
     appShortName: "Layar Box Office",
     affiliateGroupLabel: "🏠 Group Affiliate",
     affiliateGroupUrl: buildTelegramBotChatUrlForUsername(runtime.botUsername),
@@ -154,6 +289,11 @@ function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
     webhookSecret: null,
     welcomeMessage:
       "👋 Hai {first_name}! Selamat datang di Layar Box Office.\n\n🎬 Nonton film box office langsung dari Telegram.\n🔥 Tanpa ribet • Full HD • Update setiap hari\n\n📌 Cara pakai:\n• Buka -> langsung mulai nonton\n• Cari Judul -> cari film favoritmu\n• Gabung Affiliate -> mulai bangun komisi dari Telegram\n• Layar Box Office -> lihat update kanal utama\n• Hubungi Admin -> kalau ada kendala\n• Join VIP -> buka akses premium\n\nPilih menu di bawah dan mulai sekarang!",
+  } satisfies Omit<TelegramBotSettingsSnapshot, "inlineButtons">;
+
+  return {
+    ...defaults,
+    inlineButtons: buildLegacyInlineButtonsFromSettings(defaults),
   };
 }
 
@@ -225,16 +365,16 @@ function isLegacyInternalVipUrl(value: string, runtime: TelegramBotRuntime) {
 }
 
 function withDerivedLinks(
-  settings: TelegramBotSettingsSnapshot,
+  settings: TelegramBotSettingsRecord,
   runtime: TelegramBotRuntime,
-) {
+): TelegramBotSettingsSnapshot {
   const vipFallbackUrl = `${runtime.publicAppUrl}/vip`;
   const resolvedVipUrl = fillWebAppUrlFromRuntime(
     settings.vipUrl,
     vipFallbackUrl,
   );
 
-  return {
+  const derivedSettings = {
     ...settings,
     affiliateGroupUrl: fillUrlFromRuntime(
       settings.affiliateGroupUrl,
@@ -264,6 +404,14 @@ function withDerivedLinks(
       ? vipFallbackUrl
       : resolvedVipUrl,
   };
+
+  return {
+    ...derivedSettings,
+    inlineButtons: normalizeInlineButtons(
+      settings.inlineButtons,
+      buildLegacyInlineButtonsFromSettings(derivedSettings),
+    ),
+  };
 }
 
 export async function ensureTelegramBotSettings() {
@@ -289,6 +437,7 @@ export async function ensureTelegramBotSettings() {
       botUsername: defaults.botUsername,
       channelLabel: defaults.channelLabel,
       channelUrl: defaults.channelUrl,
+      inlineButtons: defaults.inlineButtons as unknown as object,
       miniAppShortName: defaults.miniAppShortName,
       ownerTelegramId: defaults.ownerTelegramId,
       openAppLabel: defaults.openAppLabel,

@@ -60,6 +60,41 @@ function createUrlButton(text: string, url: string) {
   };
 }
 
+function resolveWebAppOrigin(settings: TelegramBotSettingsSnapshot) {
+  const candidates = [settings.publicAppUrl, settings.openAppUrl];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      return new URL(candidate).origin;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function shouldUseWebAppButton(
+  settings: TelegramBotSettingsSnapshot,
+  urlValue: string,
+) {
+  const webAppOrigin = resolveWebAppOrigin(settings);
+
+  if (!webAppOrigin) {
+    return false;
+  }
+
+  try {
+    return new URL(urlValue).origin === webAppOrigin;
+  } catch {
+    return false;
+  }
+}
+
 export function parseStartPayload(messageText: string | undefined) {
   const text = messageText?.trim();
 
@@ -97,76 +132,30 @@ export function buildTelegramInlineKeyboard(
   startParam: string | null,
   extraRows?: TelegramInlineButton[][],
 ) {
-  const openAppUrl = sanitizeAbsoluteUrl(settings.openAppUrl);
-  const searchUrl = sanitizeAbsoluteUrl(settings.searchUrl);
-  const affiliateUrl = sanitizeAbsoluteUrl(settings.affiliateUrl);
-  const affiliateGroupUrl = sanitizeAbsoluteUrl(settings.affiliateGroupUrl);
-  const channelUrl = sanitizeAbsoluteUrl(settings.channelUrl);
-  const supportUrl = sanitizeAbsoluteUrl(settings.supportUrl);
-  const vipUrl = sanitizeAbsoluteUrl(settings.vipUrl);
-
   const rows: TelegramInlineButton[][] = [];
+  for (let index = 0; index < settings.inlineButtons.length; index += 2) {
+    const pair = settings.inlineButtons.slice(index, index + 2);
+    const row = pair
+      .filter((button) => button.enabled)
+      .map((button) => {
+        const sanitizedUrl = sanitizeAbsoluteUrl(button.url);
 
-  if (openAppUrl) {
-    rows.push([
-      createWebAppButton(
-        settings.openAppLabel,
-        appendStartParam(openAppUrl, startParam),
-      ),
-    ]);
-  }
+        if (!sanitizedUrl) {
+          return null;
+        }
 
-  if (searchUrl) {
-    rows.push([
-      createWebAppButton(
-        settings.searchLabel,
-        appendStartParam(searchUrl, startParam),
-      ),
-    ]);
-  }
+        return shouldUseWebAppButton(settings, sanitizedUrl)
+          ? createWebAppButton(
+              button.label,
+              appendStartParam(sanitizedUrl, startParam),
+            )
+          : createUrlButton(button.label, sanitizedUrl);
+      })
+      .filter((button): button is TelegramInlineButton => button !== null);
 
-  if (affiliateUrl) {
-    rows.push([
-      createWebAppButton(
-        settings.affiliateLabel,
-        appendStartParam(affiliateUrl, startParam),
-      ),
-    ]);
-  }
-
-  const communityRow: TelegramInlineButton[] = [];
-
-  if (affiliateGroupUrl) {
-    communityRow.push(
-      createUrlButton(settings.affiliateGroupLabel, affiliateGroupUrl),
-    );
-  }
-
-  if (channelUrl) {
-    communityRow.push(createUrlButton(settings.channelLabel, channelUrl));
-  }
-
-  if (communityRow.length) {
-    rows.push(communityRow);
-  }
-
-  const supportRow: TelegramInlineButton[] = [];
-
-  if (supportUrl) {
-    supportRow.push(createUrlButton(settings.supportLabel, supportUrl));
-  }
-
-  if (vipUrl) {
-    supportRow.push(
-      createWebAppButton(
-        settings.vipLabel,
-        appendStartParam(vipUrl, startParam),
-      ),
-    );
-  }
-
-  if (supportRow.length) {
-    rows.push(supportRow);
+    if (row.length) {
+      rows.push(row);
+    }
   }
 
   if (extraRows?.length) {

@@ -186,6 +186,7 @@ model TelegramBotSettings {
   seoDescription      String   @default("Layar Box Office adalah Mini App Telegram untuk nonton film box office terupdate, cari judul favorit, buka akses VIP, dan jalankan affiliate langsung dari Telegram.")
   seoKeywords         String?  @db.Text
   welcomeMessage      String   @db.Text
+  inlineButtons       Json?    @db.JsonB
   openAppLabel        String
   openAppUrl          String   @db.Text
   searchLabel         String

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
 import {
+  buildLegacyInlineButtonsFromSettings,
   getTelegramBotSettingsSafe,
   type TelegramBotSettingsSnapshot,
 } from "@/lib/telegram-bot-settings";
@@ -165,27 +166,40 @@ export function resolvePartnerBotSettings(
   overridesValue: unknown,
 ) {
   const overrides = sanitizePartnerBotSettingsOverrides(overridesValue);
+  const effectiveLegacySettings = {
+    affiliateGroupLabel:
+      overrides.affiliateGroupLabel ?? globalSettings.affiliateGroupLabel,
+    affiliateGroupUrl:
+      overrides.affiliateGroupUrl ?? globalSettings.affiliateGroupUrl,
+    affiliateLabel: overrides.affiliateLabel ?? globalSettings.affiliateLabel,
+    affiliateUrl: overrides.affiliateUrl ?? globalSettings.affiliateUrl,
+    channelLabel: overrides.channelLabel ?? globalSettings.channelLabel,
+    channelUrl: overrides.channelUrl ?? globalSettings.channelUrl,
+    openAppLabel: overrides.openAppLabel ?? globalSettings.openAppLabel,
+    openAppUrl: overrides.openAppUrl ?? globalSettings.openAppUrl,
+    searchLabel: overrides.searchLabel ?? globalSettings.searchLabel,
+    searchUrl: overrides.searchUrl ?? globalSettings.searchUrl,
+    supportLabel: overrides.supportLabel ?? globalSettings.supportLabel,
+    supportUrl: overrides.supportUrl ?? globalSettings.supportUrl,
+    vipLabel: overrides.vipLabel ?? globalSettings.vipLabel,
+    vipUrl: overrides.vipUrl ?? globalSettings.vipUrl,
+  };
+  const partnerInlineButtons = buildLegacyInlineButtonsFromSettings(
+    effectiveLegacySettings,
+  );
 
   return {
     overrides,
     settings: {
       ...globalSettings,
-      affiliateGroupLabel:
-        overrides.affiliateGroupLabel ?? globalSettings.affiliateGroupLabel,
-      affiliateGroupUrl:
-        overrides.affiliateGroupUrl ?? globalSettings.affiliateGroupUrl,
-      affiliateLabel: overrides.affiliateLabel ?? globalSettings.affiliateLabel,
-      affiliateUrl: overrides.affiliateUrl ?? globalSettings.affiliateUrl,
-      channelLabel: overrides.channelLabel ?? globalSettings.channelLabel,
-      channelUrl: overrides.channelUrl ?? globalSettings.channelUrl,
-      openAppLabel: overrides.openAppLabel ?? globalSettings.openAppLabel,
-      openAppUrl: overrides.openAppUrl ?? globalSettings.openAppUrl,
-      searchLabel: overrides.searchLabel ?? globalSettings.searchLabel,
-      searchUrl: overrides.searchUrl ?? globalSettings.searchUrl,
-      supportLabel: overrides.supportLabel ?? globalSettings.supportLabel,
-      supportUrl: overrides.supportUrl ?? globalSettings.supportUrl,
-      vipLabel: overrides.vipLabel ?? globalSettings.vipLabel,
-      vipUrl: overrides.vipUrl ?? globalSettings.vipUrl,
+      ...effectiveLegacySettings,
+      inlineButtons: globalSettings.inlineButtons.map((button, index) =>
+        index < partnerInlineButtons.length &&
+        partnerInlineButtons[index] &&
+        index < 7
+          ? partnerInlineButtons[index]
+          : button,
+      ),
       welcomeMessage:
         overrides.welcomeMessage ?? globalSettings.welcomeMessage,
     },

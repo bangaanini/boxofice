@@ -5,6 +5,7 @@ import {
   Bot,
   Crown,
   Home,
+  Keyboard,
   Landmark,
   Link2,
   Percent,
@@ -49,6 +50,13 @@ const items = [
     icon: Bot,
     label: "Settings bot",
     match: (pathname: string) => pathname.startsWith("/admin/settings"),
+  },
+  {
+    description: "Pesan sambutan dan tombol inline bot",
+    href: "/admin/bot-message",
+    icon: Keyboard,
+    label: "Pesan bot",
+    match: (pathname: string) => pathname.startsWith("/admin/bot-message"),
   },
   {
     description: "Daftarkan bot milik partner affiliate",
