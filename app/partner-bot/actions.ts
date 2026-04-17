@@ -56,6 +56,17 @@ function validateOptionalUrl(value: string, label: string, botId: string) {
       throw new Error("invalid_protocol");
     }
 
+    if (
+      (url.hostname === "t.me" || url.hostname === "telegram.me") &&
+      url.searchParams.has("startapp")
+    ) {
+      redirectToPartnerSettings({
+        botId,
+        message: `${label} tidak boleh memakai link t.me dengan startapp. Gunakan URL web app langsung.`,
+        status: "error",
+      });
+    }
+
     return url.toString();
   } catch {
     redirectToPartnerSettings({

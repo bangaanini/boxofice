@@ -538,6 +538,41 @@ function readRequiredUrlField(
   }
 }
 
+function readInlineButtonUrlField(
+  formData: FormData,
+  key: string,
+  label: string,
+  redirectBasePath = "/admin/bot-message",
+  statusKey = "botUi",
+) {
+  const value = readTextField(formData, key);
+
+  try {
+    const url = new URL(value);
+
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw new Error("invalid_protocol");
+    }
+
+    if (
+      (url.hostname === "t.me" || url.hostname === "telegram.me") &&
+      url.searchParams.has("startapp")
+    ) {
+      redirect(
+        `${redirectBasePath}?${statusKey}=error&message=${encodeURIComponent(
+          `${label} tidak boleh memakai link t.me dengan startapp. Gunakan URL web app langsung.`,
+        )}`,
+      );
+    }
+
+    return url.toString();
+  } catch {
+    redirect(
+      `${redirectBasePath}?${statusKey}=error&message=${encodeURIComponent(`${label} wajib berupa URL yang valid.`)}`,
+    );
+  }
+}
+
 function readNullableUrlField(
   formData: FormData,
   key: string,
@@ -617,7 +652,7 @@ function readTelegramInlineButtons(
     }
 
     if (url) {
-      normalizedUrl = readRequiredUrlField(
+      normalizedUrl = readInlineButtonUrlField(
         formData,
         `buttonUrl_${buttonNumber}`,
         `URL tombol ${buttonNumber}`,
