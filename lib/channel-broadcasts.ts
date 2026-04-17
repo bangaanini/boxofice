@@ -313,21 +313,24 @@ export async function publishChannelBroadcast(
         text: buttonLabel,
         url: deepLinkUrl,
       },
-      {
-        text: searchButtonLabel,
-        url: searchDeepLinkUrl,
-      },
     ],
   ];
 
+  const secondaryRow: Array<{ text: string; url: string }> = [
+    {
+      text: searchButtonLabel,
+      url: searchDeepLinkUrl,
+    },
+  ];
+
   if (extraButtonEnabled && extraButtonLabel && extraButtonUrl) {
-    inlineKeyboard.push([
-      {
-        text: extraButtonLabel,
-        url: extraButtonUrl,
-      },
-    ]);
+    secondaryRow.push({
+      text: extraButtonLabel,
+      url: extraButtonUrl,
+    });
   }
+
+  inlineKeyboard.push(secondaryRow);
 
   const draft = await prisma.channelBroadcast.create({
     data: {

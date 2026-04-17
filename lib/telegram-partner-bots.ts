@@ -412,6 +412,7 @@ export async function getPartnerBotForWebhook(partnerBotId: string) {
           id: true,
           name: true,
           telegramId: true,
+          telegramUsername: true,
           affiliateProfile: {
             select: {
               referralCode: true,

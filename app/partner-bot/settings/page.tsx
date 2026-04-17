@@ -85,7 +85,9 @@ export default async function PartnerBotSettingsPage({
             </h1>
             <p className="mt-2 text-sm leading-6 text-neutral-400">
               Semua field di sini opsional. Kalau dikosongkan, bot akan otomatis
-              pakai setting global dari sistem utama.
+              pakai setting global dari sistem utama. Tombol Hubungi Admin dan
+              Group tetap ikut pengaturan admin utama, dan Join VIP tetap membuka
+              halaman VIP Mini App.
             </p>
           </div>
 

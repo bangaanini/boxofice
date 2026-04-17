@@ -330,19 +330,24 @@ export function ChannelBroadcastComposer({
 
           <div className="mt-3">
             <div className="grid gap-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-[16px] border border-white/10 bg-[#253140] px-4 py-3 text-center text-sm font-semibold text-white">
-                  {buttonLabel.trim() || "▶️ Tonton Sekarang"}
-                </div>
+              <div className="rounded-[16px] border border-white/10 bg-[#253140] px-4 py-3 text-center text-sm font-semibold text-white">
+                {buttonLabel.trim() || "▶️ Tonton Sekarang"}
+              </div>
+              <div
+                className={cn(
+                  "grid gap-2",
+                  extraButtonEnabled ? "grid-cols-2" : "grid-cols-1",
+                )}
+              >
                 <div className="rounded-[16px] border border-white/10 bg-[#253140] px-4 py-3 text-center text-sm font-semibold text-white">
                   {searchButtonLabel.trim() || "🔎 Cari Judul"}
                 </div>
+                {extraButtonEnabled ? (
+                  <div className="rounded-[16px] border border-white/10 bg-[#253140] px-4 py-3 text-center text-sm font-semibold text-white">
+                    {extraButtonLabel.trim() || "Tombol tambahan"}
+                  </div>
+                ) : null}
               </div>
-              {extraButtonEnabled ? (
-                <div className="rounded-[16px] border border-white/10 bg-[#253140] px-4 py-3 text-center text-sm font-semibold text-white">
-                  {extraButtonLabel.trim() || "Tombol tambahan"}
-                </div>
-              ) : null}
             </div>
           </div>
         </div>

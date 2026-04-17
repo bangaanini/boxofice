@@ -7,11 +7,12 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { publishChannelBroadcast } from "@/lib/channel-broadcasts";
 import { prisma } from "@/lib/prisma";
 import {
-  buildLegacyInlineButtonsFromSettings,
   type TelegramInlineButtonConfig,
+  getTelegramBotSettingsSafe,
 } from "@/lib/telegram-bot-settings";
 import {
   PARTNER_BOT_OVERRIDE_KEYS,
+  resolvePartnerBotSettings,
   type PartnerBotSettingsOverrides,
 } from "@/lib/telegram-partner-bots";
 import { isDynamicTelegramDeepLink } from "@/lib/telegram-link-policy";
@@ -222,78 +223,14 @@ export async function savePartnerBotSettingsAction(formData: FormData) {
       ? (partnerBot.settingsOverrides as Record<string, unknown>)
       : {};
 
-  const effectiveLegacy = buildLegacyInlineButtonsFromSettings({
-    affiliateGroupLabel:
-      overrides.affiliateGroupLabel ??
-      (typeof existingOverrides.affiliateGroupLabel === "string"
-        ? existingOverrides.affiliateGroupLabel
-        : "🏠 Group Affiliate"),
-    affiliateGroupUrl:
-      overrides.affiliateGroupUrl ??
-      (typeof existingOverrides.affiliateGroupUrl === "string"
-        ? existingOverrides.affiliateGroupUrl
-        : ""),
-    affiliateLabel:
-      overrides.affiliateLabel ??
-      (typeof existingOverrides.affiliateLabel === "string"
-        ? existingOverrides.affiliateLabel
-        : "💰 Gabung Affiliate"),
-    affiliateUrl:
-      overrides.affiliateUrl ??
-      (typeof existingOverrides.affiliateUrl === "string"
-        ? existingOverrides.affiliateUrl
-        : ""),
-    channelLabel:
-      overrides.channelLabel ??
-      (typeof existingOverrides.channelLabel === "string"
-        ? existingOverrides.channelLabel
-        : "🎥 Layar Box Office"),
-    channelUrl:
-      overrides.channelUrl ??
-      (typeof existingOverrides.channelUrl === "string"
-        ? existingOverrides.channelUrl
-        : ""),
-    openAppLabel:
-      overrides.openAppLabel ??
-      (typeof existingOverrides.openAppLabel === "string"
-        ? existingOverrides.openAppLabel
-        : "🎬 Buka"),
-    openAppUrl:
-      overrides.openAppUrl ??
-      (typeof existingOverrides.openAppUrl === "string"
-        ? existingOverrides.openAppUrl
-        : ""),
-    searchLabel:
-      overrides.searchLabel ??
-      (typeof existingOverrides.searchLabel === "string"
-        ? existingOverrides.searchLabel
-        : "🔎 Cari Judul"),
-    searchUrl:
-      overrides.searchUrl ??
-      (typeof existingOverrides.searchUrl === "string"
-        ? existingOverrides.searchUrl
-        : ""),
-    supportLabel:
-      overrides.supportLabel ??
-      (typeof existingOverrides.supportLabel === "string"
-        ? existingOverrides.supportLabel
-        : "📞 Hubungi Admin"),
-    supportUrl:
-      overrides.supportUrl ??
-      (typeof existingOverrides.supportUrl === "string"
-        ? existingOverrides.supportUrl
-        : ""),
-    vipLabel:
-      overrides.vipLabel ??
-      (typeof existingOverrides.vipLabel === "string"
-        ? existingOverrides.vipLabel
-        : "💎 Join VIP"),
-    vipUrl:
-      overrides.vipUrl ??
-      (typeof existingOverrides.vipUrl === "string"
-        ? existingOverrides.vipUrl
-        : ""),
-  });
+  const telegramSettings = await getTelegramBotSettingsSafe();
+  const effectiveLegacy = resolvePartnerBotSettings(
+    telegramSettings.settings,
+    {
+      ...existingOverrides,
+      ...overrides,
+    },
+  ).settings.inlineButtons;
 
   overrides.inlineButtons = inlineButtons;
   if (inlineButtons[0]) {
