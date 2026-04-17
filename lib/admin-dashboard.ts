@@ -94,7 +94,7 @@ export async function getAdminUserTableData(query: string | undefined) {
           }
         : undefined,
       orderBy: {
-        createdAt: "desc",
+        createdAt: "asc",
       },
       select: {
         createdAt: true,
@@ -184,7 +184,7 @@ export async function getAdminUserTableData(query: string | undefined) {
           }
         : undefined,
       orderBy: {
-        createdAt: "desc",
+        createdAt: "asc",
       },
       select: {
         createdAt: true,

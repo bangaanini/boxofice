@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LogOut, Play } from "lucide-react";
 
 import { logoutAdmin } from "@/app/admin/actions";
+import { AdminActionToast } from "@/components/admin/admin-action-toast";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ export default async function AdminDashboardLayout({
           </div>
 
           <div className="space-y-5">
+            <AdminActionToast />
             <div className="flex flex-col gap-3 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(27,18,16,0.96),rgba(14,10,9,0.98))] p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-orange-200">
