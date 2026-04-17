@@ -638,6 +638,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
       redirectBasePath,
     ),
     miniAppShortName: readNullableTextField(formData, "miniAppShortName"),
+    ownerTelegramId: readNullableTextField(formData, "ownerTelegramId"),
     openAppLabel: readTextField(formData, "openAppLabel") || "🎬 Buka",
     openAppUrl: readRequiredUrlField(
       formData,

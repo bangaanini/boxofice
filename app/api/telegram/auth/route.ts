@@ -8,6 +8,7 @@ import {
 import {
   extractAffiliateCodeFromStartParam,
 } from "@/lib/telegram-miniapp";
+import { setActiveBotContextCookie } from "@/lib/bot-access";
 import { validateTelegramInitDataWithKnownBots } from "@/lib/telegram-partner-bots";
 import { createUserSession, upsertTelegramUser } from "@/lib/user-auth";
 
@@ -68,6 +69,14 @@ export async function POST(request: NextRequest) {
     }
 
     await createUserSession(user);
+    await setActiveBotContextCookie(
+      matchedBot.kind === "partner"
+        ? {
+            kind: "partner",
+            partnerBotId: matchedBot.id,
+          }
+        : { kind: "default" },
+    );
 
     return NextResponse.json({
       ok: true,

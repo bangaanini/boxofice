@@ -3,6 +3,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { clearActiveBotContextCookie } from "@/lib/bot-access";
 import { prisma } from "@/lib/prisma";
 import type { ValidatedTelegramInitData } from "@/lib/telegram-miniapp";
 
@@ -307,6 +308,8 @@ export async function logoutCurrentUser() {
     value: "",
     maxAge: 0,
   });
+
+  await clearActiveBotContextCookie();
 }
 
 export async function changeUserPassword(input: {

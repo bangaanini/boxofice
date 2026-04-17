@@ -184,6 +184,12 @@ export default async function AdminSettingsPage({
                 placeholder="Mis. BoxOficebot"
               />
               <Field
+                defaultValue={telegramSettings.ownerTelegramId ?? ""}
+                label="Telegram ID owner bot"
+                name="ownerTelegramId"
+                placeholder="Contoh 5789695336"
+              />
+              <Field
                 defaultValue={telegramSettings.publicAppUrl ?? ""}
                 label="Public App URL"
                 name="publicAppUrl"
@@ -235,6 +241,9 @@ export default async function AdminSettingsPage({
                 </p>
                 <p>
                   Bot aktif: <span className="text-white">@{telegramRuntime.botUsername}</span>
+                </p>
+                <p>
+                  Owner utama: <span className="text-white">{telegramSettings.ownerTelegramId || "Belum diatur"}</span>
                 </p>
                 <p>
                   Main App URL: <span className="text-white">{telegramRuntime.publicAppUrl}</span>

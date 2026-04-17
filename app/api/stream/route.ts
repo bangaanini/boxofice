@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { hasBotOwnerPlaybackAccess } from "@/lib/bot-access";
 import { fetchPlayableStream, MovieApiError } from "@/lib/movie-api";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserSession } from "@/lib/user-auth";
@@ -148,16 +149,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const vipStatus = getVipStatus(user);
+    const [ownerPlaybackAccess, vipStatus] = await Promise.all([
+      hasBotOwnerPlaybackAccess(user),
+      Promise.resolve(getVipStatus(user)),
+    ]);
+    const vipLikeAccess = vipStatus.active || ownerPlaybackAccess;
     const previewLimitSeconds = resolvePreviewLimitSeconds(
       vipSettingsResult.settings,
-      vipStatus.active,
+      vipLikeAccess,
     );
     const accessToken = createPlaybackAccessToken({
       movieId: lookup.movieId,
       previewLimitSeconds,
       userId: user.id,
-      vipActive: vipStatus.active,
+      vipActive: vipLikeAccess,
     });
     const streamCache = lookup.streamCache;
     const cachedStream = streamCache ? cachedStreamResponse(streamCache) : null;
@@ -173,8 +178,9 @@ export async function GET(request: NextRequest) {
           previewLimitSeconds,
           upgradeLabel: vipSettingsResult.settings.joinVipLabel,
           upgradeUrl: vipSettingsResult.settings.joinVipUrl,
-          vipActive: vipStatus.active,
+          vipActive: vipLikeAccess,
           vipExpiresAt: vipStatus.expiresAt?.toISOString() ?? null,
+          ownerPlaybackAccess,
         },
         {
           headers: {
@@ -244,8 +250,9 @@ export async function GET(request: NextRequest) {
         resolvedFrom: stream.resolvedFrom,
         upgradeLabel: vipSettingsResult.settings.joinVipLabel,
         upgradeUrl: vipSettingsResult.settings.joinVipUrl,
-        vipActive: vipStatus.active,
+        vipActive: vipLikeAccess,
         vipExpiresAt: vipStatus.expiresAt?.toISOString() ?? null,
+        ownerPlaybackAccess,
       },
       {
         headers: {

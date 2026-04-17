@@ -176,6 +176,7 @@ model TelegramBotSettings {
   slug                String   @unique @default("default")
   botToken            String?  @db.Text
   botUsername         String?
+  ownerTelegramId     String?
   webhookSecret       String?
   publicAppUrl        String?  @db.Text
   miniAppShortName    String?

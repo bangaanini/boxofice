@@ -18,6 +18,7 @@ export type TelegramBotSettingsSnapshot = {
   createdAt: Date;
   id: string;
   miniAppShortName: string | null;
+  ownerTelegramId: string | null;
   openAppLabel: string;
   openAppUrl: string;
   publicAppUrl: string | null;
@@ -72,7 +73,8 @@ function isMissingTelegramBotSchemaError(error: unknown) {
 
   return (
     typeof error.message === "string" &&
-    error.message.includes("TelegramBotSettings")
+    (error.message.includes("TelegramBotSettings") ||
+      error.message.includes("ownerTelegramId"))
   );
 }
 
@@ -133,6 +135,7 @@ function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
     createdAt: new Date(0),
     id: "telegram-bot-settings-fallback",
     miniAppShortName: null,
+    ownerTelegramId: getOptionalEnv("TELEGRAM_BOT_OWNER_TELEGRAM_ID"),
     openAppLabel: "🎬 Buka",
     openAppUrl: runtime.publicAppUrl,
     publicAppUrl: null,
@@ -287,6 +290,7 @@ export async function ensureTelegramBotSettings() {
       channelLabel: defaults.channelLabel,
       channelUrl: defaults.channelUrl,
       miniAppShortName: defaults.miniAppShortName,
+      ownerTelegramId: defaults.ownerTelegramId,
       openAppLabel: defaults.openAppLabel,
       openAppUrl: defaults.openAppUrl,
       publicAppUrl: defaults.publicAppUrl,
