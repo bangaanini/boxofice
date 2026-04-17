@@ -51,7 +51,7 @@ function sanitizeAbsoluteUrl(value: string) {
 
     if (
       (url.hostname === "t.me" || url.hostname === "telegram.me") &&
-      (!url.pathname || url.pathname === "/")
+      (!url.pathname || url.pathname === "/" || url.searchParams.has("startapp"))
     ) {
       return null;
     }
@@ -354,23 +354,21 @@ export async function sendTelegramWelcomeMessage(input: {
       error: message,
     });
 
-    await sendWithKeyboard(false).catch(async () => {
-      console.error("Telegram inline keyboard fallback also failed, sending plain text only", {
-        attemptedButtons: getInlineKeyboardDebugEntries(
-          input.settings,
-          input.startParam,
-          input.extraRows,
-          { preferWebAppButtons: false },
-        ),
-        botName: input.botName,
-        chatId,
-        error: message,
-      });
-      await sendTelegramBotMessage({
-        botToken: input.botToken,
-        chatId,
-        text,
-      });
+    console.error("Telegram inline keyboard fallback failed, sending plain text only", {
+      attemptedButtons: getInlineKeyboardDebugEntries(
+        input.settings,
+        input.startParam,
+        input.extraRows,
+        { preferWebAppButtons: true },
+      ),
+      botName: input.botName,
+      chatId,
+      error: message,
+    });
+    await sendTelegramBotMessage({
+      botToken: input.botToken,
+      chatId,
+      text,
     });
   }
 
