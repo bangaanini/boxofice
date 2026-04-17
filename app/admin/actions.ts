@@ -38,7 +38,13 @@ function resolveRedirectTarget(
   formData: FormData,
   fallbackPath: string,
 ) {
-  const path = sanitizeAdminRedirectPath(formData.get("redirectTo"));
+  const rawPath = formData.get("redirectTo");
+
+  if (typeof rawPath !== "string" || !rawPath.trim()) {
+    return fallbackPath;
+  }
+
+  const path = sanitizeAdminRedirectPath(rawPath);
 
   return path || fallbackPath;
 }
