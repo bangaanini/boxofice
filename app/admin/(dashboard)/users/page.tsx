@@ -176,7 +176,7 @@ export default async function AdminUsersPage({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1480px] w-full text-left">
+          <table className="min-w-[1620px] w-full text-left">
             <thead className="bg-white/[0.04] text-sm text-neutral-400">
               <tr>
                 <th className="px-5 py-4 font-medium">User</th>
@@ -192,6 +192,7 @@ export default async function AdminUsersPage({
                 <th className="px-5 py-4 font-medium">Referral aktif</th>
                 <th className="px-5 py-4 font-medium">Sesi</th>
                 <th className="px-5 py-4 font-medium">Terdaftar</th>
+                <th className="px-5 py-4 font-medium">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -230,90 +231,6 @@ export default async function AdminUsersPage({
                             Kode {profile.referralCode}
                           </p>
                         ) : null}
-                        <div className="mt-4 space-y-3">
-                          <form
-                            action={updateUserAffiliateCommission}
-                            className="space-y-2 rounded-[16px] border border-white/10 bg-black/20 p-3"
-                          >
-                            <input type="hidden" name="redirectTo" value={redirectTo} />
-                            <input type="hidden" name="userId" value={user.id} />
-                            <label className="block">
-                              <span className="text-xs font-medium text-neutral-400">
-                                Komisi individu
-                              </span>
-                              <div className="mt-2 flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  name="commissionRateOverride"
-                                  min={1}
-                                  max={100}
-                                  defaultValue={profile?.commissionRateOverride ?? ""}
-                                  placeholder={String(defaultCommissionRate)}
-                                  className="h-10 w-20 rounded-[12px] border border-white/10 bg-black/25 px-3 text-sm text-white outline-none"
-                                />
-                                <span className="text-xs text-neutral-400">%</span>
-                              </div>
-                              <p className="mt-2 text-[11px] leading-5 text-neutral-500">
-                                Kosongkan untuk pakai komisi global.
-                              </p>
-                            </label>
-                            <PendingSubmitButton
-                              pendingLabel="Menyimpan..."
-                              variant="secondary"
-                              className="h-9 border border-white/10 bg-white/10 text-xs text-white hover:bg-white/15"
-                            >
-                              Simpan komisi
-                            </PendingSubmitButton>
-                          </form>
-
-                          <form
-                            action={updateUserVipStatus}
-                            className="space-y-2 rounded-[16px] border border-white/10 bg-black/20 p-3"
-                          >
-                            <input type="hidden" name="redirectTo" value={redirectTo} />
-                            <input type="hidden" name="userId" value={user.id} />
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                name="vipDays"
-                                min={1}
-                                defaultValue={30}
-                                className="h-10 w-20 rounded-[12px] border border-white/10 bg-black/25 px-3 text-sm text-white outline-none"
-                              />
-                              <span className="text-xs text-neutral-400">hari</span>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <PendingSubmitButton
-                                pendingLabel="Memproses..."
-                                name="intent"
-                                value="grant"
-                                pendingFieldName="intent"
-                                pendingFieldValue="grant"
-                                className="h-9 bg-red-600 text-xs text-white hover:bg-red-500"
-                              >
-                                {vipActive ? "Perpanjang VIP" : "Aktifkan VIP"}
-                              </PendingSubmitButton>
-                              <PendingSubmitButton
-                                pendingLabel="Mencabut..."
-                                name="intent"
-                                value="revoke"
-                                pendingFieldName="intent"
-                                pendingFieldValue="revoke"
-                                variant="secondary"
-                                className="h-9 border border-white/10 bg-white/10 text-xs text-white hover:bg-white/15"
-                              >
-                                Cabut VIP
-                              </PendingSubmitButton>
-                            </div>
-                          </form>
-
-                          <DeleteUserForm
-                            action={deleteUserAccount}
-                            redirectTo={redirectTo}
-                            userId={user.id}
-                            userName={user.name}
-                          />
-                        </div>
                       </td>
                       <td className="px-5 py-4 text-sm text-neutral-300">
                         {referredBy ? (
@@ -388,13 +305,86 @@ export default async function AdminUsersPage({
                       <td className="px-5 py-4 text-sm text-neutral-300">
                         {formatDate(user.createdAt)}
                       </td>
+                      <td className="px-5 py-4">
+                        <div className="flex min-w-[260px] flex-col gap-3">
+                          <form
+                            action={updateUserAffiliateCommission}
+                            className="flex flex-wrap items-center gap-2 rounded-[16px] border border-white/10 bg-black/20 p-2"
+                          >
+                            <input type="hidden" name="redirectTo" value={redirectTo} />
+                            <input type="hidden" name="userId" value={user.id} />
+                            <input
+                              type="number"
+                              name="commissionRateOverride"
+                              min={1}
+                              max={100}
+                              defaultValue={profile?.commissionRateOverride ?? ""}
+                              placeholder={String(defaultCommissionRate)}
+                              className="h-9 w-16 rounded-[12px] border border-white/10 bg-black/25 px-2 text-sm text-white outline-none"
+                            />
+                            <span className="text-xs text-neutral-400">%</span>
+                            <PendingSubmitButton
+                              pendingLabel="Menyimpan..."
+                              variant="secondary"
+                              className="h-9 rounded-[12px] border border-white/10 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                            >
+                              Simpan
+                            </PendingSubmitButton>
+                          </form>
+
+                          <form
+                            action={updateUserVipStatus}
+                            className="flex flex-wrap items-center gap-2 rounded-[16px] border border-white/10 bg-black/20 p-2"
+                          >
+                            <input type="hidden" name="redirectTo" value={redirectTo} />
+                            <input type="hidden" name="userId" value={user.id} />
+                            <input
+                              type="number"
+                              name="vipDays"
+                              min={1}
+                              defaultValue={30}
+                              className="h-9 w-16 rounded-[12px] border border-white/10 bg-black/25 px-2 text-sm text-white outline-none"
+                            />
+                            <span className="text-xs text-neutral-400">hari</span>
+                            <PendingSubmitButton
+                              pendingLabel="Memproses..."
+                              name="intent"
+                              value="grant"
+                              pendingFieldName="intent"
+                              pendingFieldValue="grant"
+                              className="h-9 rounded-[12px] bg-red-600 px-3 text-xs text-white hover:bg-red-500"
+                            >
+                              {vipActive ? "Perpanjang" : "Aktifkan"}
+                            </PendingSubmitButton>
+                            <PendingSubmitButton
+                              pendingLabel="Mencabut..."
+                              name="intent"
+                              value="revoke"
+                              pendingFieldName="intent"
+                              pendingFieldValue="revoke"
+                              variant="secondary"
+                              className="h-9 rounded-[12px] border border-white/10 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                            >
+                              Cabut
+                            </PendingSubmitButton>
+                          </form>
+
+                          <DeleteUserForm
+                            action={deleteUserAccount}
+                            compact
+                            redirectTo={redirectTo}
+                            userId={user.id}
+                            userName={user.name}
+                          />
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
                   <td
-                    colSpan={13}
+                    colSpan={14}
                     className="px-5 py-14 text-center text-neutral-400"
                   >
                     Tidak ada user yang cocok dengan pencarian ini.
