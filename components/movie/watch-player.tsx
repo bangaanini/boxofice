@@ -206,6 +206,7 @@ export function WatchPlayer({
   } | null>(null);
   const initialResumeAppliedRef = React.useRef(false);
   const lastProgressReportRef = React.useRef(0);
+  const failedSourceUrlsRef = React.useRef<string[]>([]);
   const [stream, setStream] = React.useState<CachedStreamResponse | null>(() =>
     streamCacheKey ? readCachedStream(streamCacheKey) : null,
   );
@@ -221,7 +222,6 @@ export function WatchPlayer({
   const [seekFeedback, setSeekFeedback] = React.useState<SeekFeedback | null>(
     null,
   );
-  const [failedSourceUrls, setFailedSourceUrls] = React.useState<string[]>([]);
   const [isImmersive, setIsImmersive] = React.useState(false);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [previewEnded, setPreviewEnded] = React.useState(false);
@@ -238,7 +238,7 @@ export function WatchPlayer({
 
     async function loadStream() {
       setError(null);
-      setFailedSourceUrls([]);
+      failedSourceUrlsRef.current = [];
       setPreviewEnded(false);
       setShowRotateGate(false);
       dismissedRotateSourceUrlRef.current = null;
@@ -374,12 +374,14 @@ export function WatchPlayer({
 
   const moveToNextPlayableSource = React.useCallback(
     (failedUrl: string) => {
-      const nextFailedUrls = Array.from(new Set([...failedSourceUrls, failedUrl]));
+      const nextFailedUrls = Array.from(
+        new Set([...failedSourceUrlsRef.current, failedUrl]),
+      );
       const nextSource = sources.find(
         (source) => !nextFailedUrls.includes(source.url),
       );
 
-      setFailedSourceUrls(nextFailedUrls);
+      failedSourceUrlsRef.current = nextFailedUrls;
 
       if (nextSource) {
         dismissedRotateSourceUrlRef.current = null;
@@ -395,7 +397,7 @@ export function WatchPlayer({
         "Sumber video langsung dari upstream belum bisa diputar di pemutar ini.",
       );
     },
-    [failedSourceUrls, sources, streamCacheKey],
+    [sources, streamCacheKey],
   );
 
   React.useEffect(() => {
@@ -422,6 +424,7 @@ export function WatchPlayer({
     const resumeTime = resumeSnapshot?.time ?? 0;
     const hasResumeTarget = resumeTime > 1;
     let hasStartedPlayback = false;
+    let hlsErrorRecoveryCount = 0;
     const resumeEvents = ["loadedmetadata", "loadeddata", "canplay", "seeked"] as const;
 
     function scheduleResumeStep(delayMs: number) {
@@ -513,12 +516,12 @@ export function WatchPlayer({
       video.playsInline = true;
       video.preload = "metadata";
       video.poster = poster ?? "";
-      video.addEventListener("error", handleNativeError);
       resumeEvents.forEach((eventName) => {
         video.addEventListener(eventName, runResumeStep);
       });
 
       if (!isHlsSource(activeSource)) {
+        video.addEventListener("error", handleNativeError);
         video.src = mediaUrl;
         video.load();
         scheduleResumeStep(250);
@@ -551,11 +554,33 @@ export function WatchPlayer({
           runResumeStep();
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            hls?.destroy();
-            hlsRef.current = null;
-            moveToNextPlayableSource(activeSource.url);
+          if (!data.fatal || disposed) {
+            return;
           }
+
+          if (
+            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+            hls &&
+            hlsErrorRecoveryCount < 2
+          ) {
+            hlsErrorRecoveryCount += 1;
+            hls.startLoad();
+            return;
+          }
+
+          if (
+            data.type === Hls.ErrorTypes.MEDIA_ERROR &&
+            hls &&
+            hlsErrorRecoveryCount < 2
+          ) {
+            hlsErrorRecoveryCount += 1;
+            hls.recoverMediaError();
+            return;
+          }
+
+          hls?.destroy();
+          hlsRef.current = null;
+          moveToNextPlayableSource(activeSource.url);
         });
         hls.loadSource(mediaUrl);
         hls.attachMedia(video);
@@ -566,6 +591,7 @@ export function WatchPlayer({
         video.canPlayType("application/vnd.apple.mpegurl") ||
         video.canPlayType("application/x-mpegURL")
       ) {
+        video.addEventListener("error", handleNativeError);
         video.src = mediaUrl;
         video.load();
         scheduleResumeStep(250);
@@ -589,8 +615,8 @@ export function WatchPlayer({
       video.removeEventListener("error", handleNativeError);
       hls?.destroy();
       hlsRef.current = null;
+      video.pause();
       video.removeAttribute("src");
-      video.load();
       unlockOrientationIfPossible();
     };
   }, [
