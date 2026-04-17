@@ -2,7 +2,7 @@ import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
-import { Button } from "@/components/ui/button";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { updateAffiliateProgramSettings } from "@/app/admin/actions";
 import {
   getAffiliateProfileCountSafe,
@@ -173,12 +173,12 @@ export default async function AdminCommissionPage({
               </span>
             </label>
 
-            <Button
-              type="submit"
+            <PendingSubmitButton
+              pendingLabel="Menyimpan..."
               className="h-11 bg-red-600 text-white hover:bg-red-500"
             >
               Simpan presentase
-            </Button>
+            </PendingSubmitButton>
           </form>
         ) : null}
       </AdminSurface>

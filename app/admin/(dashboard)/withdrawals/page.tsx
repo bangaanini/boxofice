@@ -3,7 +3,7 @@ import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
-import { Button } from "@/components/ui/button";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { getAffiliatePayoutRequestsForAdmin } from "@/lib/affiliate";
 
 export const dynamic = "force-dynamic";
@@ -220,32 +220,38 @@ export default async function AdminWithdrawalsPage({
                     />
 
                     <div className="grid gap-2">
-                      <Button
-                        type="submit"
+                      <PendingSubmitButton
+                        pendingLabel="Menyetujui..."
                         name="intent"
                         value="approve"
+                        pendingFieldName="intent"
+                        pendingFieldValue="approve"
                         variant="secondary"
                         className="h-11 border border-sky-400/20 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
                       >
                         Setujui request
-                      </Button>
-                      <Button
-                        type="submit"
+                      </PendingSubmitButton>
+                      <PendingSubmitButton
+                        pendingLabel="Menyimpan..."
                         name="intent"
                         value="paid"
+                        pendingFieldName="intent"
+                        pendingFieldValue="paid"
                         className="h-11 bg-emerald-600 text-white hover:bg-emerald-500"
                       >
                         Tandai sudah dibayar
-                      </Button>
-                      <Button
-                        type="submit"
+                      </PendingSubmitButton>
+                      <PendingSubmitButton
+                        pendingLabel="Menolak..."
                         name="intent"
                         value="reject"
+                        pendingFieldName="intent"
+                        pendingFieldValue="reject"
                         variant="destructive"
                         className="h-11"
                       >
                         Tolak dan kembalikan saldo
-                      </Button>
+                      </PendingSubmitButton>
                     </div>
                   </form>
                 </div>

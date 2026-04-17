@@ -2,7 +2,7 @@ import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
-import { Button } from "@/components/ui/button";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import {
   createOrUpdateVipPlan,
   updatePaymentGatewaySettings,
@@ -204,12 +204,12 @@ export default async function AdminPaymentsPage({
               />
             </div>
 
-            <Button
-              type="submit"
+            <PendingSubmitButton
+              pendingLabel="Menyimpan..."
               className="h-11 bg-red-600 text-white hover:bg-red-500"
             >
               Simpan pengaturan payment
-            </Button>
+            </PendingSubmitButton>
           </div>
 
           <div className="space-y-4 rounded-[22px] border border-white/10 bg-black/20 p-5">
@@ -339,12 +339,12 @@ export default async function AdminPaymentsPage({
                 </label>
               </div>
 
-              <Button
-                type="submit"
+              <PendingSubmitButton
+                pendingLabel="Menyimpan..."
                 className="mt-5 h-11 bg-red-600 text-white hover:bg-red-500"
               >
                 Simpan paket
-              </Button>
+              </PendingSubmitButton>
             </form>
           ))}
         </div>
@@ -412,12 +412,12 @@ export default async function AdminPaymentsPage({
             </label>
           </div>
 
-          <Button
-            type="submit"
+          <PendingSubmitButton
+            pendingLabel="Menambahkan..."
             className="mt-5 h-11 bg-white text-neutral-950 hover:bg-neutral-200"
           >
             Tambah paket VIP
-          </Button>
+          </PendingSubmitButton>
         </form>
       </AdminSurface>
 

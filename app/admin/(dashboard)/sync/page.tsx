@@ -9,8 +9,8 @@ import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { SyncSubmitButton } from "@/components/admin/sync-submit-button";
-import { Button } from "@/components/ui/button";
 import { getAdminOverviewData } from "@/lib/admin-dashboard";
 import { getRecentCatalogAuditRunsSafe } from "@/lib/audit-history";
 import { DEFAULT_SYNC_PAGE, MAX_SYNC_PAGE } from "@/lib/movie-sync";
@@ -578,13 +578,13 @@ export default async function AdminSyncPage({
         </p>
         <form action={cleanupMovieTitlesFromAdmin} className="mt-4">
           <input type="hidden" name="redirectTo" value="/admin/sync" />
-          <Button
-            type="submit"
+          <PendingSubmitButton
+            pendingLabel="Membersihkan..."
             variant="secondary"
             className="h-11 border border-white/10 bg-white/10 text-white hover:bg-white/15"
           >
             Bersihkan judul
-          </Button>
+          </PendingSubmitButton>
         </form>
         <div className="mt-6 border-t border-white/10 pt-5">
           <p className="text-sm font-semibold text-orange-200">
@@ -601,13 +601,13 @@ export default async function AdminSyncPage({
           </p>
           <form action={hideRedirectMoviesFromAdmin} className="mt-4">
             <input type="hidden" name="redirectTo" value="/admin/sync" />
-            <Button
-              type="submit"
+            <PendingSubmitButton
+              pendingLabel="Menyembunyikan..."
               variant="secondary"
               className="h-11 border border-white/10 bg-white/10 text-white hover:bg-white/15"
             >
               Sembunyikan redirect
-            </Button>
+            </PendingSubmitButton>
           </form>
         </div>
         <div className="mt-6 border-t border-white/10 pt-5">
@@ -622,13 +622,13 @@ export default async function AdminSyncPage({
           </p>
           <form action={refreshWebCacheFromAdmin} className="mt-4">
             <input type="hidden" name="redirectTo" value="/admin/sync" />
-            <Button
-              type="submit"
+            <PendingSubmitButton
+              pendingLabel="Merefresh..."
               variant="secondary"
               className="h-11 border border-white/10 bg-white/10 text-white hover:bg-white/15"
             >
               Refresh cache web
-            </Button>
+            </PendingSubmitButton>
           </form>
         </div>
       </AdminSurface>

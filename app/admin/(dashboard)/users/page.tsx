@@ -6,6 +6,7 @@ import {
   updateUserVipStatus,
 } from "@/app/admin/actions";
 import { DeleteUserForm } from "@/components/admin/delete-user-form";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import {
   AdminMetricCard,
   AdminSurface,
@@ -328,13 +329,13 @@ export default async function AdminUsersPage({
                               Kosongkan untuk pakai komisi global.
                             </p>
                           </label>
-                          <Button
-                            type="submit"
+                          <PendingSubmitButton
+                            pendingLabel="Menyimpan..."
                             variant="secondary"
                             className="h-9 border border-white/10 bg-white/10 text-xs text-white hover:bg-white/15"
                           >
                             Simpan komisi
-                          </Button>
+                          </PendingSubmitButton>
                         </form>
                         <form
                           action={updateUserVipStatus}
@@ -353,23 +354,27 @@ export default async function AdminUsersPage({
                             <span className="text-xs text-neutral-400">hari</span>
                           </div>
                           <div className="flex flex-col gap-2">
-                            <Button
-                              type="submit"
+                            <PendingSubmitButton
+                              pendingLabel="Memproses..."
                               name="intent"
                               value="grant"
+                              pendingFieldName="intent"
+                              pendingFieldValue="grant"
                               className="h-9 bg-red-600 text-xs text-white hover:bg-red-500"
                             >
                               {vipActive ? "Perpanjang VIP" : "Aktifkan VIP"}
-                            </Button>
-                            <Button
-                              type="submit"
+                            </PendingSubmitButton>
+                            <PendingSubmitButton
+                              pendingLabel="Mencabut..."
                               name="intent"
                               value="revoke"
+                              pendingFieldName="intent"
+                              pendingFieldValue="revoke"
                               variant="secondary"
                               className="h-9 border border-white/10 bg-white/10 text-xs text-white hover:bg-white/15"
                             >
                               Cabut VIP
-                            </Button>
+                            </PendingSubmitButton>
                           </div>
                         </form>
                         <DeleteUserForm

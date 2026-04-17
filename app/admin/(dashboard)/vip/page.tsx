@@ -2,7 +2,7 @@ import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
-import { Button } from "@/components/ui/button";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { updateVipProgramSettings } from "@/app/admin/actions";
 import { getVipProgramSettingsSafe } from "@/lib/vip";
 
@@ -181,12 +181,12 @@ export default async function AdminVipPage({
               />
             </div>
 
-            <Button
-              type="submit"
+            <PendingSubmitButton
+              pendingLabel="Menyimpan..."
               className="h-11 bg-red-600 text-white hover:bg-red-500"
             >
               Simpan pengaturan VIP
-            </Button>
+            </PendingSubmitButton>
           </form>
         ) : null}
       </AdminSurface>

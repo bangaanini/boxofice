@@ -3,6 +3,7 @@ import { LogOut, Play } from "lucide-react";
 
 import { logoutAdmin } from "@/app/admin/actions";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Button } from "@/components/ui/button";
 import { requireAdminSession } from "@/lib/admin-session";
 
@@ -41,14 +42,14 @@ export default async function AdminDashboardLayout({
                   </Link>
                 </Button>
                 <form action={logoutAdmin}>
-                  <Button
-                    type="submit"
+                  <PendingSubmitButton
+                    pendingLabel="Keluar..."
                     variant="secondary"
                     className="h-11 border border-white/10 bg-white/10 text-white hover:bg-white/15"
                   >
                     <LogOut className="size-4" />
                     Logout
-                  </Button>
+                  </PendingSubmitButton>
                 </form>
               </div>
             </div>
