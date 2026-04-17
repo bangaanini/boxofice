@@ -612,7 +612,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
   }
 
   const payload = {
-    appShortName: readTextField(formData, "appShortName") || "Layar BoxOffice",
+    appShortName: readTextField(formData, "appShortName") || "Layar Box Office",
     affiliateGroupLabel: readTextField(formData, "affiliateGroupLabel") || "🏠 Group Affiliate",
     affiliateGroupUrl: readRequiredUrlField(
       formData,
@@ -627,10 +627,10 @@ export async function updateTelegramBotSettings(formData: FormData) {
       "URL tombol affiliate",
       redirectBasePath,
     ),
-    brandName: readTextField(formData, "brandName") || "Layar BoxOffice",
+    brandName: readTextField(formData, "brandName") || "Layar Box Office",
     botToken: readNullableTextField(formData, "botToken"),
     botUsername: readNullableTextField(formData, "botUsername"),
-    channelLabel: readTextField(formData, "channelLabel") || "🎥 Film Box Office",
+    channelLabel: readTextField(formData, "channelLabel") || "🎥 Layar Box Office",
     channelUrl: readRequiredUrlField(
       formData,
       "channelUrl",
@@ -653,7 +653,7 @@ export async function updateTelegramBotSettings(formData: FormData) {
     ),
     seoDescription,
     seoKeywords: readNullableTextField(formData, "seoKeywords"),
-    seoTitle: readTextField(formData, "seoTitle") || "Layar BoxOffice",
+    seoTitle: readTextField(formData, "seoTitle") || "Layar Box Office",
     searchLabel: readTextField(formData, "searchLabel") || "🔎 Cari Judul",
     searchUrl: readRequiredUrlField(
       formData,

@@ -117,18 +117,18 @@ function getEnvRuntimeConfig(): TelegramBotRuntime {
 function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
   const runtime = getEnvRuntimeConfig();
   const defaultSeoDescription =
-    "Layar BoxOffice adalah Mini App Telegram untuk nonton film Box Office, cari judul favorit, buka akses VIP, dan jalankan affiliate langsung dari Telegram.";
+    "Layar Box Office adalah Mini App Telegram untuk nonton film box office terupdate, cari judul favorit, buka akses VIP, dan jalankan affiliate langsung dari Telegram.";
 
   return {
-    appShortName: "Layar BoxOffice",
+    appShortName: "Layar Box Office",
     affiliateGroupLabel: "🏠 Group Affiliate",
     affiliateGroupUrl: buildTelegramBotChatUrlForUsername(runtime.botUsername),
     affiliateLabel: "💰 Gabung Affiliate",
     affiliateUrl: `${runtime.publicAppUrl}/affiliate`,
-    brandName: "Layar BoxOffice",
+    brandName: "Layar Box Office",
     botToken: null,
     botUsername: null,
-    channelLabel: "🎥 Film Box Office",
+    channelLabel: "🎥 Layar Box Office",
     channelUrl: buildTelegramBotChatUrlForUsername(runtime.botUsername),
     createdAt: new Date(0),
     id: "telegram-bot-settings-fallback",
@@ -138,8 +138,8 @@ function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
     publicAppUrl: null,
     seoDescription: defaultSeoDescription,
     seoKeywords:
-      "layar boxoffice, telegram mini app, nonton film telegram, film box office, vip film, affiliate telegram",
-    seoTitle: "Layar BoxOffice",
+      "layar box office, layarbox.app, telegram mini app, nonton film telegram, film box office, vip film, affiliate telegram",
+    seoTitle: "Layar Box Office",
     searchLabel: "🔎 Cari Judul",
     searchUrl: `${runtime.publicAppUrl}/search`,
     slug: "default",
@@ -150,7 +150,7 @@ function createDefaultTelegramBotSettings(): TelegramBotSettingsSnapshot {
     vipUrl: `${runtime.publicAppUrl}/vip`,
     webhookSecret: null,
     welcomeMessage:
-      "👋 Hai {first_name}! Selamat datang di Box Office.\n\n🎬 Nonton film Box Office langsung dari Telegram.\n🔥 Tanpa ribet • Full HD • Update setiap hari\n\n📌 Cara pakai:\n• Buka -> langsung mulai nonton\n• Cari Judul -> cari film favoritmu\n• Gabung Affiliate -> mulai bangun komisi dari Telegram\n• Film Box Office -> lihat update kanal utama\n• Hubungi Admin -> kalau ada kendala\n• Join VIP -> buka akses premium\n\nPilih menu di bawah dan mulai sekarang!",
+      "👋 Hai {first_name}! Selamat datang di Layar Box Office.\n\n🎬 Nonton film box office langsung dari Telegram.\n🔥 Tanpa ribet • Full HD • Update setiap hari\n\n📌 Cara pakai:\n• Buka -> langsung mulai nonton\n• Cari Judul -> cari film favoritmu\n• Gabung Affiliate -> mulai bangun komisi dari Telegram\n• Layar Box Office -> lihat update kanal utama\n• Hubungi Admin -> kalau ada kendala\n• Join VIP -> buka akses premium\n\nPilih menu di bawah dan mulai sekarang!",
   };
 }
 
@@ -358,10 +358,10 @@ export function getSeoMetadataSnapshot(
     .filter(Boolean) ?? [];
 
   return {
-    appShortName: settings.appShortName.trim() || settings.brandName.trim() || "Layar BoxOffice",
-    brandName: settings.brandName.trim() || "Layar BoxOffice",
+    appShortName: settings.appShortName.trim() || settings.brandName.trim() || "Layar Box Office",
+    brandName: settings.brandName.trim() || "Layar Box Office",
     description,
     keywords,
-    title: settings.seoTitle.trim() || settings.brandName.trim() || "Layar BoxOffice",
+    title: settings.seoTitle.trim() || settings.brandName.trim() || "Layar Box Office",
   };
 }

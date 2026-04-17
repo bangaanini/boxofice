@@ -146,19 +146,19 @@ export default async function AdminSettingsPage({
                 defaultValue={telegramSettings.brandName}
                 label="Nama brand"
                 name="brandName"
-                placeholder="Layar BoxOffice"
+                placeholder="Layar Box Office"
               />
               <Field
                 defaultValue={telegramSettings.appShortName}
                 label="Nama singkat app"
                 name="appShortName"
-                placeholder="Layar BoxOffice"
+                placeholder="Layar Box Office"
               />
               <Field
                 defaultValue={telegramSettings.seoTitle}
                 label="Judul SEO"
                 name="seoTitle"
-                placeholder="Layar BoxOffice"
+                placeholder="Layar Box Office"
               />
               <Field
                 defaultValue={telegramSettings.botToken ?? ""}
@@ -182,7 +182,7 @@ export default async function AdminSettingsPage({
                 defaultValue={telegramSettings.publicAppUrl ?? ""}
                 label="Public App URL"
                 name="publicAppUrl"
-                placeholder="https://boxofice.vercel.app"
+                placeholder="https://layarbox.app"
                 type="url"
               />
               <Field
@@ -213,7 +213,7 @@ export default async function AdminSettingsPage({
                 name="seoKeywords"
                 defaultValue={telegramSettings.seoKeywords ?? ""}
                 rows={3}
-                placeholder="layar boxoffice, telegram mini app, nonton film telegram"
+                placeholder="layar box office, layarbox.app, telegram mini app, nonton film telegram"
                 className="mt-2 w-full rounded-[20px] border border-white/10 bg-black/25 px-4 py-4 text-sm leading-7 text-white outline-none placeholder:text-neutral-500"
               />
               <p className="mt-2 text-sm leading-6 text-neutral-400">

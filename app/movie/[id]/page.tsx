@@ -72,7 +72,7 @@ function buildMovieDescription(movie: {
 }) {
   const rawDescription =
     movie.description?.trim() ||
-    `Tonton ${movie.title}${movie.year ? ` (${movie.year})` : ""} di Layar BoxOffice langsung dari Telegram.`;
+    `Tonton ${movie.title}${movie.year ? ` (${movie.year})` : ""} di Layar Box Office langsung dari Telegram.`;
 
   const compactDescription = rawDescription.replace(/\s+/g, " ").trim();
 
