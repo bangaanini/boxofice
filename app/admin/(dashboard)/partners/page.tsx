@@ -3,7 +3,7 @@ import {
   AdminSurface,
 } from "@/components/admin/admin-surface";
 import { CopyCodeBlock } from "@/components/admin/copy-code-block";
-import { Button } from "@/components/ui/button";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import {
   deletePartnerBotFromAdmin,
   savePartnerBotFromAdmin,
@@ -176,12 +176,12 @@ export default async function AdminPartnerBotsPage({
             Langsung aktifkan bot partner ini
           </label>
 
-          <Button
-            type="submit"
+          <PendingSubmitButton
+            pendingLabel="Menyimpan..."
             className="h-11 bg-red-600 text-white hover:bg-red-500"
           >
             Simpan bot partner
-          </Button>
+          </PendingSubmitButton>
         </form>
       </AdminSurface>
 
@@ -281,12 +281,12 @@ export default async function AdminPartnerBotsPage({
                       Bot partner ini aktif
                     </label>
 
-                    <Button
-                      type="submit"
+                    <PendingSubmitButton
+                      pendingLabel="Menyimpan..."
                       className="h-11 bg-red-600 text-white hover:bg-red-500"
                     >
                       Simpan perubahan
-                    </Button>
+                    </PendingSubmitButton>
                   </form>
 
                   <form action={deletePartnerBotFromAdmin}>
@@ -301,13 +301,13 @@ export default async function AdminPartnerBotsPage({
                         name="partnerBotId"
                         value={partnerBot.id}
                       />
-                      <Button
-                        type="submit"
+                      <PendingSubmitButton
+                        pendingLabel="Menghapus..."
                         variant="secondary"
                         className="h-11 border border-white/10 bg-white/[0.08] text-white hover:bg-white/[0.14]"
                       >
                         Hapus bot
-                      </Button>
+                      </PendingSubmitButton>
                     </div>
                   </form>
                 </div>

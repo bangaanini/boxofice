@@ -3,7 +3,7 @@ import {
   AdminSurface,
 } from "@/components/admin/admin-surface";
 import { CopyCodeBlock } from "@/components/admin/copy-code-block";
-import { Button } from "@/components/ui/button";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { updateTelegramBotSettings } from "@/app/admin/actions";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 
@@ -278,12 +278,12 @@ export default async function AdminSettingsPage({
               <Field defaultValue={telegramSettings.vipUrl} label="URL tombol VIP" name="vipUrl" type="url" />
             </div>
 
-            <Button
-              type="submit"
+            <PendingSubmitButton
+              pendingLabel="Menyimpan..."
               className="h-11 bg-red-600 text-white hover:bg-red-500"
             >
               Simpan pengaturan Telegram
-            </Button>
+            </PendingSubmitButton>
           </form>
         </AdminSurface>
 

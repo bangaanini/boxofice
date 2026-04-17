@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { showToast } from "@/components/ui/simple-toast";
 
 async function copyText(value: string) {
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -45,14 +46,20 @@ export function CopyCodeBlock({
   title: string;
 }) {
   const [copied, setCopied] = React.useState(false);
+  const [isCopying, setIsCopying] = React.useState(false);
 
   async function handleCopy() {
     try {
+      setIsCopying(true);
       await copyText(copyValue ?? code);
       setCopied(true);
+      showToast(`${title} berhasil disalin.`);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);
+      showToast(`Gagal menyalin ${title.toLowerCase()}.`, "error");
+    } finally {
+      setIsCopying(false);
     }
   }
 
@@ -66,11 +73,12 @@ export function CopyCodeBlock({
           type="button"
           variant="secondary"
           onClick={handleCopy}
+          disabled={isCopying}
           data-haptic="light"
           className="h-9 rounded-[12px] border border-white/10 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
         >
           {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-          {copied ? "Tersalin" : "Salin"}
+          {isCopying ? "Menyalin..." : copied ? "Tersalin" : "Salin"}
         </Button>
       </div>
       <pre className="mt-3 overflow-x-auto whitespace-pre text-xs leading-6 text-neutral-200">

@@ -6,6 +6,7 @@ import { HapticFeedback } from "@/components/feedback/haptic-feedback";
 import { MobileBottomNav } from "@/components/navigation/mobile-bottom-nav";
 import { TelegramAppChrome } from "@/components/telegram/telegram-app-chrome";
 import { TelegramSessionSync } from "@/components/telegram/telegram-session-sync";
+import { SimpleToastViewport } from "@/components/ui/simple-toast";
 import {
   getFallbackTelegramBotSettingsResult,
   getSeoMetadataSnapshot,
@@ -82,6 +83,7 @@ export default async function RootLayout({
         <TelegramAppChrome />
         <TelegramSessionSync />
         <HapticFeedback />
+        <SimpleToastViewport />
         {hasUserSession ? <MobileBottomNav /> : null}
         <Script
           src="https://telegram.org/js/telegram-web-app.js?57"
