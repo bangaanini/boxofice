@@ -1,4 +1,4 @@
-import { publishMainChannelBroadcastAction } from "@/app/admin/actions";
+import { publishAdminChannelBroadcastAction } from "@/app/admin/actions";
 import { ChannelBroadcastComposer } from "@/components/broadcast/channel-broadcast-composer";
 import { AdminSurface } from "@/components/admin/admin-surface";
 import {
@@ -7,6 +7,7 @@ import {
   listRecentChannelBroadcasts,
   searchMoviesForChannelBroadcast,
 } from "@/lib/channel-broadcasts";
+import { listPartnerBotsForAdmin } from "@/lib/telegram-partner-bots";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +25,15 @@ export default async function AdminChannelBroadcastPage({
 }: AdminChannelBroadcastPageProps) {
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
-  const [telegram, movies, broadcasts] = await Promise.all([
+  const [telegram, movies, broadcasts, partnerData] = await Promise.all([
     getTelegramBotSettingsSafe(),
     searchMoviesForChannelBroadcast(query),
-    listRecentChannelBroadcasts({ botKind: "default", limit: 8 }),
+    listRecentChannelBroadcasts({ limit: 12 }),
+    listPartnerBotsForAdmin(),
   ]);
+  const availablePartnerBots = partnerData.partnerBots.filter(
+    (partnerBot) => partnerBot.active,
+  );
   const selectedMovie = movies[0] ?? null;
   const initialCaption = selectedMovie
     ? buildDefaultChannelBroadcastCaption({
@@ -45,12 +50,13 @@ export default async function AdminChannelBroadcastPage({
           Broadcast channel
         </p>
         <h1 className="mt-4 text-4xl font-black text-white">
-          Kirim poster ke channel utama
+          Kirim poster ke channel utama dan partner
         </h1>
         <p className="mt-3 max-w-4xl text-sm leading-7 text-neutral-400">
-          Bot utama bisa mengirim poster, sinopsis, dan satu tombol inline ke
-          channel Telegram. Tombol memakai deep link pendek, jadi klik dari
-          channel tetap mendarat ke film yang benar di Mini App.
+          Admin cukup menyiapkan satu broadcast, lalu pilih apakah konten itu
+          dikirim dari bot utama, dari partner tertentu, atau keduanya
+          sekaligus. Bot partner akan otomatis memakai channel default yang
+          tersimpan di datanya masing-masing.
         </p>
       </AdminSurface>
 
@@ -92,10 +98,95 @@ export default async function AdminChannelBroadcastPage({
 
       {movies.length ? (
         <ChannelBroadcastComposer
-          action={publishMainChannelBroadcastAction}
+          action={publishAdminChannelBroadcastAction}
           botName={telegram.settings.brandName}
           botUsername={telegram.runtime.botUsername}
-          helperText="Bot utama harus sudah jadi admin di channel target. Gunakan @channelkamu atau link t.me/channelkamu."
+          channelFieldLabel="Channel bot utama"
+          channelFieldPlaceholder="@channelutama atau https://t.me/channelutama"
+          extraFields={
+            <div className="space-y-4 rounded-[18px] border border-white/10 bg-white/[0.03] p-4">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  Target broadcast
+                </p>
+                <p className="mt-2 text-xs leading-5 text-neutral-400">
+                  Centang bot yang ingin ikut mengirim post ini. Bot utama akan
+                  memakai channel yang kamu isi di bawah, sedangkan partner bot
+                  otomatis memakai channel default miliknya.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-3 rounded-[16px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
+                <input
+                  type="checkbox"
+                  name="includeMainBot"
+                  defaultChecked
+                  className="mt-0.5 size-4 accent-red-500"
+                />
+                <span>
+                  <span className="block font-medium text-white">
+                    Bot utama
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-neutral-400">
+                    @{telegram.runtime.botUsername || "botutama"} ke channel
+                    utama yang kamu isi di form ini.
+                  </span>
+                </span>
+              </label>
+
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                  Bot partner aktif
+                </p>
+                <div className="grid gap-3">
+                  {availablePartnerBots.length ? (
+                    availablePartnerBots.map((partnerBot) => {
+                      const partnerName =
+                        partnerBot.label?.trim() || partnerBot.botName;
+                      const hasDefaultChannel = Boolean(
+                        partnerBot.defaultChannelUsername?.trim(),
+                      );
+
+                      return (
+                        <label
+                          key={partnerBot.id}
+                          className={`flex items-start gap-3 rounded-[16px] border px-4 py-3 text-sm ${
+                            hasDefaultChannel
+                              ? "border-white/10 bg-black/20 text-white"
+                              : "border-white/6 bg-black/10 text-neutral-500"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            name="partnerBotIds"
+                            value={partnerBot.id}
+                            disabled={!hasDefaultChannel}
+                            className="mt-0.5 size-4 accent-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
+                          <span>
+                            <span className="block font-medium">
+                              {partnerName}
+                            </span>
+                            <span className="mt-1 block text-xs leading-5 text-neutral-400">
+                              @{partnerBot.botUsername}
+                              {hasDefaultChannel
+                                ? ` • ${partnerBot.defaultChannelUsername}`
+                                : " • channel default belum diatur"}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-neutral-400">
+                      Belum ada bot partner aktif.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          }
+          helperText="Bot utama harus sudah jadi admin di channel target. Kalau kamu hanya kirim lewat partner bot, field channel utama ini boleh dibiarkan kosong."
           initialButtonLabel={getDefaultChannelBroadcastButtonLabel()}
           initialCaption={initialCaption}
           initialMovieId={selectedMovie.id}
@@ -108,7 +199,7 @@ export default async function AdminChannelBroadcastPage({
             }),
           }))}
           pendingLabel="Mengirim..."
-          submitLabel="Kirim ke channel"
+          submitLabel="Kirim broadcast"
         />
       ) : (
         <AdminSurface className="text-sm leading-6 text-neutral-300">
@@ -161,7 +252,7 @@ export default async function AdminChannelBroadcastPage({
             ))
           ) : (
             <p className="text-sm text-neutral-400">
-              Belum ada broadcast channel dari bot utama.
+              Belum ada broadcast channel dari bot utama maupun partner.
             </p>
           )}
         </div>

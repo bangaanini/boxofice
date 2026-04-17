@@ -852,6 +852,10 @@ export async function savePartnerBotFromAdmin(formData: FormData) {
   const ownerUserId = readTextField(formData, "ownerUserId");
   const partnerBotId = readNullableTextField(formData, "partnerBotId");
   const botToken = readTextField(formData, "botToken");
+  const defaultChannelUsername = readNullableTextField(
+    formData,
+    "defaultChannelUsername",
+  );
   const label = readNullableTextField(formData, "label");
   const miniAppShortName = readNullableTextField(formData, "miniAppShortName");
   const active = formData.get("active") === "on";
@@ -923,6 +927,7 @@ export async function savePartnerBotFromAdmin(formData: FormData) {
     botName: botProfile.botName,
     botToken: botToken.trim(),
     botUsername: botProfile.botUsername,
+    defaultChannelUsername,
     label,
     miniAppShortName,
     ownerUserId: owner.id,
@@ -951,6 +956,156 @@ export async function savePartnerBotFromAdmin(formData: FormData) {
     `${redirectBasePath}?partner=ok&message=${encodeURIComponent(
       `Bot @${botProfile.botUsername} berhasil ${recordId ? "diperbarui" : "ditambahkan"}.`,
     )}`,
+  );
+}
+
+export async function publishAdminChannelBroadcastAction(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(
+    formData,
+    "/admin/channel-broadcasts",
+  );
+  const channelUsername = readTextField(formData, "channelUsername");
+  const movieId = readTextField(formData, "movieId");
+  const caption = readTextField(formData, "caption");
+  const buttonLabel = readTextField(formData, "buttonLabel");
+  const pinMessage = formData.get("pinMessage") === "on";
+  const includeMainBot = formData.get("includeMainBot") === "on";
+  const selectedPartnerBotIds = formData
+    .getAll("partnerBotIds")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+
+  if (!movieId) {
+    redirect(
+      `${redirectBasePath}?broadcast=error&message=${encodeURIComponent("Pilih film yang ingin dibroadcast dulu.")}`,
+    );
+  }
+
+  if (!includeMainBot && selectedPartnerBotIds.length === 0) {
+    redirect(
+      `${redirectBasePath}?broadcast=error&message=${encodeURIComponent("Pilih minimal satu target broadcast.")}`,
+    );
+  }
+
+  const telegram = await getTelegramBotSettingsSafe();
+  const selectedPartnerBots = selectedPartnerBotIds.length
+    ? await prisma.partnerBot.findMany({
+        where: {
+          active: true,
+          id: {
+            in: selectedPartnerBotIds,
+          },
+        },
+        select: {
+          botName: true,
+          botToken: true,
+          botUsername: true,
+          defaultChannelUsername: true,
+          id: true,
+          label: true,
+          miniAppShortName: true,
+          ownerUserId: true,
+        },
+      })
+    : [];
+
+  const targetErrors: string[] = [];
+  const successLabels: string[] = [];
+
+  if (includeMainBot) {
+    if (!telegram.runtime.botToken?.trim() || !telegram.runtime.botUsername?.trim()) {
+      targetErrors.push("Bot utama belum lengkap. Isi bot token dan username lebih dulu.");
+    } else if (!channelUsername) {
+      targetErrors.push("Channel default bot utama belum diisi di form broadcast.");
+    } else {
+      try {
+        const result = await publishChannelBroadcast({
+          botKind: "default",
+          botToken: telegram.runtime.botToken,
+          botUsername: telegram.runtime.botUsername,
+          buttonLabel,
+          caption,
+          channelUsername,
+          miniAppShortName: telegram.runtime.miniAppShortName,
+          movieId,
+          pinMessage,
+        });
+
+        successLabels.push(
+          result.pinError
+            ? `bot utama terkirim, tapi pin gagal`
+            : "bot utama terkirim",
+        );
+      } catch (error) {
+        targetErrors.push(
+          `Bot utama: ${
+            error instanceof Error ? error.message : "Broadcast gagal dikirim."
+          }`,
+        );
+      }
+    }
+  }
+
+  for (const partnerBot of selectedPartnerBots) {
+    if (!partnerBot.defaultChannelUsername?.trim()) {
+      targetErrors.push(
+        `${partnerBot.label?.trim() || partnerBot.botName} belum punya channel default.`,
+      );
+      continue;
+    }
+
+    try {
+      const result = await publishChannelBroadcast({
+        botKind: "partner",
+        botToken: partnerBot.botToken,
+        botUsername: partnerBot.botUsername,
+        buttonLabel,
+        caption,
+        channelUsername: partnerBot.defaultChannelUsername,
+        miniAppShortName: partnerBot.miniAppShortName,
+        movieId,
+        ownerUserId: partnerBot.ownerUserId,
+        partnerBotId: partnerBot.id,
+        pinMessage,
+      });
+
+      successLabels.push(
+        result.pinError
+          ? `${partnerBot.label?.trim() || partnerBot.botName} terkirim, tapi pin gagal`
+          : `${partnerBot.label?.trim() || partnerBot.botName} terkirim`,
+      );
+    } catch (error) {
+      targetErrors.push(
+        `${partnerBot.label?.trim() || partnerBot.botName}: ${
+          error instanceof Error ? error.message : "Broadcast gagal dikirim."
+        }`,
+      );
+    }
+  }
+
+  revalidatePath("/admin/channel-broadcasts");
+  revalidatePath("/partner-bot/broadcast");
+
+  if (!successLabels.length) {
+    redirect(
+      `${redirectBasePath}?broadcast=error&message=${encodeURIComponent(
+        targetErrors[0] ?? "Broadcast tidak berhasil dikirim ke target mana pun.",
+      )}`,
+    );
+  }
+
+  const summary = [
+    `${successLabels.length} target berhasil`,
+    targetErrors.length ? `${targetErrors.length} target gagal` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const detail = targetErrors.length ? ` (${targetErrors.join(" | ")})` : "";
+
+  redirect(
+    `${redirectBasePath}?broadcast=ok&message=${encodeURIComponent(`${summary}${detail}`)}`,
   );
 }
 

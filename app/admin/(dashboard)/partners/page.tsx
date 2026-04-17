@@ -164,6 +164,11 @@ export default async function AdminPartnerBotsPage({
               name="miniAppShortName"
               placeholder="Opsional kalau bot punya shortname sendiri"
             />
+            <Field
+              label="Channel default partner"
+              name="defaultChannelUsername"
+              placeholder="@channelpartner atau https://t.me/channelpartner"
+            />
           </div>
 
           <label className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
@@ -221,6 +226,14 @@ export default async function AdminPartnerBotsPage({
                       ? ` • ${partnerBot.owner.affiliateProfile.referralCode}`
                       : ""}
                   </p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Channel default:{" "}
+                    <span className="text-neutral-300">
+                      {partnerBot.defaultChannelUsername?.trim()
+                        ? partnerBot.defaultChannelUsername
+                        : "belum diatur"}
+                    </span>
+                  </p>
                 </div>
 
                 {partnerBot.links ? (
@@ -268,6 +281,12 @@ export default async function AdminPartnerBotsPage({
                         defaultValue={partnerBot.miniAppShortName}
                         label="Mini App shortname"
                         name="miniAppShortName"
+                      />
+                      <Field
+                        defaultValue={partnerBot.defaultChannelUsername}
+                        label="Channel default partner"
+                        name="defaultChannelUsername"
+                        placeholder="@channelpartner atau https://t.me/channelpartner"
                       />
                     </div>
 

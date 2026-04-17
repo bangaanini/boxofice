@@ -23,6 +23,9 @@ type ChannelBroadcastComposerProps = {
   action: (formData: FormData) => void | Promise<void>;
   botName: string;
   botUsername: string;
+  channelFieldLabel?: string;
+  channelFieldPlaceholder?: string;
+  extraFields?: React.ReactNode;
   helperText: string;
   hiddenFields?: HiddenField[];
   initialButtonLabel: string;
@@ -51,6 +54,9 @@ export function ChannelBroadcastComposer({
   action,
   botName,
   botUsername,
+  channelFieldLabel = "Channel Telegram",
+  channelFieldPlaceholder = "@channelkamu atau https://t.me/channelkamu",
+  extraFields,
   helperText,
   hiddenFields = [],
   initialButtonLabel,
@@ -103,17 +109,19 @@ export function ChannelBroadcastComposer({
           <input key={field.name} type="hidden" name={field.name} value={field.value} />
         ))}
 
+        {extraFields ? <div>{extraFields}</div> : null}
+
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
           <div>
             <label className="block text-sm font-medium text-neutral-300">
-              Channel Telegram
+              {channelFieldLabel}
             </label>
             <input
               name="channelUsername"
               value={channelUsername}
               onChange={(event) => setChannelUsername(event.target.value)}
               className="mt-2 h-12 w-full rounded-[16px] border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-neutral-600"
-              placeholder="@channelkamu atau https://t.me/channelkamu"
+              placeholder={channelFieldPlaceholder}
             />
             <p className="mt-2 text-xs leading-5 text-neutral-500">{helperText}</p>
           </div>

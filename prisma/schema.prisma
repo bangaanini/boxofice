@@ -216,6 +216,7 @@ model PartnerBot {
   botUsername      String   @unique
   botName          String
   miniAppShortName String?
+  defaultChannelUsername String?
   settingsOverrides Json?   @db.JsonB
   webhookSecret    String
   active           Boolean  @default(true)
