@@ -376,6 +376,7 @@ export async function publishPartnerChannelBroadcastAction(formData: FormData) {
       botUsername: true,
       id: true,
       label: true,
+      miniAppShortName: true,
       ownerUserId: true,
     },
   });
@@ -395,6 +396,7 @@ export async function publishPartnerChannelBroadcastAction(formData: FormData) {
       message: "Aktifkan bot partner dulu sebelum broadcast ke channel.",
       status: "error",
     });
+    return;
   }
 
   if (!movieId) {
@@ -406,6 +408,8 @@ export async function publishPartnerChannelBroadcastAction(formData: FormData) {
     return;
   }
 
+  let successMessage = "";
+
   try {
     const result = await publishChannelBroadcast({
       botKind: "partner",
@@ -414,6 +418,7 @@ export async function publishPartnerChannelBroadcastAction(formData: FormData) {
       buttonLabel,
       caption,
       channelUsername,
+      miniAppShortName: partnerBot.miniAppShortName,
       movieId,
       ownerUserId: partnerBot.ownerUserId,
       partnerBotId: partnerBot.id,
@@ -422,15 +427,9 @@ export async function publishPartnerChannelBroadcastAction(formData: FormData) {
 
     revalidatePath("/partner-bot/broadcast");
 
-    const message = result.pinError
+    successMessage = result.pinError
       ? `Broadcast terkirim, tapi pin post gagal: ${result.pinError}`
       : `Broadcast untuk ${partnerBot.label?.trim() || partnerBot.botName} berhasil dikirim.`;
-
-    redirectToPartnerBroadcast({
-      botId: partnerBot.id,
-      message,
-      status: "ok",
-    });
   } catch (error) {
     redirectToPartnerBroadcast({
       botId: partnerBot.id,
@@ -441,4 +440,10 @@ export async function publishPartnerChannelBroadcastAction(formData: FormData) {
       status: "error",
     });
   }
+
+  redirectToPartnerBroadcast({
+    botId: partnerBot.id,
+    message: successMessage,
+    status: "ok",
+  });
 }

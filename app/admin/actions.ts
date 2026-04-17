@@ -1129,6 +1129,8 @@ export async function publishMainChannelBroadcastAction(formData: FormData) {
     );
   }
 
+  let successMessage = "";
+
   try {
     const result = await publishChannelBroadcast({
       botKind: "default",
@@ -1137,24 +1139,25 @@ export async function publishMainChannelBroadcastAction(formData: FormData) {
       buttonLabel,
       caption,
       channelUsername,
+      miniAppShortName: telegram.runtime.miniAppShortName,
       movieId,
       pinMessage,
     });
 
     revalidatePath("/admin/channel-broadcasts");
 
-    const message = result.pinError
+    successMessage = result.pinError
       ? `Broadcast terkirim, tapi pin post gagal: ${result.pinError}`
       : "Broadcast channel berhasil dikirim.";
-
-    redirect(
-      `${redirectBasePath}?broadcast=ok&message=${encodeURIComponent(message)}`,
-    );
   } catch (error) {
     redirect(
       `${redirectBasePath}?broadcast=error&message=${encodeURIComponent(error instanceof Error ? error.message : "Broadcast channel gagal dikirim.")}`,
     );
   }
+
+  redirect(
+    `${redirectBasePath}?broadcast=ok&message=${encodeURIComponent(successMessage)}`,
+  );
 }
 
 export async function createOrUpdateVipPlan(formData: FormData) {

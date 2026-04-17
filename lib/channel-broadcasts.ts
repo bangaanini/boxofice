@@ -6,7 +6,7 @@ import {
   buildChannelBroadcastStartParam,
   extractChannelBroadcastTokenFromStartParam,
 } from "@/lib/channel-broadcast-tokens";
-import { buildTelegramMainMiniAppUrlForUsername } from "@/lib/telegram-miniapp";
+import { buildTelegramMiniAppUrlForConfig } from "@/lib/telegram-miniapp";
 import { excludeBlockedMoviesWhere } from "@/lib/movie-visibility";
 
 const DEFAULT_BROADCAST_BUTTON_LABEL = "▶️ Tonton Sekarang";
@@ -19,6 +19,7 @@ type PublishChannelBroadcastInput = {
   buttonLabel: string;
   caption: string;
   channelUsername: string;
+  miniAppShortName?: string | null;
   movieId: string;
   ownerUserId?: string | null;
   partnerBotId?: string | null;
@@ -248,8 +249,11 @@ export async function publishChannelBroadcast(
 
   const token = await createUniqueChannelBroadcastToken();
   const startParam = buildChannelBroadcastStartParam(token);
-  const deepLinkUrl = buildTelegramMainMiniAppUrlForUsername(
-    input.botUsername,
+  const deepLinkUrl = buildTelegramMiniAppUrlForConfig(
+    {
+      botUsername: input.botUsername,
+      miniAppShortName: input.miniAppShortName ?? null,
+    },
     startParam,
   );
 
