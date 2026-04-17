@@ -160,6 +160,10 @@ export function ChannelBroadcastComposer({
             <p className="mt-2 text-xs leading-5 text-neutral-500">
               Telegram membatasi caption foto sampai 1024 karakter.
             </p>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">
+              Baris VIP, Panduan Pengguna, dan Hubungi Admin akan otomatis jadi
+              inline link ke bot pengirim selama labelnya tetap dipakai.
+            </p>
           </div>
 
           <div className="space-y-4">

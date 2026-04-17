@@ -15,6 +15,9 @@ import { excludeBlockedMoviesWhere } from "@/lib/movie-visibility";
 
 const DEFAULT_BROADCAST_BUTTON_LABEL = "▶️ Tonton Sekarang";
 const MAX_CAPTION_LENGTH = 1024;
+const VIP_LINK_LABEL = "🛍️ Langganan VIP Sekarang";
+const GUIDE_LINK_LABEL = "📚 Panduan Pengguna";
+const SUPPORT_LINK_LABEL = "📞 Hubungi Admin Sekarang";
 
 type PublishChannelBroadcastInput = {
   botKind: "default" | "partner";
@@ -79,7 +82,6 @@ export function buildDefaultChannelBroadcastCaption(input: {
   description?: string | null;
   title: string;
 }) {
-  const botLink = buildTelegramBotChatUrlForUsername(input.botUsername);
   const description = truncateText(input.description ?? "", 360) || "Sinopsis belum tersedia.";
   const lines = [
     "SINOPSIS",
@@ -89,17 +91,43 @@ export function buildDefaultChannelBroadcastCaption(input: {
     "———————————————",
     "💎 AKSES VIP - NONTON SEPUASNYA",
     "Dapatkan akses ke semua film boxoffice hanya mulai Rp2.000 per hari.",
-    `🛍️ Langganan VIP Sekarang ${botLink}`,
+    VIP_LINK_LABEL,
     "",
     "☎️ BANTUAN & PERTANYAAN",
     "Jika mengalami kendala atau butuh bantuan:",
-    `📚 Panduan Pengguna ${botLink}`,
-    `📞 Hubungi Admin Sekarang ${botLink}`,
+    GUIDE_LINK_LABEL,
+    SUPPORT_LINK_LABEL,
     "",
     "Klik tombol di bawah untuk mulai👇",
   ];
 
   return lines.join("\n");
+}
+
+function buildCaptionTextLinkEntities(caption: string, url: string) {
+  const entities: Array<{
+    length: number;
+    offset: number;
+    type: "text_link";
+    url: string;
+  }> = [];
+
+  for (const label of [VIP_LINK_LABEL, GUIDE_LINK_LABEL, SUPPORT_LINK_LABEL]) {
+    const offset = caption.indexOf(label);
+
+    if (offset < 0) {
+      continue;
+    }
+
+    entities.push({
+      length: label.length,
+      offset,
+      type: "text_link",
+      url,
+    });
+  }
+
+  return entities;
 }
 
 async function createUniqueChannelBroadcastToken() {
@@ -280,6 +308,8 @@ export async function publishChannelBroadcast(
     },
     startParam,
   );
+  const botChatUrl = buildTelegramBotChatUrlForUsername(input.botUsername);
+  const captionEntities = buildCaptionTextLinkEntities(caption, botChatUrl);
 
   const inlineKeyboard: Array<Array<{ text: string; url: string }>> = [
     [
@@ -309,6 +339,7 @@ export async function publishChannelBroadcast(
     const sent = await sendTelegramBotPhoto({
       botToken: input.botToken,
       caption,
+      captionEntities,
       chatId: `@${normalizedChannelUsername}`,
       photo: movie.thumbnail,
       replyMarkup: {

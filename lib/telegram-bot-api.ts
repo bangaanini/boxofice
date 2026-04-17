@@ -100,6 +100,12 @@ export async function sendTelegramBotMessage(input: {
 export async function sendTelegramBotPhoto(input: {
   botToken: string;
   caption?: string;
+  captionEntities?: Array<{
+    length: number;
+    offset: number;
+    type: "text_link";
+    url: string;
+  }>;
   chatId: number | string;
   photo: string;
   replyMarkup?: Record<string, unknown>;
@@ -108,6 +114,7 @@ export async function sendTelegramBotPhoto(input: {
     method: "POST",
     payload: {
       caption: input.caption,
+      caption_entities: input.captionEntities,
       chat_id: input.chatId,
       photo: input.photo,
       reply_markup: input.replyMarkup,
