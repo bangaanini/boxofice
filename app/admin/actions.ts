@@ -13,6 +13,9 @@ import { clearAdminSessionCookie, requireAdminSession } from "@/lib/admin-sessio
 import { getPaymentGatewaySettingsSafe } from "@/lib/payments";
 import { getTelegramBotProfile } from "@/lib/telegram-bot-api";
 import { sendTelegramUserMessage } from "@/lib/telegram-bot";
+import {
+  publishChannelBroadcast,
+} from "@/lib/channel-broadcasts";
 import { isDynamicTelegramDeepLink } from "@/lib/telegram-link-policy";
 import {
   buildLegacyInlineButtonsFromSettings,
@@ -1097,6 +1100,61 @@ export async function updatePaymentGatewaySettings(formData: FormData) {
   redirect(
     `${redirectBasePath}?payment=ok&message=${encodeURIComponent("Payment gateway berhasil diperbarui.")}`,
   );
+}
+
+export async function publishMainChannelBroadcastAction(formData: FormData) {
+  await requireAdminSession();
+
+  const redirectBasePath = resolveRedirectTarget(
+    formData,
+    "/admin/channel-broadcasts",
+  );
+  const channelUsername = readTextField(formData, "channelUsername");
+  const movieId = readTextField(formData, "movieId");
+  const caption = readTextField(formData, "caption");
+  const buttonLabel = readTextField(formData, "buttonLabel");
+  const pinMessage = formData.get("pinMessage") === "on";
+
+  if (!movieId) {
+    redirect(
+      `${redirectBasePath}?broadcast=error&message=${encodeURIComponent("Pilih film yang ingin dibroadcast dulu.")}`,
+    );
+  }
+
+  const telegram = await getTelegramBotSettingsSafe();
+
+  if (!telegram.runtime.botToken?.trim() || !telegram.runtime.botUsername?.trim()) {
+    redirect(
+      `${redirectBasePath}?broadcast=error&message=${encodeURIComponent("Bot utama belum lengkap. Isi bot token dan username lebih dulu.")}`,
+    );
+  }
+
+  try {
+    const result = await publishChannelBroadcast({
+      botKind: "default",
+      botToken: telegram.runtime.botToken,
+      botUsername: telegram.runtime.botUsername,
+      buttonLabel,
+      caption,
+      channelUsername,
+      movieId,
+      pinMessage,
+    });
+
+    revalidatePath("/admin/channel-broadcasts");
+
+    const message = result.pinError
+      ? `Broadcast terkirim, tapi pin post gagal: ${result.pinError}`
+      : "Broadcast channel berhasil dikirim.";
+
+    redirect(
+      `${redirectBasePath}?broadcast=ok&message=${encodeURIComponent(message)}`,
+    );
+  } catch (error) {
+    redirect(
+      `${redirectBasePath}?broadcast=error&message=${encodeURIComponent(error instanceof Error ? error.message : "Broadcast channel gagal dikirim.")}`,
+    );
+  }
 }
 
 export async function createOrUpdateVipPlan(formData: FormData) {

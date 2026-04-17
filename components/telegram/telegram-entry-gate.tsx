@@ -5,6 +5,7 @@ import Link from "next/link";
 import { MessageCircle, ShieldCheck, Smartphone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { extractChannelBroadcastTokenFromStartParam } from "@/lib/channel-broadcast-tokens";
 import { extractMovieIdFromStartParam } from "@/lib/telegram-miniapp";
 
 type TelegramWebApp = {
@@ -69,6 +70,14 @@ function getTelegramStartTargetPath(startParam?: string | null) {
     return `/movie/${movieId}`;
   }
 
+  const broadcastToken = extractChannelBroadcastTokenFromStartParam(
+    resolvedStartParam,
+  );
+
+  if (broadcastToken) {
+    return "/";
+  }
+
   return null;
 }
 
@@ -117,10 +126,11 @@ export function TelegramEntryGate({
         method: "POST",
       });
 
-      const payload = (await response.json().catch(() => null)) as
+        const payload = (await response.json().catch(() => null)) as
         | {
             error?: string;
             ok?: boolean;
+            redirectPath?: string | null;
           }
         | null;
 
@@ -133,7 +143,9 @@ export function TelegramEntryGate({
 
       setStatus("Akun siap. Membuka Box Office...");
       window.location.replace(
-        getTelegramStartTargetPath(resolvedStartParam) ?? successRedirectPath,
+        payload?.redirectPath ??
+          getTelegramStartTargetPath(resolvedStartParam) ??
+          successRedirectPath,
       );
     } catch (authError) {
       setError(

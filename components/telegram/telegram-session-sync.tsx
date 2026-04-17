@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
+import { extractChannelBroadcastTokenFromStartParam } from "@/lib/channel-broadcast-tokens";
 import { extractMovieIdFromStartParam } from "@/lib/telegram-miniapp";
 
 type TelegramWebApp = {
@@ -77,6 +78,14 @@ function getTelegramStartTargetPath(startParam?: string | null) {
     return `/movie/${movieId}`;
   }
 
+  const broadcastToken = extractChannelBroadcastTokenFromStartParam(
+    startParam ?? readStartParamFromLocation(),
+  );
+
+  if (broadcastToken) {
+    return "/";
+  }
+
   return null;
 }
 
@@ -132,7 +141,7 @@ export function TelegramSessionSync() {
           method: "POST",
         });
         const payload = (await response.json().catch(() => null)) as
-          | { ok?: boolean }
+          | { ok?: boolean; redirectPath?: string | null }
           | null;
 
         if (!response.ok || !payload?.ok || cancelled) {
@@ -145,9 +154,9 @@ export function TelegramSessionSync() {
           activeIdentity.telegramId,
         );
 
-        const targetPath = getTelegramStartTargetPath(
-          activeIdentity.startParam,
-        );
+        const targetPath =
+          payload?.redirectPath ??
+          getTelegramStartTargetPath(activeIdentity.startParam);
 
         if (targetPath && window.location.pathname === "/") {
           window.location.replace(targetPath);

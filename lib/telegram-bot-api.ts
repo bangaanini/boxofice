@@ -11,6 +11,10 @@ type TelegramBotProfile = {
   username?: string;
 };
 
+type TelegramMessageResult = {
+  message_id: number;
+};
+
 function trimToken(botToken: string) {
   const trimmed = botToken.trim();
 
@@ -83,12 +87,46 @@ export async function sendTelegramBotMessage(input: {
   replyMarkup?: Record<string, unknown>;
   text: string;
 }) {
-  return callTelegramBotApi(input.botToken, "sendMessage", {
+  return callTelegramBotApi<TelegramMessageResult>(input.botToken, "sendMessage", {
     method: "POST",
     payload: {
       chat_id: input.chatId,
       reply_markup: input.replyMarkup,
       text: input.text,
+    },
+  });
+}
+
+export async function sendTelegramBotPhoto(input: {
+  botToken: string;
+  caption?: string;
+  chatId: number | string;
+  photo: string;
+  replyMarkup?: Record<string, unknown>;
+}) {
+  return callTelegramBotApi<TelegramMessageResult>(input.botToken, "sendPhoto", {
+    method: "POST",
+    payload: {
+      caption: input.caption,
+      chat_id: input.chatId,
+      photo: input.photo,
+      reply_markup: input.replyMarkup,
+    },
+  });
+}
+
+export async function pinTelegramBotChatMessage(input: {
+  botToken: string;
+  chatId: number | string;
+  disableNotification?: boolean;
+  messageId: number;
+}) {
+  return callTelegramBotApi<boolean>(input.botToken, "pinChatMessage", {
+    method: "POST",
+    payload: {
+      chat_id: input.chatId,
+      disable_notification: input.disableNotification ?? true,
+      message_id: input.messageId,
     },
   });
 }

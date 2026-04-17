@@ -8,6 +8,7 @@ import {
   Keyboard,
   Landmark,
   Link2,
+  Megaphone,
   Percent,
   RefreshCw,
   ShieldCheck,
@@ -57,6 +58,13 @@ const items = [
     icon: Keyboard,
     label: "Pesan bot",
     match: (pathname: string) => pathname.startsWith("/admin/bot-message"),
+  },
+  {
+    description: "Poster channel dan tombol tonton sekarang",
+    href: "/admin/channel-broadcasts",
+    icon: Megaphone,
+    label: "Broadcast channel",
+    match: (pathname: string) => pathname.startsWith("/admin/channel-broadcasts"),
   },
   {
     description: "Daftarkan bot milik partner affiliate",

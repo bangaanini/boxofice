@@ -31,6 +31,7 @@ model Movie {
   streamCache    MovieStreamCache?
   favorites      UserFavorite[]
   watchHistories WatchHistory[]
+  broadcasts     ChannelBroadcast[]
 
   @@index([updatedAt])
   @@index([inHome, updatedAt])
@@ -80,6 +81,7 @@ model User {
   affiliateProfile  AffiliateProfile?
   affiliateReferral AffiliateReferral?
   partnerBots       PartnerBot[]
+  channelBroadcasts ChannelBroadcast[]
 }
 
 model UserSession {
@@ -220,9 +222,36 @@ model PartnerBot {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   owner            User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  channelBroadcasts ChannelBroadcast[]
 
   @@index([ownerUserId, active])
   @@index([active, updatedAt])
+}
+
+model ChannelBroadcast {
+  id               String      @id @default(uuid())
+  token            String      @unique
+  movieId          String
+  ownerUserId      String?
+  partnerBotId     String?
+  botKind          String      @default("default")
+  botUsername      String
+  channelUsername  String
+  buttonLabel      String
+  caption          String      @db.Text
+  telegramMessageId Int?
+  pinned           Boolean     @default(false)
+  postedAt         DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  movie            Movie       @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  owner            User?       @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  partnerBot       PartnerBot? @relation(fields: [partnerBotId], references: [id], onDelete: SetNull)
+
+  @@index([movieId, createdAt])
+  @@index([ownerUserId, createdAt])
+  @@index([partnerBotId, createdAt])
+  @@index([botKind, createdAt])
 }
 
 model VipProgramSettings {

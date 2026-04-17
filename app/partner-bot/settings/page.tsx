@@ -96,6 +96,13 @@ export default async function PartnerBotSettingsPage({
           >
             <Link href="/profile">Profil</Link>
           </Button>
+          <Button
+            asChild
+            variant="secondary"
+            className="h-10 border border-white/10 bg-white/[0.08] px-4 text-white hover:bg-white/[0.14]"
+          >
+            <Link href="/partner-bot/broadcast">Broadcast</Link>
+          </Button>
         </div>
 
         {params.partner ? (

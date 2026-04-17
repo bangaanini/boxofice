@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { Prisma } from "@/app/generated/prisma/client";
+import { publishChannelBroadcast } from "@/lib/channel-broadcasts";
 import { prisma } from "@/lib/prisma";
 import {
   buildLegacyInlineButtonsFromSettings,
@@ -43,6 +44,23 @@ function redirectToPartnerSettings(input: {
   }
 
   redirect(`/partner-bot/settings?${params.toString()}`);
+}
+
+function redirectToPartnerBroadcast(input: {
+  botId?: string;
+  message: string;
+  status: "error" | "ok";
+}) {
+  const params = new URLSearchParams({
+    broadcast: input.status,
+    message: input.message,
+  });
+
+  if (input.botId) {
+    params.set("bot", input.botId);
+  }
+
+  redirect(`/partner-bot/broadcast?${params.toString()}`);
 }
 
 function validateOptionalUrl(value: string, label: string, botId: string) {
@@ -328,4 +346,99 @@ export async function savePartnerBotSettingsAction(formData: FormData) {
     message: "Pengaturan bot partner berhasil diperbarui.",
     status: "ok",
   });
+}
+
+export async function publishPartnerChannelBroadcastAction(formData: FormData) {
+  const user = await requireUserSession();
+  const partnerBotId = sanitizeRedirectBotId(formData.get("partnerBotId"));
+  const channelUsername = readTextField(formData, "channelUsername");
+  const movieId = readTextField(formData, "movieId");
+  const caption = readTextField(formData, "caption");
+  const buttonLabel = readTextField(formData, "buttonLabel");
+  const pinMessage = formData.get("pinMessage") === "on";
+
+  if (!partnerBotId) {
+    redirectToPartnerBroadcast({
+      message: "Bot partner tidak ditemukan.",
+      status: "error",
+    });
+  }
+
+  const partnerBot = await prisma.partnerBot.findFirst({
+    where: {
+      id: partnerBotId,
+      ownerUserId: user.id,
+    },
+    select: {
+      active: true,
+      botName: true,
+      botToken: true,
+      botUsername: true,
+      id: true,
+      label: true,
+      ownerUserId: true,
+    },
+  });
+
+  if (!partnerBot) {
+    redirectToPartnerBroadcast({
+      botId: partnerBotId,
+      message: "Kamu tidak punya akses ke bot ini.",
+      status: "error",
+    });
+    return;
+  }
+
+  if (!partnerBot.active) {
+    redirectToPartnerBroadcast({
+      botId: partnerBot.id,
+      message: "Aktifkan bot partner dulu sebelum broadcast ke channel.",
+      status: "error",
+    });
+  }
+
+  if (!movieId) {
+    redirectToPartnerBroadcast({
+      botId: partnerBot.id,
+      message: "Pilih film yang ingin dibroadcast dulu.",
+      status: "error",
+    });
+    return;
+  }
+
+  try {
+    const result = await publishChannelBroadcast({
+      botKind: "partner",
+      botToken: partnerBot.botToken,
+      botUsername: partnerBot.botUsername,
+      buttonLabel,
+      caption,
+      channelUsername,
+      movieId,
+      ownerUserId: partnerBot.ownerUserId,
+      partnerBotId: partnerBot.id,
+      pinMessage,
+    });
+
+    revalidatePath("/partner-bot/broadcast");
+
+    const message = result.pinError
+      ? `Broadcast terkirim, tapi pin post gagal: ${result.pinError}`
+      : `Broadcast untuk ${partnerBot.label?.trim() || partnerBot.botName} berhasil dikirim.`;
+
+    redirectToPartnerBroadcast({
+      botId: partnerBot.id,
+      message,
+      status: "ok",
+    });
+  } catch (error) {
+    redirectToPartnerBroadcast({
+      botId: partnerBot.id,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Broadcast channel gagal dikirim.",
+      status: "error",
+    });
+  }
 }

@@ -5,6 +5,7 @@ import {
   consumeTelegramReferralIntent,
   registerAffiliateClick,
 } from "@/lib/affiliate";
+import { resolveChannelBroadcastStartParam } from "@/lib/channel-broadcasts";
 import {
   extractAffiliateCodeFromStartParam,
 } from "@/lib/telegram-miniapp";
@@ -51,6 +52,10 @@ export async function POST(request: NextRequest) {
         : null;
     const partnerReferralCode =
       matchedBot.kind === "partner" ? matchedBot.ownerReferralCode : null;
+    const broadcastTarget =
+      (await resolveChannelBroadcastStartParam(
+        telegram.startParam ?? fallbackStartParam,
+      ).catch(() => null)) ?? null;
     const referralCode =
       partnerReferralCode ??
       referralCodeFromInitData ??
@@ -80,6 +85,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      redirectPath: broadcastTarget ? `/movie/${broadcastTarget.movieId}` : null,
       user: {
         id: user.id,
         name: user.name,
