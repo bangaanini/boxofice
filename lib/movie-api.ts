@@ -1,7 +1,21 @@
 import { formatMovieTitle } from "@/lib/movie-title";
 import { isBlockedMovieCandidate } from "@/lib/movie-visibility";
 
-const BASE_URL = "https://api.sonzaix.indevs.in";
+const DEFAULT_BASE_URL =
+  "https://dgucknjvjhmdzhhfouyg.supabase.co/functions/v1/lk21";
+const LEGACY_BASE_PATH = "/lk21";
+
+function normalizeBaseUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return DEFAULT_BASE_URL;
+  }
+
+  return trimmed.replace(/\/+$/, "");
+}
+
+const BASE_URL = normalizeBaseUrl(process.env.MOVIE_API_BASE_URL);
 
 type JsonRecord = Record<string, unknown>;
 const API_REQUEST_TIMEOUT_MS = 10000;
@@ -170,19 +184,54 @@ function cleanSynopsis(value: string | undefined): string | undefined {
   return cleaned;
 }
 
+function isSupabaseEdgeBaseUrl(baseUrl: string) {
+  return (
+    baseUrl.includes(".supabase.co/functions/v1/") &&
+    /\/functions\/v1\/[^/]+$/i.test(baseUrl)
+  );
+}
+
+function buildUpstreamUrl(path: string) {
+  if (!isSupabaseEdgeBaseUrl(BASE_URL)) {
+    return `${BASE_URL}${path}`;
+  }
+
+  const [pathname, search = ""] = path.split("?");
+  const normalizedPath = pathname.startsWith(LEGACY_BASE_PATH)
+    ? pathname.slice(LEGACY_BASE_PATH.length) || "/"
+    : pathname;
+  const url = new URL(BASE_URL);
+  const pathValue = normalizedPath.startsWith("/")
+    ? normalizedPath
+    : `/${normalizedPath}`;
+
+  url.searchParams.set("path", pathValue);
+
+  if (search) {
+    const incoming = new URLSearchParams(search);
+
+    for (const [key, value] of incoming.entries()) {
+      url.searchParams.set(key, value);
+    }
+  }
+
+  return url.toString();
+}
+
 async function requestJson<T>(
   path: string,
   init?: RequestInit & { next?: { revalidate?: number } },
 ): Promise<T> {
   const { headers, ...restInit } = init ?? {};
   let lastError: unknown;
+  const requestUrl = buildUpstreamUrl(path);
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${BASE_URL}${path}`, {
+      const response = await fetch(requestUrl, {
         ...restInit,
         headers: {
           Accept: "application/json",
