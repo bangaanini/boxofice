@@ -1,7 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 
+import { TelegramAwareUserAvatar } from "@/components/navigation/telegram-aware-user-avatar";
 import { HomeCatalog } from "@/components/movie/home-catalog";
 import { HomeHero } from "@/components/movie/home-hero";
 import { HomeSectionRow } from "@/components/movie/home-section-row";
@@ -68,6 +69,17 @@ function buildFilterHref(
   return query ? `/?${query}` : "/";
 }
 
+function appendStartParamToPath(path: string, startParam: string | null) {
+  if (!startParam) {
+    return path;
+  }
+
+  const params = new URLSearchParams();
+  params.set("tgWebAppStartParam", startParam);
+
+  return `${path}?${params.toString()}`;
+}
+
 function FilterChip({
   active,
   href,
@@ -119,39 +131,34 @@ export default async function Home({ searchParams }: HomePageProps) {
       incomingStartParam,
     ).catch(() => null);
 
+    if (broadcastTarget?.movieId) {
+      redirect(
+        appendStartParamToPath(
+          `/movie/${broadcastTarget.movieId}`,
+          incomingStartParam,
+        ),
+      );
+    }
+
     return (
       <main className="relative min-h-screen overflow-hidden bg-black px-4 py-8 text-white">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(220,38,38,0.2),transparent_26%),radial-gradient(circle_at_50%_18%,rgba(255,115,0,0.14),transparent_32%),linear-gradient(180deg,#120909_0%,#050505_58%,#020202_100%)]" />
 
         <section className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col justify-center">
           <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,20,0.92),rgba(8,8,8,0.96))] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-xl">
-            {broadcastTarget?.movie?.thumbnail ? (
-              <div className="mx-auto mb-5 overflow-hidden rounded-[18px] border border-white/10 bg-white/5 shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
-                <div className="relative mx-auto aspect-[4/5] w-24">
-                  <Image
-                    src={broadcastTarget.movie.thumbnail}
-                    alt={broadcastTarget.movie.title || "Poster film"}
-                    fill
-                    unoptimized
-                    sizes="96px"
-                    className="object-cover"
-                  />
-                </div>
-              </div>
-            ) : null}
-            <div className="mx-auto size-11 animate-spin rounded-full border-2 border-red-400/25 border-t-red-400" />
             <p className="mt-5 text-lg font-semibold text-white">
-              Membuka film dari channel...
+              Film broadcast tidak ditemukan
             </p>
-            {broadcastTarget?.movie?.title ? (
-              <p className="mt-2 text-sm font-medium text-orange-200">
-                {broadcastTarget.movie.title}
-              </p>
-            ) : null}
             <p className="mt-3 text-sm leading-7 text-neutral-400">
-              Kami sedang menyiapkan halaman tujuan kamu di Mini App. Tunggu
-              sebentar ya.
+              Link channel ini tidak lagi cocok dengan data broadcast yang
+              tersimpan. Silakan buka katalog atau kirim ulang broadcast.
             </p>
+            <Link
+              href="/"
+              className="mt-5 inline-flex h-11 items-center justify-center rounded-full bg-red-600 px-5 text-sm font-semibold text-white"
+            >
+              Buka katalog
+            </Link>
           </div>
         </section>
       </main>
@@ -159,24 +166,7 @@ export default async function Home({ searchParams }: HomePageProps) {
   }
 
   if (isSearchStart) {
-    return (
-      <main className="relative min-h-screen overflow-hidden bg-black px-4 py-8 text-white">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(220,38,38,0.2),transparent_26%),radial-gradient(circle_at_50%_18%,rgba(255,115,0,0.14),transparent_32%),linear-gradient(180deg,#120909_0%,#050505_58%,#020202_100%)]" />
-
-        <section className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col justify-center">
-          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,20,0.92),rgba(8,8,8,0.96))] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-xl">
-            <div className="mx-auto size-11 animate-spin rounded-full border-2 border-red-400/25 border-t-red-400" />
-            <p className="mt-5 text-lg font-semibold text-white">
-              Membuka pencarian film...
-            </p>
-            <p className="mt-3 text-sm leading-7 text-neutral-400">
-              Kami sedang menyiapkan halaman cari judul di Mini App. Tunggu
-              sebentar ya.
-            </p>
-          </div>
-        </section>
-      </main>
-    );
+    redirect(appendStartParamToPath("/search", incomingStartParam));
   }
 
   const [filters, catalog, homepage] = await Promise.all([
@@ -212,22 +202,12 @@ export default async function Home({ searchParams }: HomePageProps) {
         <div className="mx-auto w-full max-w-7xl px-4 pb-2 pt-[calc(env(safe-area-inset-top)+8px)] sm:px-8 lg:px-10">
           {user && displayName ? (
             <div className="flex items-center gap-3">
-              <div className="relative size-11 shrink-0 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
-                {user.telegramPhotoUrl ? (
-                  <Image
-                    src={user.telegramPhotoUrl}
-                    alt={displayName}
-                    fill
-                    unoptimized
-                    sizes="44px"
-                    className="object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white">
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-                )}
-              </div>
+              <TelegramAwareUserAvatar
+                alt={displayName}
+                className="size-11"
+                fallbackChar={displayName.charAt(0).toUpperCase()}
+                photoUrl={user.telegramPhotoUrl}
+              />
               <div className="min-w-0">
                 <p className="truncate text-base font-semibold text-white">
                   {displayName}

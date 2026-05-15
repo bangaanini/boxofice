@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 
+import { TelegramAwareUserAvatar } from "@/components/navigation/telegram-aware-user-avatar";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -157,9 +158,13 @@ export function DesktopTopNav({
             )}
             aria-label="Buka profil"
           >
-            <span className="flex size-8 items-center justify-center rounded-full bg-white/10 text-xs font-bold ring-1 ring-white/10">
-              {fallbackChar}
-            </span>
+            <TelegramAwareUserAvatar
+              alt={displayName ?? "Profil"}
+              className="size-8"
+              fallbackClassName="text-xs font-bold text-white"
+              fallbackChar={fallbackChar}
+              imageSizes="32px"
+            />
             <span className="hidden md:inline">
               {displayName ?? "Profil"}
             </span>
