@@ -96,6 +96,27 @@ export type FilmboxTrendingSyncSummary = SyncCounters & {
   perPage: number;
 };
 
+export type FilmboxHomeBatchSyncSummary = FilmboxHomeSyncSummary & {
+  offset: number;
+  limit: number;
+  totalMovies: number;
+  processed: number;
+  nextOffset: number;
+  done: boolean;
+};
+
+export type FilmboxTrendingBatchSyncSummary = SyncCounters & {
+  page: number;
+  perPage: number;
+  offset: number;
+  limit: number;
+  totalMovies: number;
+  processed: number;
+  nextOffset: number;
+  done: boolean;
+  pageFailed: boolean;
+};
+
 export type TitleCleanupSummary = {
   changed: number;
   scanned: number;
@@ -181,6 +202,23 @@ function resolvePerPage(
   const safeValue = Number.isFinite(rawValue)
     ? Math.trunc(rawValue)
     : DEFAULT_TRENDING_PER_PAGE;
+
+  return Math.min(Math.max(safeValue, 1), 60);
+}
+
+function resolveBatchLimit(
+  input: FormDataEntryValue | string | number | null | undefined,
+  fallback: number,
+) {
+  const rawValue =
+    typeof input === "string"
+      ? Number(input)
+      : typeof input === "number"
+        ? input
+        : fallback;
+  const safeValue = Number.isFinite(rawValue)
+    ? Math.trunc(rawValue)
+    : fallback;
 
   return Math.min(Math.max(safeValue, 1), 60);
 }
@@ -531,6 +569,64 @@ function combineHomeMovies(
   return { heroSet, sectionsBySource, moviesBySource };
 }
 
+export async function syncFilmboxHomeBatch(
+  options: { offset?: number; limit?: number } = {},
+): Promise<FilmboxHomeBatchSyncSummary> {
+  const offset = Math.max(0, Math.trunc(options.offset ?? 0));
+  const limit = resolveBatchLimit(options.limit, 9);
+  const home = await fetchFilmboxHome();
+  const { heroSet, sectionsBySource, moviesBySource } = combineHomeMovies(
+    home.heroBanners,
+    home.sections,
+  );
+  const allMovies = Array.from(moviesBySource.values());
+  const batchMovies = allMovies.slice(offset, offset + limit);
+  const counters = emptyCounters();
+  counters.fetched = batchMovies.length;
+
+  const sourceUrls = batchMovies.map((movie) => movie.sourceUrl);
+  const existing = sourceUrls.length
+    ? await prisma.movie.findMany({
+        where: { sourceUrl: { in: sourceUrls } },
+        select: MOVIE_SELECT,
+      })
+    : [];
+  const existingMap = new Map(
+    existing.map((entry) => [entry.sourceUrl, entry as ExistingSyncedMovie]),
+  );
+
+  await runWithConcurrency(
+    batchMovies,
+    resolveDetailConcurrency(),
+    async (movie) => {
+      const context = buildSectionContext(
+        movie.sourceUrl,
+        heroSet,
+        sectionsBySource,
+      );
+      await upsertMovieFromMetadata(movie, existingMap, counters, context);
+    },
+  );
+
+  const nextOffset = Math.min(offset + batchMovies.length, allMovies.length);
+
+  return {
+    ...counters,
+    heroBanners: home.heroBanners.length,
+    sections: home.sections.map((section) => ({
+      slug: section.slug,
+      title: section.title,
+      items: section.items.length,
+    })),
+    offset,
+    limit,
+    totalMovies: allMovies.length,
+    processed: batchMovies.length,
+    nextOffset,
+    done: nextOffset >= allMovies.length,
+  };
+}
+
 export async function syncFilmboxHome(): Promise<FilmboxHomeSyncSummary> {
   const home = await fetchFilmboxHome();
   const { heroSet, sectionsBySource, moviesBySource } = combineHomeMovies(
@@ -572,6 +668,94 @@ export async function syncFilmboxHome(): Promise<FilmboxHomeSyncSummary> {
       title: section.title,
       items: section.items.length,
     })),
+  };
+}
+
+export async function syncTrendingPageBatch(options: {
+  page?: number;
+  perPage?: number;
+  offset?: number;
+  limit?: number;
+}): Promise<FilmboxTrendingBatchSyncSummary> {
+  const page = resolveSyncPage(options.page ?? 0);
+  const perPage = resolvePerPage(options.perPage ?? DEFAULT_TRENDING_PER_PAGE);
+  const offset = Math.max(0, Math.trunc(options.offset ?? 0));
+  const limit = resolveBatchLimit(options.limit, 9);
+  const counters = emptyCounters();
+  let result: MovieListResult;
+
+  try {
+    result = await fetchTrending(page, perPage);
+  } catch (error) {
+    counters.errors.push(
+      `Page ${page} gagal: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
+
+    return {
+      ...counters,
+      page,
+      perPage,
+      offset,
+      limit,
+      totalMovies: 0,
+      processed: 0,
+      nextOffset: 0,
+      done: true,
+      pageFailed: true,
+    };
+  }
+
+  const batchMovies = Array.from(
+    new Map(
+      result.movies
+        .slice(offset, offset + limit)
+        .map((movie) => [movie.sourceUrl, movie]),
+    ).values(),
+  );
+  counters.fetched = batchMovies.length;
+
+  const sourceUrls = batchMovies.map((movie) => movie.sourceUrl);
+  const existing = sourceUrls.length
+    ? await prisma.movie.findMany({
+        where: { sourceUrl: { in: sourceUrls } },
+        select: MOVIE_SELECT,
+      })
+    : [];
+  const existingMap = new Map(
+    existing.map((entry) => [entry.sourceUrl, entry as ExistingSyncedMovie]),
+  );
+
+  await runWithConcurrency(
+    batchMovies,
+    resolveDetailConcurrency(),
+    async (movie) => {
+      const existingEntry = existingMap.get(movie.sourceUrl);
+      const context: UpsertContext = {
+        inHero: existingEntry?.inHero ?? false,
+        homeSections: existingEntry?.homeSections ?? [],
+      };
+      await upsertMovieFromMetadata(movie, existingMap, counters, context);
+    },
+  );
+
+  const nextOffset = Math.min(
+    offset + Math.max(batchMovies.length, limit),
+    result.movies.length,
+  );
+
+  return {
+    ...counters,
+    page,
+    perPage,
+    offset,
+    limit,
+    totalMovies: result.movies.length,
+    processed: batchMovies.length,
+    nextOffset,
+    done: nextOffset >= result.movies.length,
+    pageFailed: false,
   };
 }
 

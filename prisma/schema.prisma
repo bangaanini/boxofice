@@ -256,6 +256,44 @@ model CronJobCursor {
   updatedAt DateTime @updatedAt
 }
 
+model MovieSyncJob {
+  id                      String    @id @default(uuid())
+  runnerToken             String    @db.Text
+  target                  String
+  status                  String    @default("queued")
+  fromPage                Int       @default(0)
+  toPage                  Int       @default(0)
+  perPage                 Int       @default(18)
+  homeBatchSize           Int       @default(9)
+  movieBatchSize          Int       @default(9)
+  currentPhase            String    @default("home")
+  currentPage             Int       @default(0)
+  currentOffset           Int       @default(0)
+  processedHomeMovies     Int       @default(0)
+  totalHomeMovies         Int?
+  processedTrendingMovies Int       @default(0)
+  totalTrendingMovies     Int?
+  fetched                 Int       @default(0)
+  created                 Int       @default(0)
+  updated                 Int       @default(0)
+  unchanged               Int       @default(0)
+  skippedUnsupported      Int       @default(0)
+  upserted                Int       @default(0)
+  errorCount              Int       @default(0)
+  messages                String[]  @default([])
+  summary                 Json      @default("{}") @db.JsonB
+  errorMessage            String?   @db.Text
+  leaseId                 String?
+  leaseExpiresAt          DateTime?
+  startedAt               DateTime?
+  finishedAt              DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([updatedAt])
+}
+
 model VipProgramSettings {
   id                  String   @id @default(uuid())
   slug                String   @unique @default("default")

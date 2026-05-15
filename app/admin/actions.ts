@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { Prisma } from "@/app/generated/prisma/client";
 import {
@@ -26,11 +28,13 @@ import { createPartnerBotWebhookSecret } from "@/lib/telegram-partner-bots";
 import {
   cleanupMovieTitles,
   resolveSyncPage,
-  syncFilmboxHome,
-  syncTrendingPages,
-  type FilmboxHomeSyncSummary,
-  type FilmboxTrendingSyncSummary,
 } from "@/lib/movie-sync";
+import {
+  createMovieSyncJob,
+  getMovieSyncJobRunner,
+  triggerMovieSyncJob,
+  type MovieSyncTarget,
+} from "@/lib/movie-sync-jobs";
 import { prisma } from "@/lib/prisma";
 import { getVipProgramSettingsSafe } from "@/lib/vip";
 
@@ -49,47 +53,42 @@ function resolveRedirectTarget(
   return path || fallbackPath;
 }
 
-function buildHomeSyncParams(summary: FilmboxHomeSyncSummary) {
-  return new URLSearchParams({
-    sync: summary.errors.length ? "partial" : "ok",
-    target: "home",
-    created: String(summary.created),
-    updated: String(summary.updated),
-    unchanged: String(summary.unchanged),
-    skippedUnsupported: String(summary.skippedUnsupported),
-    upserted: String(summary.upserted),
-    fetched: String(summary.fetched),
-    errors: String(summary.errors.length),
-    heroBanners: String(summary.heroBanners),
-    sectionCount: String(summary.sections.length),
-    message: summary.errors[0] ?? "",
-  });
+function normalizeAppOrigin(value: string | undefined | null) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
 }
 
-function buildTrendingSyncParams(summary: FilmboxTrendingSyncSummary) {
-  return new URLSearchParams({
-    sync: summary.errors.length ? "partial" : "ok",
-    target: "trending",
-    created: String(summary.created),
-    updated: String(summary.updated),
-    unchanged: String(summary.unchanged),
-    skippedUnsupported: String(summary.skippedUnsupported),
-    upserted: String(summary.upserted),
-    fetched: String(summary.fetched),
-    errors: String(summary.errors.length),
-    fromPage: String(summary.fromPage),
-    toPage: String(summary.toPage),
-    perPage: String(summary.perPage),
-    message: summary.errors[0] ?? "",
-  });
+async function resolveAppOrigin() {
+  const configuredOrigin = normalizeAppOrigin(
+    process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL,
+  );
+
+  if (configuredOrigin) {
+    return configuredOrigin;
+  }
+
+  const headersList = await headers();
+  const host =
+    headersList.get("x-forwarded-host") ?? headersList.get("host");
+  const protocol = headersList.get("x-forwarded-proto") ?? "http";
+
+  return host ? `${protocol}://${host}` : "http://localhost:3000";
 }
 
 export async function syncMoviesFromAdmin(formData: FormData) {
   await requireAdminSession();
   const rawTarget = String(formData.get("target") ?? "home");
-  const target = rawTarget === "trending" || rawTarget === "all"
-    ? rawTarget
-    : "home";
+  const target: MovieSyncTarget =
+    rawTarget === "trending" || rawTarget === "all" ? rawTarget : "home";
   const redirectBasePath = resolveRedirectTarget(formData, "/admin/sync");
   const fromPage = resolveSyncPage(formData.get("fromPage") ?? formData.get("page") ?? 0);
   const toPage = resolveSyncPage(formData.get("toPage") ?? fromPage);
@@ -98,64 +97,31 @@ export async function syncMoviesFromAdmin(formData: FormData) {
     ? Math.min(Math.max(Math.trunc(perPageRaw), 1), 60)
     : 18;
 
-  let redirectPath = `${redirectBasePath}?sync=ok&target=${target}`;
+  let redirectPath = `${redirectBasePath}?sync=queued&target=${target}`;
 
   try {
-    if (target === "home") {
-      const summary = await syncFilmboxHome();
-      const params = buildHomeSyncParams(summary);
-      redirectPath = `${redirectBasePath}?${params.toString()}`;
-    } else if (target === "trending") {
-      const summary = await syncTrendingPages({
-        fromPage,
-        toPage,
-        perPage,
-      });
-      const params = buildTrendingSyncParams(summary);
-      redirectPath = `${redirectBasePath}?${params.toString()}`;
-    } else {
-      const home = await syncFilmboxHome();
-      const trending = await syncTrendingPages({
-        fromPage,
-        toPage,
-        perPage,
-      });
-      const totalErrors = home.errors.length + trending.errors.length;
-      const params = new URLSearchParams({
-        sync: totalErrors ? "partial" : "ok",
-        target: "all",
-        homeCreated: String(home.created),
-        homeUpdated: String(home.updated),
-        homeUnchanged: String(home.unchanged),
-        homeUpserted: String(home.upserted),
-        homeSkippedUnsupported: String(home.skippedUnsupported),
-        homeFetched: String(home.fetched),
-        homeHeroBanners: String(home.heroBanners),
-        homeSectionCount: String(home.sections.length),
-        homeErrors: String(home.errors.length),
-        trendingCreated: String(trending.created),
-        trendingUpdated: String(trending.updated),
-        trendingUnchanged: String(trending.unchanged),
-        trendingUpserted: String(trending.upserted),
-        trendingSkippedUnsupported: String(trending.skippedUnsupported),
-        trendingFetched: String(trending.fetched),
-        trendingFromPage: String(trending.fromPage),
-        trendingToPage: String(trending.toPage),
-        trendingErrors: String(trending.errors.length),
-        message: home.errors[0] ?? trending.errors[0] ?? "",
-      });
-      redirectPath = `${redirectBasePath}?${params.toString()}`;
-    }
+    const job = await createMovieSyncJob({
+      target,
+      fromPage,
+      toPage,
+      perPage,
+    });
+    const origin = await resolveAppOrigin();
 
-    revalidatePath("/");
-    revalidatePath("/admin");
+    after(() =>
+      triggerMovieSyncJob({
+        jobId: job.id,
+        runnerToken: job.runnerToken,
+        origin,
+      }),
+    );
+
     revalidatePath("/admin/sync");
-    revalidatePath("/admin/users");
-    revalidatePath("/admin/settings");
-    revalidatePath("/search");
-    revalidatePath("/library");
-    revalidatePath("/browse/[slug]", "page");
-    revalidatePath("/movie/[id]", "page");
+    redirectPath = `${redirectBasePath}?${new URLSearchParams({
+      sync: "queued",
+      target,
+      jobId: job.id,
+    }).toString()}`;
   } catch (error) {
     const params = new URLSearchParams({
       message: error instanceof Error ? error.message : "Sync gagal",
@@ -167,6 +133,44 @@ export async function syncMoviesFromAdmin(formData: FormData) {
   }
 
   redirect(redirectPath);
+}
+
+export async function resumeMovieSyncJobFromAdmin(formData: FormData) {
+  await requireAdminSession();
+  const redirectBasePath = resolveRedirectTarget(formData, "/admin/sync");
+  const jobId = String(formData.get("jobId") ?? "").trim();
+
+  if (!jobId) {
+    redirect(
+      `${redirectBasePath}?sync=error&message=${encodeURIComponent("Job sync tidak ditemukan")}`,
+    );
+  }
+
+  const runner = await getMovieSyncJobRunner(jobId);
+
+  if (!runner) {
+    redirect(
+      `${redirectBasePath}?sync=error&message=${encodeURIComponent("Job sync sudah selesai atau tidak ditemukan")}`,
+    );
+  }
+
+  const origin = await resolveAppOrigin();
+
+  after(() =>
+    triggerMovieSyncJob({
+      jobId: runner.id,
+      runnerToken: runner.runnerToken,
+      origin,
+    }),
+  );
+
+  revalidatePath("/admin/sync");
+  redirect(
+    `${redirectBasePath}?${new URLSearchParams({
+      sync: "resumed",
+      jobId: runner.id,
+    }).toString()}`,
+  );
 }
 
 export async function cleanupMovieTitlesFromAdmin(formData: FormData) {

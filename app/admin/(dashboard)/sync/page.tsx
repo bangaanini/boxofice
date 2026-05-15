@@ -1,15 +1,22 @@
 import {
   cleanupMovieTitlesFromAdmin,
   refreshWebCacheFromAdmin,
+  resumeMovieSyncJobFromAdmin,
   syncMoviesFromAdmin,
 } from "@/app/admin/actions";
 import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
+import { MovieSyncAutoRefresh } from "@/components/admin/movie-sync-auto-refresh";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { SyncSubmitButton } from "@/components/admin/sync-submit-button";
 import { getAdminOverviewData } from "@/lib/admin-dashboard";
+import {
+  isActiveMovieSyncJob,
+  listRecentMovieSyncJobs,
+  type MovieSyncJob,
+} from "@/lib/movie-sync-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +60,7 @@ type AdminSyncPageProps = {
     titleScanned?: string;
     titleUnchanged?: string;
     webCache?: string;
+    jobId?: string;
   }>;
 };
 
@@ -74,12 +82,16 @@ const SYNC_BUTTONS = [
   },
 ] as const;
 
+function isLegacySyncStatus(value: string | undefined) {
+  return value === "ok" || value === "partial" || value === "error";
+}
+
 function HomeSyncBanner({
   params,
 }: {
   params: Awaited<AdminSyncPageProps["searchParams"]>;
 }) {
-  if (!params.sync || params.target !== "home") {
+  if (!isLegacySyncStatus(params.sync) || params.target !== "home") {
     return null;
   }
 
@@ -124,7 +136,7 @@ function TrendingSyncBanner({
 }: {
   params: Awaited<AdminSyncPageProps["searchParams"]>;
 }) {
-  if (!params.sync || params.target !== "trending") {
+  if (!isLegacySyncStatus(params.sync) || params.target !== "trending") {
     return null;
   }
 
@@ -170,7 +182,7 @@ function AllSyncBanner({
 }: {
   params: Awaited<AdminSyncPageProps["searchParams"]>;
 }) {
-  if (!params.sync || params.target !== "all") {
+  if (!isLegacySyncStatus(params.sync) || params.target !== "all") {
     return null;
   }
 
@@ -274,12 +286,221 @@ function WebCacheBanner({
   );
 }
 
+function BackgroundSyncNotice({
+  params,
+}: {
+  params: Awaited<AdminSyncPageProps["searchParams"]>;
+}) {
+  if (params.sync === "queued") {
+    return (
+      <AdminSurface className="text-sm leading-6 text-emerald-100">
+        Job sync sudah masuk antrean background
+        {params.jobId ? (
+          <>
+            {" "}
+            <span className="font-mono text-emerald-200">
+              #{params.jobId.slice(0, 8)}
+            </span>
+          </>
+        ) : null}
+        . Halaman ini akan refresh otomatis selama job masih berjalan.
+      </AdminSurface>
+    );
+  }
+
+  if (params.sync === "resumed") {
+    return (
+      <AdminSurface className="text-sm leading-6 text-emerald-100">
+        Runner sync dipicu ulang. Progress akan lanjut dari batch terakhir yang
+        tersimpan.
+      </AdminSurface>
+    );
+  }
+
+  if (params.sync === "error" && !params.target) {
+    return (
+      <AdminSurface className="text-sm leading-6 text-red-200">
+        {params.message ?? "Job sync gagal diproses."}
+      </AdminSurface>
+    );
+  }
+
+  return null;
+}
+
+function formatJobDate(date: Date | null) {
+  if (!date) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function getJobProgress(job: MovieSyncJob) {
+  const processed = job.processedHomeMovies + job.processedTrendingMovies;
+  const knownTotal =
+    (job.totalHomeMovies ?? 0) + (job.totalTrendingMovies ?? 0);
+  const total = knownTotal > 0 ? knownTotal : null;
+  const percent = total
+    ? Math.min(100, Math.round((processed / total) * 100))
+    : job.status === "queued"
+      ? 0
+      : null;
+
+  return { processed, total, percent };
+}
+
+const JOB_STATUS_LABELS: Record<MovieSyncJob["status"], string> = {
+  queued: "Antre",
+  running: "Berjalan",
+  succeeded: "Selesai",
+  partial: "Selesai sebagian",
+  failed: "Gagal",
+};
+
+const JOB_STATUS_CLASSES: Record<MovieSyncJob["status"], string> = {
+  queued: "border-sky-300/20 bg-sky-500/10 text-sky-100",
+  running: "border-orange-300/20 bg-orange-500/10 text-orange-100",
+  succeeded: "border-emerald-300/20 bg-emerald-500/10 text-emerald-100",
+  partial: "border-yellow-300/20 bg-yellow-500/10 text-yellow-100",
+  failed: "border-red-300/20 bg-red-500/10 text-red-100",
+};
+
+function MovieSyncJobsPanel({ jobs }: { jobs: MovieSyncJob[] }) {
+  const hasActiveJob = jobs.some(isActiveMovieSyncJob);
+
+  return (
+    <AdminSurface>
+      <MovieSyncAutoRefresh active={hasActiveJob} />
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-orange-200">
+            Background jobs
+          </p>
+          <h2 className="mt-2 text-2xl font-bold text-white">
+            Progress sync film
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-400">
+            Tiap job diproses per batch kecil agar request Next tidak menunggu
+            seluruh katalog selesai.
+          </p>
+        </div>
+        {hasActiveJob ? (
+          <span className="rounded-full border border-orange-300/20 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-100">
+            Auto-refresh aktif
+          </span>
+        ) : null}
+      </div>
+
+      {jobs.length ? (
+        <div className="mt-5 space-y-3">
+          {jobs.map((job) => {
+            const progress = getJobProgress(job);
+            const active = isActiveMovieSyncJob(job);
+
+            return (
+              <div
+                key={job.id}
+                className="rounded-[18px] border border-white/10 bg-black/20 p-4"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${JOB_STATUS_CLASSES[job.status]}`}
+                      >
+                        {JOB_STATUS_LABELS[job.status]}
+                      </span>
+                      <span className="font-mono text-xs text-neutral-500">
+                        #{job.id.slice(0, 8)}
+                      </span>
+                      <span className="text-xs uppercase text-neutral-500">
+                        {job.target}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-neutral-300">
+                      Phase: <strong>{job.currentPhase}</strong>
+                      {job.currentPhase === "trending" ? (
+                        <>
+                          {" "}
+                          · Page: <strong>{job.currentPage}</strong>/
+                          {job.toPage}
+                        </>
+                      ) : null}
+                      {" "}
+                      · Offset: <strong>{job.currentOffset}</strong>
+                    </p>
+                    <p className="text-xs leading-5 text-neutral-500">
+                      Dibuat: {formatJobDate(job.createdAt)} · Update:{" "}
+                      {formatJobDate(job.updatedAt)}
+                    </p>
+                  </div>
+
+                  {active ? (
+                    <form action={resumeMovieSyncJobFromAdmin}>
+                      <input type="hidden" name="redirectTo" value="/admin/sync" />
+                      <input type="hidden" name="jobId" value={job.id} />
+                      <PendingSubmitButton
+                        pendingLabel="Memicu..."
+                        variant="secondary"
+                        className="h-10 border border-white/10 bg-white/10 text-white hover:bg-white/15"
+                      >
+                        Lanjutkan runner
+                      </PendingSubmitButton>
+                    </form>
+                  ) : (
+                    <span className="text-xs text-neutral-500">
+                      Selesai: {formatJobDate(job.finishedAt)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-orange-300 transition-all"
+                      style={{
+                        width: `${progress.percent ?? (active ? 45 : 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-neutral-400">
+                    Diproses: {progress.processed}
+                    {progress.total ? ` / ${progress.total}` : ""} · Baru:{" "}
+                    {job.created} · Update: {job.updated} · Tetap:{" "}
+                    {job.unchanged} · Unsupported: {job.skippedUnsupported} ·
+                    Error: {job.errorCount}
+                  </p>
+                </div>
+
+                {job.messages.length ? (
+                  <p className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
+                    {job.messages[job.messages.length - 1]}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-5 text-sm text-neutral-500">
+          Belum ada job sync background.
+        </p>
+      )}
+    </AdminSurface>
+  );
+}
+
 export default async function AdminSyncPage({
   searchParams,
 }: AdminSyncPageProps) {
-  const [params, overview] = await Promise.all([
+  const [params, overview, syncJobs] = await Promise.all([
     searchParams,
     getAdminOverviewData(),
+    listRecentMovieSyncJobs(),
   ]);
 
   return (
@@ -316,6 +537,8 @@ export default async function AdminSyncPage({
       <HomeSyncBanner params={params} />
       <TrendingSyncBanner params={params} />
       <AllSyncBanner params={params} />
+      <BackgroundSyncNotice params={params} />
+      <MovieSyncJobsPanel jobs={syncJobs} />
       <TitleCleanupBanner params={params} />
       <WebCacheBanner params={params} />
 
