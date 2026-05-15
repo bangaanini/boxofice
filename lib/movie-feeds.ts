@@ -6,6 +6,10 @@ import {
   excludeBlockedMoviesWhere,
   isBlockedMovieCandidate,
 } from "@/lib/movie-visibility";
+import {
+  normalizeSeasonsList,
+  type SeasonInfo,
+} from "@/lib/season-utils";
 
 export type MovieCard = {
   id: string;
@@ -27,12 +31,6 @@ export type RelatedMovieInput = {
   subjectType?: number | null;
   homeSections?: string[] | null;
   limit?: number;
-};
-
-export type SeasonInfo = {
-  season: number;
-  totalEpisodes: number;
-  episodes: number[];
 };
 
 export type MovieDetailData = {
@@ -108,48 +106,6 @@ function normalizeFilterValue(value?: string | null) {
   const normalized = value?.trim();
 
   return normalized ? normalized : null;
-}
-
-function normalizeSeasonsList(value: unknown): SeasonInfo[] | null {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const seasons: SeasonInfo[] = [];
-
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      continue;
-    }
-
-    const record = entry as Record<string, unknown>;
-    const seasonNumber = Number(record.season);
-    const totalEpisodes = Number(record.totalEpisodes ?? record.total_episodes);
-    const rawEpisodes = Array.isArray(record.episodes) ? record.episodes : [];
-    const episodes: number[] = [];
-
-    for (const ep of rawEpisodes) {
-      const parsed = Number(ep);
-
-      if (Number.isFinite(parsed)) {
-        episodes.push(parsed);
-      }
-    }
-
-    if (!Number.isFinite(seasonNumber)) {
-      continue;
-    }
-
-    seasons.push({
-      season: seasonNumber,
-      totalEpisodes: Number.isFinite(totalEpisodes)
-        ? totalEpisodes
-        : episodes.length,
-      episodes,
-    });
-  }
-
-  return seasons.length ? seasons : null;
 }
 
 function getCatalogWhere(filters: HomepageFilters = {}): Prisma.MovieWhereInput {

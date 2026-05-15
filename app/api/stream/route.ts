@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { hasBotOwnerPlaybackAccess } from "@/lib/bot-access";
 import { fetchGetPlay, MovieApiError } from "@/lib/movie-api";
+import { refreshSeriesEpisodeMetadataIfNeeded } from "@/lib/movie-series-metadata";
 import { prisma } from "@/lib/prisma";
+import {
+  normalizeSeasonsList,
+  resolveSeriesEpisode,
+} from "@/lib/season-utils";
 import { getCurrentUserSession } from "@/lib/user-auth";
 import {
   createPlaybackAccessToken,
@@ -21,17 +26,8 @@ type StreamLookup = {
   subjectType: number;
   totalSeason: number;
   totalEpisode: number;
+  seasonsList: unknown;
 };
-
-function clampInt(value: string | null, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
-
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
-}
 
 async function resolveStreamLookup(
   request: NextRequest,
@@ -52,6 +48,7 @@ async function resolveStreamLookup(
           subjectType: true,
           totalSeason: true,
           totalEpisode: true,
+          seasonsList: true,
         },
       })
     : findBy
@@ -65,6 +62,7 @@ async function resolveStreamLookup(
             subjectType: true,
             totalSeason: true,
             totalEpisode: true,
+            seasonsList: true,
           },
         })
       : null;
@@ -73,13 +71,25 @@ async function resolveStreamLookup(
     return null;
   }
 
+  const refreshedSeriesMetadata = await refreshSeriesEpisodeMetadataIfNeeded({
+    detailPath: movie.detailPath ?? movie.sourceUrl,
+    id: movie.id,
+    seasonsList: movie.seasonsList,
+    subjectType: movie.subjectType,
+    totalEpisode: movie.totalEpisode,
+    totalSeason: movie.totalSeason,
+  });
+
   return {
     movieId: movie.id,
     detailPath: movie.detailPath ?? movie.sourceUrl,
     subjectId: movie.subjectId,
     subjectType: movie.subjectType,
-    totalSeason: movie.totalSeason,
-    totalEpisode: movie.totalEpisode,
+    totalSeason: refreshedSeriesMetadata?.totalSeason ?? movie.totalSeason,
+    totalEpisode: refreshedSeriesMetadata?.totalEpisode ?? movie.totalEpisode,
+    seasonsList:
+      refreshedSeriesMetadata?.seasonsList ??
+      normalizeSeasonsList(movie.seasonsList),
   };
 }
 
@@ -90,20 +100,22 @@ function resolveEpisode(lookup: StreamLookup, request: NextRequest) {
     return { se: 0, ep: 0 };
   }
 
-  const seParam = clampInt(request.nextUrl.searchParams.get("se"), 1);
-  const epParam = clampInt(request.nextUrl.searchParams.get("ep"), 1);
-  const seasonCap = Math.max(1, lookup.totalSeason || 1);
-  const episodeCap = Math.max(1, lookup.totalEpisode || 1);
+  const selectedEpisode = resolveSeriesEpisode({
+    requestedEpisode: request.nextUrl.searchParams.get("ep"),
+    requestedSeason: request.nextUrl.searchParams.get("se"),
+    seasonsList: normalizeSeasonsList(lookup.seasonsList),
+    totalEpisode: lookup.totalEpisode,
+    totalSeason: lookup.totalSeason,
+  });
 
   return {
-    se: Math.min(Math.max(seParam, 1), seasonCap),
-    ep: Math.min(Math.max(epParam, 1), episodeCap),
+    se: selectedEpisode.season,
+    ep: selectedEpisode.episode,
   };
 }
 
 export async function GET(request: NextRequest) {
-  const [lookup, user, vipSettingsResult] = await Promise.all([
-    resolveStreamLookup(request),
+  const [user, vipSettingsResult] = await Promise.all([
     getCurrentUserSession(),
     getVipProgramSettingsSafe(),
   ]);
@@ -111,6 +123,8 @@ export async function GET(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const lookup = await resolveStreamLookup(request);
 
   if (!lookup) {
     return NextResponse.json(

@@ -14,6 +14,7 @@ import {
   getRelatedMovies,
   type MovieCard,
 } from "@/lib/movie-feeds";
+import { refreshSeriesEpisodeMetadataIfNeeded } from "@/lib/movie-series-metadata";
 import { prisma } from "@/lib/prisma";
 import {
   getEnvPublicAppUrl,
@@ -199,7 +200,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
     getCurrentUserSession(),
     getVipProgramSettingsSafe(),
   ]);
-  const movie = await getMovieDetailData(id);
+  let movie = await getMovieDetailData(id);
 
   if (!movie) {
     notFound();
@@ -208,6 +209,23 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
   if (isBlockedMovieCandidate(movie)) {
     notFound();
   }
+
+  const refreshedSeriesMetadata = await refreshSeriesEpisodeMetadataIfNeeded({
+    detailPath: movie.detailPath,
+    id: movie.id,
+    seasonsList: movie.seasonsList,
+    subjectType: movie.subjectType,
+    totalEpisode: movie.totalEpisode,
+    totalSeason: movie.totalSeason,
+  });
+
+  if (refreshedSeriesMetadata) {
+    movie = {
+      ...movie,
+      ...refreshedSeriesMetadata,
+    };
+  }
+
   const incomingReferralCode = extractAffiliateCodeFromStartParam(
     query.ref ??
       query.start_param ??
@@ -324,10 +342,14 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
                 initialSaved={Boolean(favorite)}
                 movieId={movie.id}
                 requiresAuth={!user}
+                seasonsList={movie.seasonsList}
                 shareText={shareDescription}
                 shareUrl={shareUrl.toString()}
+                subjectType={movie.subjectType}
                 telegramShareUrl={telegramShareUrl}
                 title={movie.title}
+                totalEpisode={movie.totalEpisode}
+                totalSeason={movie.totalSeason}
               />
               </div>
             </div>

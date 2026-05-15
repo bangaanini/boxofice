@@ -11,7 +11,10 @@ import {
 import { MovieSyncAutoRefresh } from "@/components/admin/movie-sync-auto-refresh";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { SyncSubmitButton } from "@/components/admin/sync-submit-button";
-import { getAdminOverviewData } from "@/lib/admin-dashboard";
+import {
+  getAdminOverviewData,
+  getAdminSyncCatalogTables,
+} from "@/lib/admin-dashboard";
 import {
   isActiveMovieSyncJob,
   listRecentMovieSyncJobs,
@@ -82,8 +85,116 @@ const SYNC_BUTTONS = [
   },
 ] as const;
 
+type CatalogTableItem =
+  Awaited<ReturnType<typeof getAdminSyncCatalogTables>>["movies"][number];
+
 function isLegacySyncStatus(value: string | undefined) {
   return value === "ok" || value === "partial" || value === "error";
+}
+
+function formatCatalogDate(date: Date) {
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function fallbackText(value: string | null) {
+  return value?.trim() || "-";
+}
+
+function CatalogTable({
+  items,
+  label,
+  total,
+}: {
+  items: CatalogTableItem[];
+  label: string;
+  total: number;
+}) {
+  return (
+    <div className="overflow-hidden rounded-[18px] border border-white/10 bg-black/20">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <p className="text-sm font-semibold text-white">{label}</p>
+        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-neutral-300">
+          {total}
+        </span>
+      </div>
+      <div className="max-h-80 overflow-auto">
+        <table className="min-w-[760px] table-fixed text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-[#120c0b] text-[11px] uppercase tracking-[0.14em] text-neutral-500">
+            <tr>
+              <th className="w-[38%] px-4 py-3 font-semibold">Judul</th>
+              <th className="w-[12%] px-3 py-3 font-semibold">Tahun</th>
+              <th className="w-[20%] px-3 py-3 font-semibold">Genre</th>
+              <th className="w-[12%] px-3 py-3 font-semibold">Kualitas</th>
+              <th className="w-[8%] px-3 py-3 font-semibold">Sub</th>
+              <th className="w-[10%] px-3 py-3 font-semibold">Update</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10 text-neutral-300">
+            {items.length ? (
+              items.map((item) => (
+                <tr key={item.id} className="hover:bg-white/[0.03]">
+                  <td className="px-4 py-3">
+                    <div className="truncate font-medium text-neutral-100">
+                      {item.title}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">{fallbackText(item.year)}</td>
+                  <td className="px-3 py-3">
+                    <div className="truncate">{fallbackText(item.genre)}</div>
+                  </td>
+                  <td className="px-3 py-3">{fallbackText(item.quality)}</td>
+                  <td className="px-3 py-3">
+                    {item.hasIndonesianSubtitle ? "Ada" : "-"}
+                  </td>
+                  <td className="px-3 py-3 text-xs text-neutral-500">
+                    {formatCatalogDate(item.updatedAt)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-4 py-10 text-center text-sm text-neutral-500"
+                >
+                  Belum ada data.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CatalogTables({
+  catalog,
+  movieCount,
+  seriesCount,
+}: {
+  catalog: Awaited<ReturnType<typeof getAdminSyncCatalogTables>>;
+  movieCount: number;
+  seriesCount: number;
+}) {
+  return (
+    <div className="mt-6 grid gap-4 xl:grid-cols-2">
+      <CatalogTable
+        items={catalog.movies}
+        label="Daftar movie"
+        total={movieCount}
+      />
+      <CatalogTable
+        items={catalog.series}
+        label="Daftar series"
+        total={seriesCount}
+      />
+    </div>
+  );
 }
 
 function HomeSyncBanner({
@@ -497,10 +608,11 @@ function MovieSyncJobsPanel({ jobs }: { jobs: MovieSyncJob[] }) {
 export default async function AdminSyncPage({
   searchParams,
 }: AdminSyncPageProps) {
-  const [params, overview, syncJobs] = await Promise.all([
+  const [params, overview, syncJobs, catalog] = await Promise.all([
     searchParams,
     getAdminOverviewData(),
     listRecentMovieSyncJobs(),
+    getAdminSyncCatalogTables(),
   ]);
 
   return (
@@ -532,6 +644,12 @@ export default async function AdminSyncPage({
             value={overview.indonesianSubtitleCount}
           />
         </div>
+
+        <CatalogTables
+          catalog={catalog}
+          movieCount={overview.movieCount}
+          seriesCount={overview.seriesCount}
+        />
       </AdminSurface>
 
       <HomeSyncBanner params={params} />

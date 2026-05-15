@@ -5,6 +5,10 @@ import { fetchDetail } from "@/lib/movie-api";
 import { formatMovieTitle } from "@/lib/movie-title";
 import { prisma } from "@/lib/prisma";
 import { isBlockedMovieCandidate } from "@/lib/movie-visibility";
+import {
+  countEpisodesFromSeasons,
+  normalizeSeasonsList,
+} from "@/lib/season-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +68,13 @@ export default async function MovieSourcePage({
 
   const releaseDate = detail.releaseDate ?? null;
   const year = releaseDate ? releaseDate.slice(0, 4) : null;
+  const seasonsList = normalizeSeasonsList(detail.seasonsList);
+  const episodeCount = countEpisodesFromSeasons(seasonsList);
+  const totalEpisode = Math.max(detail.totalEpisode ?? 1, episodeCount ?? 1);
+  const totalSeason = Math.max(
+    detail.totalSeason ?? 1,
+    seasonsList?.length ?? 1,
+  );
   const upsertData = {
     detailPath: detail.detailPath,
     subjectId: detail.subjectId,
@@ -81,11 +92,11 @@ export default async function MovieSourcePage({
     country: detail.country ?? null,
     bahasa: detail.bahasa ?? null,
     hasIndonesianSubtitle: detail.hasIndonesianSubtitle ?? false,
-    totalEpisode: detail.totalEpisode ?? 1,
-    totalSeason: detail.totalSeason ?? 1,
+    totalEpisode,
+    totalSeason,
     seasonsList:
-      detail.seasonsList.length
-        ? (detail.seasonsList as unknown as Prisma.InputJsonValue)
+      seasonsList?.length
+        ? (seasonsList as unknown as Prisma.InputJsonValue)
         : Prisma.JsonNull,
     trailerUrl: detail.trailerUrl ?? null,
     detailSyncedAt: new Date(),

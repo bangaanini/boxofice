@@ -5,7 +5,12 @@ import { Star } from "lucide-react";
 import { ImmersiveHidden } from "@/components/feedback/immersive-hidden";
 import { WatchPlayer } from "@/components/movie/watch-player";
 import { Badge } from "@/components/ui/badge";
+import { refreshSeriesEpisodeMetadataIfNeeded } from "@/lib/movie-series-metadata";
 import { prisma } from "@/lib/prisma";
+import {
+  normalizeSeasonsList,
+  resolveSeriesEpisode,
+} from "@/lib/season-utils";
 import { requireUserSession } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +30,7 @@ async function getWatchData(id: string) {
     where: { id },
     select: {
       id: true,
+      detailPath: true,
       title: true,
       thumbnail: true,
       description: true,
@@ -33,6 +39,7 @@ async function getWatchData(id: string) {
       subjectType: true,
       totalSeason: true,
       totalEpisode: true,
+      seasonsList: true,
       hasIndonesianSubtitle: true,
     },
   });
@@ -42,20 +49,6 @@ async function getWatchData(id: string) {
   }
 
   return { movie };
-}
-
-function clampInt(value: string | undefined, fallback: number, max: number) {
-  if (!value) {
-    return fallback;
-  }
-
-  const parsed = Number(value);
-
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-
-  return Math.min(Math.max(Math.trunc(parsed), 1), Math.max(1, max));
 }
 
 export default async function WatchPage({
@@ -73,14 +66,35 @@ export default async function WatchPage({
     notFound();
   }
 
-  const { movie } = data;
+  let { movie } = data;
+  const refreshedSeriesMetadata = await refreshSeriesEpisodeMetadataIfNeeded({
+    detailPath: movie.detailPath,
+    id: movie.id,
+    seasonsList: movie.seasonsList,
+    subjectType: movie.subjectType,
+    totalEpisode: movie.totalEpisode,
+    totalSeason: movie.totalSeason,
+  });
+
+  if (refreshedSeriesMetadata) {
+    movie = {
+      ...movie,
+      ...refreshedSeriesMetadata,
+    };
+  }
+
   const isSeries = movie.subjectType === 2;
-  const seasonNumber = isSeries
-    ? clampInt(query.se, 1, movie.totalSeason || 1)
-    : 0;
-  const episodeNumber = isSeries
-    ? clampInt(query.ep, 1, movie.totalEpisode || 1)
-    : 0;
+  const selectedEpisode = isSeries
+    ? resolveSeriesEpisode({
+        requestedEpisode: query.ep,
+        requestedSeason: query.se,
+        seasonsList: normalizeSeasonsList(movie.seasonsList),
+        totalEpisode: movie.totalEpisode,
+        totalSeason: movie.totalSeason,
+      })
+    : null;
+  const seasonNumber = selectedEpisode?.season ?? 0;
+  const episodeNumber = selectedEpisode?.episode ?? 0;
   const episodeLabel = isSeries
     ? `Season ${seasonNumber} · Episode ${episodeNumber}`
     : null;

@@ -11,6 +11,10 @@ import { formatMovieTitle } from "@/lib/movie-title";
 import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isBlockedMovieCandidate } from "@/lib/movie-visibility";
+import {
+  countEpisodesFromSeasons,
+  normalizeSeasonsList,
+} from "@/lib/season-utils";
 
 export const DEFAULT_SYNC_PAGE = 0;
 export const DEFAULT_SYNC_PAGES = 3;
@@ -42,6 +46,7 @@ type ExistingSyncedMovie = {
   hasIndonesianSubtitle: boolean;
   totalEpisode: number;
   totalSeason: number;
+  seasonsList: unknown;
   trailerUrl: string | null;
   actors: string[];
   directors: string[];
@@ -143,6 +148,7 @@ const MOVIE_SELECT = {
   hasIndonesianSubtitle: true,
   totalEpisode: true,
   totalSeason: true,
+  seasonsList: true,
   trailerUrl: true,
   actors: true,
   directors: true,
@@ -304,6 +310,40 @@ function arraysEqual(left: string[], right: string[]) {
   return true;
 }
 
+function getStoredSeasonsListInput(existing?: ExistingSyncedMovie) {
+  const seasonsList = normalizeSeasonsList(existing?.seasonsList);
+
+  return seasonsList
+    ? (seasonsList as unknown as Prisma.InputJsonValue)
+    : Prisma.JsonNull;
+}
+
+function hasSeriesEpisodeMetadataGap(
+  movie: NormalizedMovieMetadata,
+  existing?: ExistingSyncedMovie,
+) {
+  const subjectType = existing?.subjectType ?? movie.subjectType;
+
+  if (subjectType !== 2) {
+    return false;
+  }
+
+  const seasonsList = normalizeSeasonsList(existing?.seasonsList);
+  const episodeCount = countEpisodesFromSeasons(seasonsList);
+
+  return !seasonsList?.length || !episodeCount;
+}
+
+function seasonsListChanged(
+  existing: ExistingSyncedMovie,
+  next: MovieMetadataData,
+) {
+  return (
+    JSON.stringify(normalizeSeasonsList(existing.seasonsList)) !==
+    JSON.stringify(normalizeSeasonsList(next.seasonsList))
+  );
+}
+
 function normalizeMovieData(
   movie: NormalizedMovieMetadata,
   detail: MovieDetail | null,
@@ -315,6 +355,22 @@ function normalizeMovieData(
   const yearFromRelease = releaseDate ? releaseDate.slice(0, 4) : null;
   const year = movie.year ?? yearFromRelease ?? existing?.year ?? null;
   const bahasa = detail?.bahasa ?? movie.bahasa ?? existing?.bahasa ?? null;
+  const detailSeasonsList = normalizeSeasonsList(detail?.seasonsList);
+  const existingSeasonsList = normalizeSeasonsList(existing?.seasonsList);
+  const effectiveSeasonsList = detailSeasonsList ?? existingSeasonsList;
+  const totalEpisodeFromSeasons =
+    countEpisodesFromSeasons(effectiveSeasonsList);
+  const totalEpisode = Math.max(
+    detail?.totalEpisode ??
+      existing?.totalEpisode ??
+      movie.totalEpisode ??
+      1,
+    totalEpisodeFromSeasons ?? 1,
+  );
+  const totalSeason = Math.max(
+    detail?.totalSeason ?? existing?.totalSeason ?? movie.totalSeason ?? 1,
+    effectiveSeasonsList?.length ?? 1,
+  );
 
   return {
     detailPath: detail?.detailPath ?? movie.detailPath,
@@ -342,19 +398,14 @@ function normalizeMovieData(
       movie.hasIndonesianSubtitle ??
       existing?.hasIndonesianSubtitle ??
       false,
-    totalEpisode:
-      detail?.totalEpisode ??
-      movie.totalEpisode ??
-      existing?.totalEpisode ??
-      1,
-    totalSeason:
-      detail?.totalSeason ?? movie.totalSeason ?? existing?.totalSeason ?? 1,
+    totalEpisode,
+    totalSeason,
     trailerUrl: detail?.trailerUrl ?? existing?.trailerUrl ?? null,
     actors: existing?.actors ?? [],
     directors: existing?.directors ?? [],
-    seasonsList: detail?.seasonsList?.length
-      ? (detail.seasonsList as unknown as Prisma.InputJsonValue)
-      : Prisma.JsonNull,
+    seasonsList: detailSeasonsList
+      ? (detailSeasonsList as unknown as Prisma.InputJsonValue)
+      : getStoredSeasonsListInput(existing),
     detailSyncedAt: detail ? new Date() : undefined,
   };
 }
@@ -379,6 +430,7 @@ function hasMovieChanged(
     existing.hasIndonesianSubtitle !== next.hasIndonesianSubtitle ||
     existing.totalEpisode !== next.totalEpisode ||
     existing.totalSeason !== next.totalSeason ||
+    seasonsListChanged(existing, next) ||
     existing.trailerUrl !== next.trailerUrl ||
     existing.detailPath !== next.detailPath ||
     existing.subjectId !== next.subjectId ||
@@ -427,7 +479,8 @@ async function upsertMovieFromMetadata(
     const needsDetail =
       !existing ||
       isStale(existing.detailSyncedAt, ttlMs) ||
-      !existing.subjectId;
+      !existing.subjectId ||
+      hasSeriesEpisodeMetadataGap(movie, existing);
     const detail = needsDetail
       ? await fetchDetailQuietly(movie.sourceUrl)
       : null;
@@ -478,6 +531,7 @@ async function upsertMovieFromMetadata(
         hasIndonesianSubtitle: nextData.hasIndonesianSubtitle,
         totalEpisode: nextData.totalEpisode,
         totalSeason: nextData.totalSeason,
+        seasonsList: normalizeSeasonsList(nextData.seasonsList),
         trailerUrl: nextData.trailerUrl,
         actors: nextData.actors,
         directors: nextData.directors,
@@ -506,6 +560,15 @@ async function upsertMovieFromMetadata(
 
     counters.updated += 1;
     counters.upserted += 1;
+    existingMap.set(movie.sourceUrl, {
+      ...existing,
+      ...nextData,
+      detailSyncedAt: nextData.detailSyncedAt ?? existing.detailSyncedAt,
+      homeSections: context.homeSections,
+      inHero: context.inHero,
+      seasonsList: normalizeSeasonsList(nextData.seasonsList),
+      sourceUrl: movie.sourceUrl,
+    });
   } catch (error) {
     counters.errors.push(
       `Failed to upsert ${movie.sourceUrl}: ${

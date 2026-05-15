@@ -6,6 +6,8 @@ import {
 import { getPaymentGatewaySettingsSafe, getVipPlansSafe } from "@/lib/payments";
 import { getVipProgramSettingsSafe } from "@/lib/vip";
 
+const ADMIN_SYNC_CATALOG_TABLE_LIMIT = 500;
+
 export async function getAdminOverviewData() {
   const [
     totalMovies,
@@ -64,6 +66,47 @@ export async function getAdminOverviewData() {
     paymentSchemaIssue: paymentSettings.schemaIssue ?? vipPlans.schemaIssue,
     paymentSchemaReady: paymentSettings.schemaReady && vipPlans.schemaReady,
     activeVipPlans: vipPlans.plans.length,
+  };
+}
+
+const ADMIN_SYNC_CATALOG_TABLE_SELECT = {
+  genre: true,
+  hasIndonesianSubtitle: true,
+  id: true,
+  quality: true,
+  title: true,
+  updatedAt: true,
+  year: true,
+} as const;
+
+export async function getAdminSyncCatalogTables() {
+  const [movies, series] = await Promise.all([
+    prisma.movie.findMany({
+      orderBy: {
+        updatedAt: "desc",
+      },
+      select: ADMIN_SYNC_CATALOG_TABLE_SELECT,
+      take: ADMIN_SYNC_CATALOG_TABLE_LIMIT,
+      where: {
+        subjectType: 1,
+      },
+    }),
+    prisma.movie.findMany({
+      orderBy: {
+        updatedAt: "desc",
+      },
+      select: ADMIN_SYNC_CATALOG_TABLE_SELECT,
+      take: ADMIN_SYNC_CATALOG_TABLE_LIMIT,
+      where: {
+        subjectType: 2,
+      },
+    }),
+  ]);
+
+  return {
+    limit: ADMIN_SYNC_CATALOG_TABLE_LIMIT,
+    movies,
+    series,
   };
 }
 
