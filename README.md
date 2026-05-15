@@ -16,6 +16,26 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Background Movie Sync Worker
+
+Admin sync creates a background job in the database. Run the worker in a
+separate process so the job keeps running even after the admin leaves
+`/admin/sync`:
+
+```bash
+npm run sync:worker
+```
+
+For a process manager such as PM2 or systemd, keep that command alive alongside
+the Next.js app. To process only one available batch and exit, use:
+
+```bash
+npm run sync:worker:once
+```
+
+Worker timing can be tuned with `SYNC_WORKER_IDLE_DELAY_MS`,
+`SYNC_WORKER_STEP_DELAY_MS`, and `SYNC_WORKER_ERROR_DELAY_MS`.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

@@ -65,7 +65,7 @@ type CreatedMovieSyncJob = {
   runnerToken: string;
 };
 
-type JobStepResult = {
+export type JobStepResult = {
   job: MovieSyncJob | null;
   claimed: boolean;
   shouldContinue: boolean;
@@ -83,6 +83,7 @@ const TERMINAL_STATUSES = new Set<MovieSyncJobStatus>([
   "partial",
   "failed",
 ]);
+let hasWarnedRevalidationFailure = false;
 
 function clampPositiveInteger(value: number, fallback: number, max: number) {
   if (!Number.isFinite(value)) {
@@ -199,16 +200,38 @@ function buildStatusAfterStep(
   return errorCount > 0 ? "partial" : "succeeded";
 }
 
+function safeRevalidatePath(path: string, type?: "layout" | "page") {
+  if (process.env.MOVIE_SYNC_WORKER === "1") {
+    return;
+  }
+
+  try {
+    if (type) {
+      revalidatePath(path, type);
+    } else {
+      revalidatePath(path);
+    }
+  } catch (error) {
+    if (!hasWarnedRevalidationFailure) {
+      hasWarnedRevalidationFailure = true;
+      console.warn(
+        "Movie sync cache revalidation skipped outside a Next.js request context.",
+        error,
+      );
+    }
+  }
+}
+
 function revalidateCatalogPages() {
-  revalidatePath("/");
-  revalidatePath("/admin");
-  revalidatePath("/admin/sync");
-  revalidatePath("/admin/users");
-  revalidatePath("/admin/settings");
-  revalidatePath("/search");
-  revalidatePath("/library");
-  revalidatePath("/browse/[slug]", "page");
-  revalidatePath("/movie/[id]", "page");
+  safeRevalidatePath("/");
+  safeRevalidatePath("/admin");
+  safeRevalidatePath("/admin/sync");
+  safeRevalidatePath("/admin/users");
+  safeRevalidatePath("/admin/settings");
+  safeRevalidatePath("/search");
+  safeRevalidatePath("/library");
+  safeRevalidatePath("/browse/[slug]", "page");
+  safeRevalidatePath("/movie/[id]", "page");
 }
 
 export function isActiveMovieSyncJob(job: Pick<MovieSyncJob, "status">) {
@@ -301,6 +324,31 @@ export async function getMovieSyncJobRunner(jobId: string) {
     SELECT "id", "runnerToken", "status"
     FROM "MovieSyncJob"
     WHERE "id" = ${jobId}
+    LIMIT 1
+  `;
+  const row = rows[0];
+
+  if (!row || TERMINAL_STATUSES.has(normalizeStatus(row.status))) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    runnerToken: row.runnerToken,
+  };
+}
+
+export async function getNextMovieSyncJobRunner() {
+  const rows = await prisma.$queryRaw<
+    Array<{ id: string; runnerToken: string; status: string }>
+  >`
+    SELECT "id", "runnerToken", "status"
+    FROM "MovieSyncJob"
+    WHERE "status" IN ('queued', 'running')
+      AND ("leaseExpiresAt" IS NULL OR "leaseExpiresAt" < NOW())
+    ORDER BY
+      CASE WHEN "status" = 'running' THEN 0 ELSE 1 END,
+      "createdAt" ASC
     LIMIT 1
   `;
   const row = rows[0];

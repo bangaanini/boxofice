@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "sync:worker": "tsx scripts/movie-sync-worker.ts",
+    "sync:worker:once": "tsx scripts/movie-sync-worker.ts --once",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint"
@@ -23,6 +25,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.5.0",
+    "tsx": "^4.21.0",
     "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
@@ -35,7 +38,6 @@
     "eslint-config-next": "16.2.3",
     "prisma": "^7.7.0",
     "tailwindcss": "^4",
-    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

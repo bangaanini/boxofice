@@ -1,9 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { after } from "next/server";
 
 import { Prisma } from "@/app/generated/prisma/client";
 import {
@@ -32,7 +30,7 @@ import {
 import {
   createMovieSyncJob,
   getMovieSyncJobRunner,
-  triggerMovieSyncJob,
+  runMovieSyncJobStep,
   type MovieSyncTarget,
 } from "@/lib/movie-sync-jobs";
 import { prisma } from "@/lib/prisma";
@@ -51,37 +49,6 @@ function resolveRedirectTarget(
   const path = sanitizeAdminRedirectPath(rawPath);
 
   return path || fallbackPath;
-}
-
-function normalizeAppOrigin(value: string | undefined | null) {
-  const trimmed = value?.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    return new URL(trimmed).origin;
-  } catch {
-    return null;
-  }
-}
-
-async function resolveAppOrigin() {
-  const configuredOrigin = normalizeAppOrigin(
-    process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL,
-  );
-
-  if (configuredOrigin) {
-    return configuredOrigin;
-  }
-
-  const headersList = await headers();
-  const host =
-    headersList.get("x-forwarded-host") ?? headersList.get("host");
-  const protocol = headersList.get("x-forwarded-proto") ?? "http";
-
-  return host ? `${protocol}://${host}` : "http://localhost:3000";
 }
 
 export async function syncMoviesFromAdmin(formData: FormData) {
@@ -106,15 +73,6 @@ export async function syncMoviesFromAdmin(formData: FormData) {
       toPage,
       perPage,
     });
-    const origin = await resolveAppOrigin();
-
-    after(() =>
-      triggerMovieSyncJob({
-        jobId: job.id,
-        runnerToken: job.runnerToken,
-        origin,
-      }),
-    );
 
     revalidatePath("/admin/sync");
     redirectPath = `${redirectBasePath}?${new URLSearchParams({
@@ -154,15 +112,10 @@ export async function resumeMovieSyncJobFromAdmin(formData: FormData) {
     );
   }
 
-  const origin = await resolveAppOrigin();
-
-  after(() =>
-    triggerMovieSyncJob({
-      jobId: runner.id,
-      runnerToken: runner.runnerToken,
-      origin,
-    }),
-  );
+  await runMovieSyncJobStep({
+    jobId: runner.id,
+    runnerToken: runner.runnerToken,
+  });
 
   revalidatePath("/admin/sync");
   redirect(

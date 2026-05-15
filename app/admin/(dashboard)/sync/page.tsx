@@ -496,12 +496,13 @@ function MovieSyncJobsPanel({ jobs }: { jobs: MovieSyncJob[] }) {
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-400">
             Tiap job diproses per batch kecil agar request Next tidak menunggu
-            seluruh katalog selesai.
+            seluruh katalog selesai. Worker sync akan memproses antrean di
+            background walaupun halaman ini ditutup.
           </p>
         </div>
         {hasActiveJob ? (
           <span className="rounded-full border border-orange-300/20 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-100">
-            Auto-refresh aktif
+            Diproses worker
           </span>
         ) : null}
       </div>
@@ -559,7 +560,7 @@ function MovieSyncJobsPanel({ jobs }: { jobs: MovieSyncJob[] }) {
                         variant="secondary"
                         className="h-10 border border-white/10 bg-white/10 text-white hover:bg-white/15"
                       >
-                        Lanjutkan runner
+                        Jalankan 1 batch
                       </PendingSubmitButton>
                     </form>
                   ) : (
