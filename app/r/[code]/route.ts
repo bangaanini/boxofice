@@ -17,7 +17,7 @@ type ReferralRouteContext = {
 };
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: ReferralRouteContext,
 ) {
   const { code } = await params;
@@ -25,6 +25,20 @@ export async function GET(
 
   if (normalizedCode) {
     await registerAffiliateClick(normalizedCode).catch(() => undefined);
+  }
+
+  const wantsWeb =
+    request.nextUrl.searchParams.get("w") === "1" ||
+    request.nextUrl.searchParams.get("via") === "web";
+
+  if (wantsWeb) {
+    const target = new URL("/signup", request.nextUrl);
+
+    if (normalizedCode) {
+      target.searchParams.set("ref", normalizedCode);
+    }
+
+    return NextResponse.redirect(target);
   }
 
   const telegram = await getTelegramBotSettingsSafe();
@@ -36,3 +50,4 @@ export async function GET(
     ),
   );
 }
+

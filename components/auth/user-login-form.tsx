@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 
 const initialState: UserAuthFormState = {};
 
-export function UserLoginForm() {
+export function UserLoginForm({ nextPath }: { nextPath?: string }) {
   const [state, formAction, isPending] = React.useActionState(
     loginUserAction,
     initialState,
@@ -20,6 +20,7 @@ export function UserLoginForm() {
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="next" value={nextPath ?? ""} />
       <label className="block">
         <span className="mb-2 block text-sm font-medium text-neutral-300">
           Email
@@ -74,10 +75,17 @@ export function UserLoginForm() {
       </Button>
 
       <Link
-        href="/signup"
+        href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
         className="flex h-12 items-center justify-center rounded-full border border-white/10 bg-black/30 px-4 text-sm font-medium text-neutral-200 transition-colors hover:bg-white/[0.04]"
       >
         Belum punya akun? Buat akun sekarang
+      </Link>
+
+      <Link
+        href={nextPath ? `/login-telegram?next=${encodeURIComponent(nextPath)}` : "/login-telegram"}
+        className="flex h-11 items-center justify-center gap-2 text-xs font-medium text-neutral-400 transition-colors hover:text-white"
+      >
+        Atau buka via Telegram Mini App
       </Link>
     </form>
   );

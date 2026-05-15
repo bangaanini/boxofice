@@ -14,8 +14,10 @@ const initialState: UserAuthFormState = {};
 
 export function UserSignupForm({
   referralCode,
+  nextPath,
 }: {
   referralCode?: string;
+  nextPath?: string;
 }) {
   const [state, formAction, isPending] = React.useActionState(
     signupUserAction,
@@ -24,6 +26,7 @@ export function UserSignupForm({
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="next" value={nextPath ?? ""} />
       {referralCode ? (
         <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
           Link undangan aktif. Setelah akun dibuat, referral akan otomatis
@@ -120,10 +123,17 @@ export function UserSignupForm({
       </Button>
 
       <Link
-        href="/login"
+        href={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"}
         className="flex h-12 items-center justify-center rounded-full border border-white/10 bg-black/30 px-4 text-sm font-medium text-neutral-200 transition-colors hover:bg-white/[0.04]"
       >
         Sudah punya akun? Masuk di sini
+      </Link>
+
+      <Link
+        href={nextPath ? `/login-telegram?next=${encodeURIComponent(nextPath)}` : "/login-telegram"}
+        className="flex h-11 items-center justify-center gap-2 text-xs font-medium text-neutral-400 transition-colors hover:text-white"
+      >
+        Atau buka via Telegram Mini App
       </Link>
     </form>
   );

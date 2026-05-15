@@ -10,14 +10,18 @@ type MovieCardLinkProps = {
   movie: MovieCard;
   className?: string;
   href?: string;
+  loading?: "eager" | "lazy";
   prefetch?: boolean;
+  priority?: boolean;
 };
 
 function MovieCardLinkComponent({
   movie,
   className,
   href,
+  loading = "lazy",
   prefetch = true,
+  priority = false,
 }: MovieCardLinkProps) {
   return (
     <Link
@@ -36,6 +40,9 @@ function MovieCardLinkComponent({
             alt={`${movie.title} poster`}
             fill
             unoptimized
+            loading={priority ? "eager" : loading}
+            priority={priority}
+            decoding="async"
             sizes="(max-width: 640px) 33vw, (max-width: 1024px) 25vw, 180px"
             className="object-cover transition-transform duration-500 group-hover:scale-[1.06]"
           />
@@ -71,7 +78,9 @@ export const MovieCardLink = React.memo(
   (previous, next) =>
     previous.className === next.className &&
     previous.href === next.href &&
+    previous.loading === next.loading &&
     previous.prefetch === next.prefetch &&
+    previous.priority === next.priority &&
     previous.movie.id === next.movie.id &&
     previous.movie.title === next.movie.title &&
     previous.movie.thumbnail === next.movie.thumbnail &&

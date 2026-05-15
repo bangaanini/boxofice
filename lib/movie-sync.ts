@@ -1,32 +1,33 @@
 import {
   fetchDetail,
-  fetchHome,
-  fetchNew,
-  fetchPlayableStream,
-  fetchPopular,
+  fetchFilmboxHome,
+  fetchTrending,
+  type FilmboxHomeSection,
   type MovieDetail,
   type MovieListResult,
-  type SanitizedStreamResponse,
+  type NormalizedMovieMetadata,
 } from "@/lib/movie-api";
 import { formatMovieTitle } from "@/lib/movie-title";
+import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isBlockedMovieCandidate } from "@/lib/movie-visibility";
 
-export type MovieFeedTarget = "home" | "popular" | "new";
-export const DEFAULT_SYNC_PAGE = 1;
+export const DEFAULT_SYNC_PAGE = 0;
 export const DEFAULT_SYNC_PAGES = 3;
 export const MAX_SYNC_PAGE = 5000;
 export const MAX_SYNC_PAGES = 20;
-const DEFAULT_SYNC_STREAM_VALIDATION_CONCURRENCY = 3;
-const MAX_SYNC_STREAM_VALIDATION_CONCURRENCY = 8;
-const DEFAULT_STREAM_CACHE_TTL_HOURS = 24;
-const STREAM_REUSABLE_FRESH_MS = 15 * 60 * 1000;
+export const DEFAULT_TRENDING_PER_PAGE = 18;
 
-type FeedDbField = "inHome" | "inPopular" | "inNew";
+const DEFAULT_SYNC_DETAIL_CONCURRENCY = 3;
+const MAX_SYNC_DETAIL_CONCURRENCY = 8;
+const DEFAULT_DETAIL_CACHE_TTL_HOURS = 24;
 
 type ExistingSyncedMovie = {
   id: string;
   sourceUrl: string;
+  detailPath: string | null;
+  subjectId: string | null;
+  subjectType: number;
   title: string;
   thumbnail: string | null;
   description: string | null;
@@ -36,20 +37,23 @@ type ExistingSyncedMovie = {
   rating: string | null;
   quality: string | null;
   releaseDate: string | null;
+  country: string | null;
+  bahasa: string | null;
+  hasIndonesianSubtitle: boolean;
+  totalEpisode: number;
+  totalSeason: number;
+  trailerUrl: string | null;
   actors: string[];
   directors: string[];
-  streams: string | null;
   detailSyncedAt: Date | null;
-  inHome: boolean;
-  inPopular: boolean;
-  inNew: boolean;
-  streamCache: {
-    checkedAt: Date;
-    sources: unknown;
-  } | null;
+  inHero: boolean;
+  homeSections: string[];
 };
 
 type MovieMetadataData = {
+  detailPath: string;
+  subjectId: string;
+  subjectType: number;
   title: string;
   thumbnail: string | null;
   description: string | null;
@@ -59,82 +63,37 @@ type MovieMetadataData = {
   rating: string | null;
   quality: string | null;
   releaseDate: string | null;
+  country: string | null;
+  bahasa: string | null;
+  hasIndonesianSubtitle: boolean;
+  totalEpisode: number;
+  totalSeason: number;
+  trailerUrl: string | null;
   actors: string[];
   directors: string[];
-  streams: string | null;
+  seasonsList: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
   detailSyncedAt?: Date;
 };
 
-type FetchedFeedPages = {
-  duplicateSkipped: number;
-  fetched: number;
-  hadFetchErrors: boolean;
-  moviesBySource: Map<string, MovieListResult["movies"][number]>;
-  pageErrors: string[];
-};
-
-export type FeedSyncSummary = {
-  target: MovieFeedTarget;
-  page?: number;
-  pages?: number;
+export type SyncCounters = {
   fetched: number;
   created: number;
-  existing: number;
   updated: number;
   unchanged: number;
-  upserted: number;
-  duplicateSkipped: number;
   skippedUnsupported: number;
-  deactivated: number;
-  hadFetchErrors: boolean;
-  active: number;
+  upserted: number;
   errors: string[];
 };
 
-export type CombinedSyncSummary = {
-  totalFetched: number;
-  totalCreated: number;
-  totalExisting: number;
-  totalUpdated: number;
-  totalUnchanged: number;
-  totalUpserted: number;
-  totalDuplicateSkipped: number;
-  totalSkippedUnsupported: number;
-  totalDeactivated: number;
-  pages: number;
-  targets: Record<MovieFeedTarget, FeedSyncSummary>;
+export type FilmboxHomeSyncSummary = SyncCounters & {
+  heroBanners: number;
+  sections: { title: string; slug: string; items: number }[];
 };
 
-export type FeedAuditSummary = {
-  target: MovieFeedTarget;
-  checked: number;
-  playable: number;
-  broken: number;
-  hidden: number;
-  refreshed: number;
-  errors: string[];
-};
-
-export type CombinedAuditSummary = {
-  totalChecked: number;
-  totalPlayable: number;
-  totalBroken: number;
-  totalHidden: number;
-  totalRefreshed: number;
-  totalErrors: number;
-  targets: Record<MovieFeedTarget, FeedAuditSummary>;
-  errors: string[];
-};
-
-export type MovieAuditTarget = MovieFeedTarget | "all";
-
-export type AuditBatchProgress = {
-  batchCount: number;
-  hasMore: boolean;
-  nextCursor: string | null;
-  summary: FeedAuditSummary | CombinedAuditSummary;
-  target: MovieAuditTarget;
-  total: number;
+export type FilmboxTrendingSyncSummary = SyncCounters & {
+  fromPage: number;
+  toPage: number;
+  perPage: number;
 };
 
 export type TitleCleanupSummary = {
@@ -143,33 +102,33 @@ export type TitleCleanupSummary = {
   unchanged: number;
 };
 
-export type RedirectMovieCleanupSummary = {
-  alreadyHidden: number;
-  hidden: number;
-  matched: number;
-  scanned: number;
-};
-
-const FEED_CONFIG: Record<
-  MovieFeedTarget,
-  {
-    dbField: FeedDbField;
-    fetcher: (page?: number) => Promise<MovieListResult>;
-  }
-> = {
-  home: {
-    dbField: "inHome",
-    fetcher: fetchHome,
-  },
-  popular: {
-    dbField: "inPopular",
-    fetcher: fetchPopular,
-  },
-  new: {
-    dbField: "inNew",
-    fetcher: fetchNew,
-  },
-};
+const MOVIE_SELECT = {
+  id: true,
+  sourceUrl: true,
+  detailPath: true,
+  subjectId: true,
+  subjectType: true,
+  title: true,
+  thumbnail: true,
+  description: true,
+  genre: true,
+  year: true,
+  duration: true,
+  rating: true,
+  quality: true,
+  releaseDate: true,
+  country: true,
+  bahasa: true,
+  hasIndonesianSubtitle: true,
+  totalEpisode: true,
+  totalSeason: true,
+  trailerUrl: true,
+  actors: true,
+  directors: true,
+  detailSyncedAt: true,
+  inHero: true,
+  homeSections: true,
+} as const;
 
 export function resolveSyncPages(
   input: FormDataEntryValue | string | number | null | undefined,
@@ -203,142 +162,38 @@ export function resolveSyncPage(
     ? Math.trunc(rawValue)
     : DEFAULT_SYNC_PAGE;
 
-  if (safeValue < 1) {
+  if (safeValue < 0) {
     return DEFAULT_SYNC_PAGE;
   }
 
   return Math.min(safeValue, MAX_SYNC_PAGE);
 }
 
-async function fetchFeedPages(
-  fetcher: (page?: number) => Promise<MovieListResult>,
-  pages: number,
-  startPage = 1,
-): Promise<FetchedFeedPages> {
-  const moviesBySource = new Map<string, MovieListResult["movies"][number]>();
-  let fetched = 0;
-  let duplicateSkipped = 0;
-  const pageErrors: string[] = [];
-  const endPage = startPage + pages - 1;
-  let totalPages = endPage;
-
-  for (let page = startPage; page <= endPage; page += 1) {
-    let result: MovieListResult;
-
-    try {
-      result = await fetcher(page);
-    } catch (error) {
-      pageErrors.push(
-        `Page ${page} gagal: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
-      break;
-    }
-
-    fetched += result.fetched;
-
-    if (typeof result.totalPages === "number" && result.totalPages > 0) {
-      totalPages = Math.min(totalPages, result.totalPages);
-    }
-
-    for (const movie of result.movies) {
-      if (moviesBySource.has(movie.sourceUrl)) {
-        duplicateSkipped += 1;
-      }
-
-      moviesBySource.set(movie.sourceUrl, movie);
-    }
-
-    if (page >= totalPages) {
-      break;
-    }
-  }
-
-  return {
-    duplicateSkipped,
-    fetched,
-    hadFetchErrors: pageErrors.length > 0,
-    moviesBySource,
-    pageErrors,
-  };
-}
-
-function mergeStringList(values: string[]) {
-  return values
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join(", ");
-}
-
-function normalizeMovieData(
-  movie: MovieListResult["movies"][number],
-  detail: MovieDetail | null,
-  existing?: ExistingSyncedMovie,
-): MovieMetadataData {
-  const rawTitle = detail?.title ?? movie.title;
-
-  return {
-    title: formatMovieTitle(rawTitle, {
-      sourceUrl: detail?.sourceUrl ?? movie.sourceUrl,
-      year: movie.year ?? existing?.year,
-    }),
-    thumbnail: detail?.poster ?? movie.thumbnail ?? null,
-    description:
-      detail?.synopsis ?? movie.description ?? existing?.description ?? null,
-    genre:
-      detail?.genres.length
-        ? mergeStringList(detail.genres)
-        : movie.genre ?? existing?.genre ?? null,
-    year: movie.year ?? existing?.year ?? null,
-    duration: movie.duration ?? existing?.duration ?? null,
-    rating: movie.rating ?? null,
-    quality: movie.quality ?? null,
-    releaseDate: detail?.releaseDate ?? existing?.releaseDate ?? null,
-    actors: detail?.actors ?? existing?.actors ?? [],
-    directors: detail?.directors ?? existing?.directors ?? [],
-    streams: detail?.streams ?? existing?.streams ?? null,
-    detailSyncedAt: detail ? new Date() : undefined,
-  };
-}
-
-function areStringArraysEqual(left: string[], right: string[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
-}
-
-function hasMovieChanged(
-  existing: ExistingSyncedMovie,
-  nextData: MovieMetadataData,
-  dbField: FeedDbField,
+function resolvePerPage(
+  input: FormDataEntryValue | string | number | null | undefined,
 ) {
-  return (
-    existing.title !== nextData.title ||
-    existing.thumbnail !== nextData.thumbnail ||
-    existing.description !== nextData.description ||
-    existing.genre !== nextData.genre ||
-    existing.year !== nextData.year ||
-    existing.duration !== nextData.duration ||
-    existing.rating !== nextData.rating ||
-    existing.quality !== nextData.quality ||
-    existing.releaseDate !== nextData.releaseDate ||
-    existing.streams !== nextData.streams ||
-    !areStringArraysEqual(existing.actors, nextData.actors) ||
-    !areStringArraysEqual(existing.directors, nextData.directors) ||
-    existing[dbField] !== true
-  );
+  const rawValue =
+    typeof input === "string"
+      ? Number(input)
+      : typeof input === "number"
+        ? input
+        : DEFAULT_TRENDING_PER_PAGE;
+  const safeValue = Number.isFinite(rawValue)
+    ? Math.trunc(rawValue)
+    : DEFAULT_TRENDING_PER_PAGE;
+
+  return Math.min(Math.max(safeValue, 1), 60);
 }
 
-function resolveStreamCacheTtlMs() {
+function resolveDetailTtlMs() {
   const rawValue = Number(
-    process.env.STREAM_CACHE_TTL_HOURS ?? DEFAULT_STREAM_CACHE_TTL_HOURS,
+    process.env.STREAM_CACHE_TTL_HOURS ??
+      process.env.DETAIL_CACHE_TTL_HOURS ??
+      DEFAULT_DETAIL_CACHE_TTL_HOURS,
   );
   const hours = Number.isFinite(rawValue)
     ? Math.max(1, Math.trunc(rawValue))
-    : DEFAULT_STREAM_CACHE_TTL_HOURS;
+    : DEFAULT_DETAIL_CACHE_TTL_HOURS;
 
   return hours * 60 * 60 * 1000;
 }
@@ -351,114 +206,21 @@ function isStale(date: Date | null | undefined, ttlMs: number) {
   return Date.now() - date.getTime() > ttlMs;
 }
 
-function hasCachedStream(
-  cache: ExistingSyncedMovie["streamCache"] | undefined,
-) {
-  return Array.isArray(cache?.sources) && cache.sources.length > 0;
-}
-
-function isReusableStreamFresh(
-  cache: ExistingSyncedMovie["streamCache"] | undefined,
-) {
-  return Boolean(cache?.checkedAt) && !isStale(cache?.checkedAt, STREAM_REUSABLE_FRESH_MS);
-}
-
-async function fetchMovieEnrichment(sourceUrl: string) {
-  let detail: MovieDetail | null = null;
-  let stream: SanitizedStreamResponse | null = null;
-
-  try {
-    detail = await fetchDetail(sourceUrl, { revalidate: 1800 });
-  } catch {
-    detail = null;
-  }
-
-  try {
-    stream = await fetchPlayableStream(sourceUrl, {
-      revalidate: 1800,
-    });
-  } catch {
-    stream = null;
-  }
-
-  return { detail, stream };
-}
-
-async function writeStreamCache(
-  movieId: string,
-  sourceUrl: string,
-  stream: SanitizedStreamResponse,
-) {
-  await prisma.movieStreamCache.upsert({
-    where: {
-      movieId,
-    },
-    create: {
-      movieId,
-      sourceUrl,
-      resolvedFrom: stream.resolvedFrom,
-      originalUrl: stream.originalUrl,
-      iframe: stream.iframe,
-      m3u8: stream.m3u8,
-      sources: stream.sources,
-      checkedAt: new Date(),
-    },
-    update: {
-      resolvedFrom: stream.resolvedFrom,
-      originalUrl: stream.originalUrl,
-      iframe: stream.iframe,
-      m3u8: stream.m3u8,
-      sources: stream.sources,
-      checkedAt: new Date(),
-    },
-  });
-}
-
-async function clearStreamCache(movieId: string) {
-  await prisma.movieStreamCache.deleteMany({
-    where: {
-      movieId,
-    },
-  });
-}
-
-function resolveAuditWhere(target: MovieAuditTarget) {
-  return target === "all"
-    ? {
-        OR: [{ inHome: true }, { inPopular: true }, { inNew: true }],
-      }
-    : {
-        [FEED_CONFIG[target].dbField]: true,
-      };
-}
-
-async function hideMovieFromCatalog(movieId: string) {
-  await prisma.movie.update({
-    where: {
-      id: movieId,
-    },
-    data: {
-      inHome: false,
-      inPopular: false,
-      inNew: false,
-    },
-  });
-}
-
-function resolveValidationConcurrency() {
+function resolveDetailConcurrency() {
   const rawValue = Number(
     process.env.SYNC_STREAM_VALIDATION_CONCURRENCY ??
-      DEFAULT_SYNC_STREAM_VALIDATION_CONCURRENCY,
+      process.env.SYNC_DETAIL_CONCURRENCY ??
+      DEFAULT_SYNC_DETAIL_CONCURRENCY,
   );
   const safeValue = Number.isFinite(rawValue)
     ? Math.trunc(rawValue)
-    : DEFAULT_SYNC_STREAM_VALIDATION_CONCURRENCY;
+    : DEFAULT_SYNC_DETAIL_CONCURRENCY;
 
   if (safeValue < 1) {
     return 1;
   }
 
-  return Math.min(safeValue, MAX_SYNC_STREAM_VALIDATION_CONCURRENCY);
+  return Math.min(safeValue, MAX_SYNC_DETAIL_CONCURRENCY);
 }
 
 async function runWithConcurrency<T>(
@@ -481,507 +243,404 @@ async function runWithConcurrency<T>(
   );
 }
 
-export async function syncMovieFeed(
-  target: MovieFeedTarget,
-  options: { page?: number; pages?: number } = {},
-): Promise<FeedSyncSummary> {
-  const config = FEED_CONFIG[target];
-  const page = resolveSyncPage(options.page);
-  const pages = options.page ? 1 : resolveSyncPages(options.pages);
-  const feed = await fetchFeedPages(config.fetcher, pages, options.page ? page : 1);
-  const moviesBySource = feed.moviesBySource;
-  const sourceUrls = Array.from(moviesBySource.keys());
-  const summary: FeedSyncSummary = {
-    target,
-    page: options.page ? page : undefined,
-    pages: options.page ? undefined : pages,
-    fetched: feed.fetched,
-    created: 0,
-    existing: 0,
-    updated: 0,
-    unchanged: 0,
-    upserted: 0,
-    duplicateSkipped: feed.duplicateSkipped,
-    skippedUnsupported: 0,
-    deactivated: 0,
-    hadFetchErrors: feed.hadFetchErrors,
-    active: sourceUrls.length,
-    errors: [...feed.pageErrors],
-  };
-  const existingMovies = await prisma.movie.findMany({
-    where: {
-      sourceUrl: {
-        in: sourceUrls,
-      },
-    },
-    select: {
-      id: true,
-      sourceUrl: true,
-      title: true,
-      thumbnail: true,
-      description: true,
-      genre: true,
-      year: true,
-      duration: true,
-      rating: true,
-      quality: true,
-      releaseDate: true,
-      actors: true,
-      directors: true,
-      streams: true,
-      detailSyncedAt: true,
-      inHome: true,
-      inPopular: true,
-      inNew: true,
-      streamCache: {
-        select: {
-          checkedAt: true,
-          sources: true,
-        },
-      },
-    },
-  });
-  const existingBySource = new Map(
-    existingMovies.map((movie) => [
-      movie.sourceUrl,
-      movie as ExistingSyncedMovie,
-    ]),
-  );
-
-  await runWithConcurrency(
-    Array.from(moviesBySource.values()),
-    resolveValidationConcurrency(),
-    async (movie) => {
-      try {
-        const feedFlag = { [config.dbField]: true } as Record<
-          FeedDbField,
-          true
-        >;
-        const existing = existingBySource.get(movie.sourceUrl);
-        const hasAnyCachedStream = hasCachedStream(existing?.streamCache);
-        const hasReusableStream =
-          existing?.[config.dbField] === true &&
-          hasAnyCachedStream &&
-          isReusableStreamFresh(existing.streamCache);
-        const shouldFetchEnrichment =
-          !hasReusableStream ||
-          isStale(existing?.detailSyncedAt, resolveStreamCacheTtlMs());
-        const enrichment = shouldFetchEnrichment
-          ? await fetchMovieEnrichment(movie.sourceUrl)
-          : { detail: null, stream: null };
-        const nextData = normalizeMovieData(movie, enrichment.detail, existing);
-        const hasPlayableStream =
-          hasReusableStream || Boolean(enrichment.stream?.sources.length);
-
-        if (
-          isBlockedMovieCandidate({
-            description: nextData.description,
-            sourceUrl: movie.sourceUrl,
-            thumbnail: nextData.thumbnail,
-            title: nextData.title,
-          })
-        ) {
-          summary.skippedUnsupported += 1;
-
-          if (existing) {
-            await hideMovieFromCatalog(existing.id);
-            summary.deactivated += 1;
-          }
-
-          return;
-        }
-
-        if (!hasPlayableStream) {
-          summary.skippedUnsupported += 1;
-
-          if (existing && hasAnyCachedStream) {
-            if (hasMovieChanged(existing, nextData, config.dbField)) {
-              await prisma.movie.update({
-                where: {
-                  sourceUrl: movie.sourceUrl,
-                },
-                data: {
-                  ...nextData,
-                  ...feedFlag,
-                },
-              });
-              summary.updated += 1;
-              summary.upserted += 1;
-              return;
-            }
-
-            summary.unchanged += 1;
-            return;
-          }
-
-          if (existing?.[config.dbField]) {
-            await prisma.movie.update({
-              where: {
-                sourceUrl: movie.sourceUrl,
-              },
-              data: {
-                [config.dbField]: false,
-              } as Record<FeedDbField, false>,
-            });
-            summary.deactivated += 1;
-          }
-
-          return;
-        }
-
-        if (!existing) {
-          const createdMovie = await prisma.movie.create({
-            data: {
-              sourceUrl: movie.sourceUrl,
-              ...nextData,
-              ...feedFlag,
-            },
-            select: {
-              id: true,
-            },
-          });
-
-          if (enrichment.stream?.sources.length) {
-            await writeStreamCache(createdMovie.id, movie.sourceUrl, enrichment.stream);
-          }
-
-          summary.created += 1;
-          summary.upserted += 1;
-          return;
-        }
-
-        summary.existing += 1;
-
-        if (!hasMovieChanged(existing, nextData, config.dbField)) {
-          if (enrichment.stream?.sources.length) {
-            await writeStreamCache(existing.id, movie.sourceUrl, enrichment.stream);
-            summary.updated += 1;
-            summary.upserted += 1;
-            return;
-          }
-
-          summary.unchanged += 1;
-          return;
-        }
-
-        await prisma.movie.update({
-          where: {
-            sourceUrl: movie.sourceUrl,
-          },
-          data: {
-            ...nextData,
-            ...feedFlag,
-          },
-        });
-
-        if (enrichment.stream?.sources.length) {
-          await writeStreamCache(existing.id, movie.sourceUrl, enrichment.stream);
-        }
-
-        summary.updated += 1;
-        summary.upserted += 1;
-      } catch (error) {
-        summary.errors.push(
-          `Failed to upsert ${movie.sourceUrl}: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-        );
-      }
-    },
-  );
-
-  return summary;
+function mergeStringList(values: string[]) {
+  return values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(", ");
 }
 
-function createAuditSummary(target: MovieFeedTarget): FeedAuditSummary {
+function arraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const set = new Set(left);
+
+  for (const value of right) {
+    if (!set.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function normalizeMovieData(
+  movie: NormalizedMovieMetadata,
+  detail: MovieDetail | null,
+  existing?: ExistingSyncedMovie,
+): MovieMetadataData {
+  const rawTitle = detail?.title ?? movie.title;
+  const releaseDate =
+    detail?.releaseDate ?? movie.releaseDate ?? existing?.releaseDate ?? null;
+  const yearFromRelease = releaseDate ? releaseDate.slice(0, 4) : null;
+  const year = movie.year ?? yearFromRelease ?? existing?.year ?? null;
+  const bahasa = detail?.bahasa ?? movie.bahasa ?? existing?.bahasa ?? null;
+
   return {
-    target,
-    checked: 0,
-    playable: 0,
-    broken: 0,
-    hidden: 0,
-    refreshed: 0,
+    detailPath: detail?.detailPath ?? movie.detailPath,
+    subjectId: detail?.subjectId ?? movie.subjectId,
+    subjectType: detail?.subjectType ?? movie.subjectType ?? 1,
+    title: formatMovieTitle(rawTitle, {
+      sourceUrl: detail?.sourceUrl ?? movie.sourceUrl,
+      year,
+    }),
+    thumbnail: detail?.poster ?? movie.thumbnail ?? existing?.thumbnail ?? null,
+    description:
+      detail?.synopsis ?? movie.description ?? existing?.description ?? null,
+    genre: detail?.genres.length
+      ? mergeStringList(detail.genres)
+      : movie.genre ?? existing?.genre ?? null,
+    year,
+    duration: movie.duration ?? existing?.duration ?? null,
+    rating: detail?.rating ?? movie.rating ?? existing?.rating ?? null,
+    quality: movie.quality ?? existing?.quality ?? null,
+    releaseDate,
+    country: detail?.country ?? movie.country ?? existing?.country ?? null,
+    bahasa,
+    hasIndonesianSubtitle:
+      detail?.hasIndonesianSubtitle ??
+      movie.hasIndonesianSubtitle ??
+      existing?.hasIndonesianSubtitle ??
+      false,
+    totalEpisode:
+      detail?.totalEpisode ??
+      movie.totalEpisode ??
+      existing?.totalEpisode ??
+      1,
+    totalSeason:
+      detail?.totalSeason ?? movie.totalSeason ?? existing?.totalSeason ?? 1,
+    trailerUrl: detail?.trailerUrl ?? existing?.trailerUrl ?? null,
+    actors: existing?.actors ?? [],
+    directors: existing?.directors ?? [],
+    seasonsList: detail?.seasonsList?.length
+      ? (detail.seasonsList as unknown as Prisma.InputJsonValue)
+      : Prisma.JsonNull,
+    detailSyncedAt: detail ? new Date() : undefined,
+  };
+}
+
+function hasMovieChanged(
+  existing: ExistingSyncedMovie,
+  next: MovieMetadataData,
+  inHero: boolean,
+  homeSections: string[],
+) {
+  return (
+    existing.title !== next.title ||
+    existing.thumbnail !== next.thumbnail ||
+    existing.description !== next.description ||
+    existing.genre !== next.genre ||
+    existing.year !== next.year ||
+    existing.releaseDate !== next.releaseDate ||
+    existing.duration !== next.duration ||
+    existing.rating !== next.rating ||
+    existing.country !== next.country ||
+    existing.bahasa !== next.bahasa ||
+    existing.hasIndonesianSubtitle !== next.hasIndonesianSubtitle ||
+    existing.totalEpisode !== next.totalEpisode ||
+    existing.totalSeason !== next.totalSeason ||
+    existing.trailerUrl !== next.trailerUrl ||
+    existing.detailPath !== next.detailPath ||
+    existing.subjectId !== next.subjectId ||
+    existing.subjectType !== next.subjectType ||
+    existing.inHero !== inHero ||
+    !arraysEqual(existing.homeSections, homeSections)
+  );
+}
+
+async function fetchDetailQuietly(detailPath: string) {
+  try {
+    return await fetchDetail(detailPath, { revalidate: 1800 });
+  } catch (error) {
+    console.error(`Failed to fetch detail for ${detailPath}`, error);
+    return null;
+  }
+}
+
+type UpsertContext = {
+  inHero: boolean;
+  homeSections: string[];
+};
+
+async function upsertMovieFromMetadata(
+  movie: NormalizedMovieMetadata,
+  existingMap: Map<string, ExistingSyncedMovie>,
+  counters: SyncCounters,
+  context: UpsertContext,
+) {
+  try {
+    const existing = existingMap.get(movie.sourceUrl);
+
+    if (
+      isBlockedMovieCandidate({
+        description: movie.description,
+        sourceUrl: movie.sourceUrl,
+        thumbnail: movie.thumbnail,
+        title: movie.title,
+      })
+    ) {
+      counters.skippedUnsupported += 1;
+      return;
+    }
+
+    const ttlMs = resolveDetailTtlMs();
+    const needsDetail =
+      !existing ||
+      isStale(existing.detailSyncedAt, ttlMs) ||
+      !existing.subjectId;
+    const detail = needsDetail
+      ? await fetchDetailQuietly(movie.sourceUrl)
+      : null;
+    const nextData = normalizeMovieData(movie, detail, existing);
+
+    if (
+      isBlockedMovieCandidate({
+        description: nextData.description,
+        sourceUrl: movie.sourceUrl,
+        thumbnail: nextData.thumbnail,
+        title: nextData.title,
+      })
+    ) {
+      counters.skippedUnsupported += 1;
+      return;
+    }
+
+    if (!existing) {
+      const created = await prisma.movie.create({
+        data: {
+          sourceUrl: movie.sourceUrl,
+          ...nextData,
+          inHero: context.inHero,
+          homeSections: context.homeSections,
+        },
+        select: { id: true },
+      });
+
+      counters.created += 1;
+      counters.upserted += 1;
+      existingMap.set(movie.sourceUrl, {
+        id: created.id,
+        sourceUrl: movie.sourceUrl,
+        detailPath: nextData.detailPath,
+        subjectId: nextData.subjectId,
+        subjectType: nextData.subjectType,
+        title: nextData.title,
+        thumbnail: nextData.thumbnail,
+        description: nextData.description,
+        genre: nextData.genre,
+        year: nextData.year,
+        duration: nextData.duration,
+        rating: nextData.rating,
+        quality: nextData.quality,
+        releaseDate: nextData.releaseDate,
+        country: nextData.country,
+        bahasa: nextData.bahasa,
+        hasIndonesianSubtitle: nextData.hasIndonesianSubtitle,
+        totalEpisode: nextData.totalEpisode,
+        totalSeason: nextData.totalSeason,
+        trailerUrl: nextData.trailerUrl,
+        actors: nextData.actors,
+        directors: nextData.directors,
+        detailSyncedAt: nextData.detailSyncedAt ?? null,
+        inHero: context.inHero,
+        homeSections: context.homeSections,
+      });
+      return;
+    }
+
+    if (
+      !hasMovieChanged(existing, nextData, context.inHero, context.homeSections)
+    ) {
+      counters.unchanged += 1;
+      return;
+    }
+
+    await prisma.movie.update({
+      where: { sourceUrl: movie.sourceUrl },
+      data: {
+        ...nextData,
+        inHero: context.inHero,
+        homeSections: context.homeSections,
+      },
+    });
+
+    counters.updated += 1;
+    counters.upserted += 1;
+  } catch (error) {
+    counters.errors.push(
+      `Failed to upsert ${movie.sourceUrl}: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
+  }
+}
+
+function emptyCounters(): SyncCounters {
+  return {
+    fetched: 0,
+    created: 0,
+    updated: 0,
+    unchanged: 0,
+    skippedUnsupported: 0,
+    upserted: 0,
     errors: [],
   };
 }
 
-function activeTargetsForMovie(movie: {
-  inHome: boolean;
-  inPopular: boolean;
-  inNew: boolean;
-}) {
-  const targets: MovieFeedTarget[] = [];
-
-  if (movie.inHome) {
-    targets.push("home");
-  }
-
-  if (movie.inPopular) {
-    targets.push("popular");
-  }
-
-  if (movie.inNew) {
-    targets.push("new");
-  }
-
-  return targets;
-}
-
-type AuditedMovie = {
-  id: string;
-  inHome: boolean;
-  inNew: boolean;
-  inPopular: boolean;
-  sourceUrl: string;
-  title: string;
-};
-
-async function resolveAuditedMovies(target: MovieFeedTarget | "all") {
-  return prisma.movie.findMany({
-    where: resolveAuditWhere(target),
-    orderBy: {
-      id: "asc",
-    },
-    select: {
-      id: true,
-      inHome: true,
-      inNew: true,
-      inPopular: true,
-      sourceUrl: true,
-      title: true,
-    },
-  });
-}
-
-async function resolveAuditedMoviesBatch(
-  target: MovieAuditTarget,
-  options: { batchSize: number; cursor?: string | null },
-) {
-  return prisma.movie.findMany({
-    ...(options.cursor
-      ? {
-          cursor: {
-            id: options.cursor,
-          },
-          skip: 1,
-        }
-      : {}),
-    where: resolveAuditWhere(target),
-    orderBy: {
-      id: "asc",
-    },
-    select: {
-      id: true,
-      inHome: true,
-      inNew: true,
-      inPopular: true,
-      sourceUrl: true,
-      title: true,
-    },
-    take: options.batchSize,
-  });
-}
-
-export async function countAuditableMovies(target: MovieAuditTarget) {
-  return prisma.movie.count({
-    where: resolveAuditWhere(target),
-  });
-}
-
-function createAuditTargets() {
+function buildSectionContext(
+  sourceUrl: string,
+  heroSet: Set<string>,
+  sectionsBySource: Map<string, Set<string>>,
+): UpsertContext {
   return {
-    home: createAuditSummary("home"),
-    popular: createAuditSummary("popular"),
-    new: createAuditSummary("new"),
+    inHero: heroSet.has(sourceUrl),
+    homeSections: Array.from(
+      sectionsBySource.get(sourceUrl) ?? new Set<string>(),
+    ),
   };
 }
 
-type AuditTotals = {
-  broken: number;
-  checked: number;
-  hidden: number;
-  playable: number;
-  refreshed: number;
-};
+function combineHomeMovies(
+  heroBanners: NormalizedMovieMetadata[],
+  sections: FilmboxHomeSection[],
+) {
+  const heroSet = new Set<string>();
+  const sectionsBySource = new Map<string, Set<string>>();
+  const moviesBySource = new Map<string, NormalizedMovieMetadata>();
 
-function createAuditTotals(): AuditTotals {
-  return {
-    broken: 0,
-    checked: 0,
-    hidden: 0,
-    playable: 0,
-    refreshed: 0,
-  };
+  for (const banner of heroBanners) {
+    heroSet.add(banner.sourceUrl);
+    moviesBySource.set(banner.sourceUrl, banner);
+  }
+
+  for (const section of sections) {
+    for (const item of section.items) {
+      moviesBySource.set(item.sourceUrl, item);
+      const existing = sectionsBySource.get(item.sourceUrl);
+
+      if (existing) {
+        existing.add(section.slug);
+      } else {
+        sectionsBySource.set(item.sourceUrl, new Set([section.slug]));
+      }
+    }
+  }
+
+  return { heroSet, sectionsBySource, moviesBySource };
 }
 
-async function auditMovies(
-  movies: AuditedMovie[],
-  target: MovieAuditTarget,
-  autoHide: boolean,
-) {
-  const targets = createAuditTargets();
-  const errors: string[] = [];
-  const totals = createAuditTotals();
+export async function syncFilmboxHome(): Promise<FilmboxHomeSyncSummary> {
+  const home = await fetchFilmboxHome();
+  const { heroSet, sectionsBySource, moviesBySource } = combineHomeMovies(
+    home.heroBanners,
+    home.sections,
+  );
+  const counters = emptyCounters();
+  counters.fetched = moviesBySource.size;
+
+  const sourceUrls = Array.from(moviesBySource.keys());
+  const existing = sourceUrls.length
+    ? await prisma.movie.findMany({
+        where: { sourceUrl: { in: sourceUrls } },
+        select: MOVIE_SELECT,
+      })
+    : [];
+  const existingMap = new Map(
+    existing.map((entry) => [entry.sourceUrl, entry as ExistingSyncedMovie]),
+  );
 
   await runWithConcurrency(
-    movies,
-    resolveValidationConcurrency(),
-    async (movie: AuditedMovie) => {
-      const affectedTargets =
-        target === "all" ? activeTargetsForMovie(movie) : [target];
-
-      totals.checked += 1;
-      affectedTargets.forEach((feedTarget) => {
-        targets[feedTarget].checked += 1;
-      });
-
-      try {
-        const stream = await fetchPlayableStream(movie.sourceUrl, {
-          revalidate: 60,
-        });
-
-        if (!stream.sources.length) {
-          totals.broken += 1;
-          affectedTargets.forEach((feedTarget) => {
-            targets[feedTarget].broken += 1;
-          });
-
-          await clearStreamCache(movie.id);
-
-          if (autoHide) {
-            await hideMovieFromCatalog(movie.id);
-            totals.hidden += 1;
-            affectedTargets.forEach((feedTarget) => {
-              targets[feedTarget].hidden += 1;
-            });
-          }
-
-          return;
-        }
-
-        await writeStreamCache(movie.id, movie.sourceUrl, stream);
-        totals.playable += 1;
-        totals.refreshed += 1;
-        affectedTargets.forEach((feedTarget) => {
-          targets[feedTarget].playable += 1;
-          targets[feedTarget].refreshed += 1;
-        });
-      } catch (error) {
-        const message = `Audit gagal untuk ${movie.title}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`;
-
-        errors.push(message);
-        affectedTargets.forEach((feedTarget) => {
-          targets[feedTarget].errors.push(message);
-        });
-      }
+    Array.from(moviesBySource.values()),
+    resolveDetailConcurrency(),
+    async (movie) => {
+      const context = buildSectionContext(
+        movie.sourceUrl,
+        heroSet,
+        sectionsBySource,
+      );
+      await upsertMovieFromMetadata(movie, existingMap, counters, context);
     },
   );
 
   return {
-    errors,
-    targets,
-    totals,
+    ...counters,
+    heroBanners: home.heroBanners.length,
+    sections: home.sections.map((section) => ({
+      slug: section.slug,
+      title: section.title,
+      items: section.items.length,
+    })),
   };
 }
 
-function finalizeAuditSummary(
-  target: MovieAuditTarget,
-  result: {
-    errors: string[];
-    targets: Record<MovieFeedTarget, FeedAuditSummary>;
-    totals: AuditTotals;
-  },
-): FeedAuditSummary | CombinedAuditSummary {
-  if (target === "all") {
-    return {
-      totalChecked: result.totals.checked,
-      totalPlayable: result.totals.playable,
-      totalBroken: result.totals.broken,
-      totalHidden: result.totals.hidden,
-      totalRefreshed: result.totals.refreshed,
-      totalErrors: result.errors.length,
-      targets: result.targets,
-      errors: result.errors,
-    };
+export async function syncTrendingPages(options: {
+  fromPage?: number;
+  toPage?: number;
+  perPage?: number;
+}): Promise<FilmboxTrendingSyncSummary> {
+  const fromPage = resolveSyncPage(options.fromPage ?? 0);
+  const toPageRaw = resolveSyncPage(options.toPage ?? fromPage);
+  const toPage = Math.max(fromPage, toPageRaw);
+  const perPage = resolvePerPage(options.perPage ?? DEFAULT_TRENDING_PER_PAGE);
+  const counters = emptyCounters();
+  const collected = new Map<string, NormalizedMovieMetadata>();
+
+  for (let page = fromPage; page <= toPage; page += 1) {
+    let result: MovieListResult;
+
+    try {
+      result = await fetchTrending(page, perPage);
+    } catch (error) {
+      counters.errors.push(
+        `Page ${page} gagal: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      break;
+    }
+
+    counters.fetched += result.fetched;
+
+    for (const movie of result.movies) {
+      collected.set(movie.sourceUrl, movie);
+    }
+
+    if (result.movies.length === 0) {
+      break;
+    }
   }
 
-  return result.targets[target];
-}
+  const sourceUrls = Array.from(collected.keys());
+  const existing = sourceUrls.length
+    ? await prisma.movie.findMany({
+        where: { sourceUrl: { in: sourceUrls } },
+        select: MOVIE_SELECT,
+      })
+    : [];
+  const existingMap = new Map(
+    existing.map((entry) => [entry.sourceUrl, entry as ExistingSyncedMovie]),
+  );
 
-export async function auditMovieCatalog(
-  target: MovieAuditTarget,
-  options: { autoHide?: boolean } = {},
-): Promise<FeedAuditSummary | CombinedAuditSummary> {
-  const autoHide = options.autoHide ?? true;
-  const movies = await resolveAuditedMovies(target);
-  const result = await auditMovies(movies, target, autoHide);
-
-  return finalizeAuditSummary(target, result);
-}
-
-export async function auditMovieCatalogBatch(
-  target: MovieAuditTarget,
-  options: {
-    autoHide?: boolean;
-    batchSize?: number;
-    cursor?: string | null;
-  } = {},
-): Promise<AuditBatchProgress> {
-  const autoHide = options.autoHide ?? true;
-  const batchSize = Math.min(Math.max(options.batchSize ?? 12, 1), 50);
-  const [total, movies] = await Promise.all([
-    countAuditableMovies(target),
-    resolveAuditedMoviesBatch(target, {
-      batchSize,
-      cursor: options.cursor,
-    }),
-  ]);
-  const result = await auditMovies(movies, target, autoHide);
-  const nextCursor = movies[movies.length - 1]?.id ?? null;
-
-  return {
-    batchCount: movies.length,
-    hasMore: Boolean(nextCursor) && movies.length === batchSize,
-    nextCursor,
-    summary: finalizeAuditSummary(target, result),
-    target,
-    total,
-  };
-}
-
-export async function syncAllMovieFeeds(
-  options: { pages?: number } = {},
-): Promise<CombinedSyncSummary> {
-  const pages = resolveSyncPages(options.pages);
-  const home = await syncMovieFeed("home", { pages });
-  const popular = await syncMovieFeed("popular", { pages });
-  const latest = await syncMovieFeed("new", { pages });
-
-  return {
-    pages,
-    totalCreated: home.created + popular.created + latest.created,
-    totalExisting: home.existing + popular.existing + latest.existing,
-    totalFetched: home.fetched + popular.fetched + latest.fetched,
-    totalUpdated: home.updated + popular.updated + latest.updated,
-    totalUnchanged: home.unchanged + popular.unchanged + latest.unchanged,
-    totalUpserted: home.upserted + popular.upserted + latest.upserted,
-    totalDuplicateSkipped:
-      home.duplicateSkipped +
-      popular.duplicateSkipped +
-      latest.duplicateSkipped,
-    totalSkippedUnsupported:
-      home.skippedUnsupported +
-      popular.skippedUnsupported +
-      latest.skippedUnsupported,
-    totalDeactivated:
-      home.deactivated + popular.deactivated + latest.deactivated,
-    targets: {
-      home,
-      popular,
-      new: latest,
+  await runWithConcurrency(
+    Array.from(collected.values()),
+    resolveDetailConcurrency(),
+    async (movie) => {
+      const existingEntry = existingMap.get(movie.sourceUrl);
+      const context: UpsertContext = {
+        inHero: existingEntry?.inHero ?? false,
+        homeSections: existingEntry?.homeSections ?? [],
+      };
+      await upsertMovieFromMetadata(movie, existingMap, counters, context);
     },
+  );
+
+  return {
+    ...counters,
+    fromPage,
+    toPage,
+    perPage,
   };
 }
 
@@ -1000,15 +659,11 @@ export async function cleanupMovieTitles(
     const movies = await prisma.movie.findMany({
       ...(cursor
         ? {
-            cursor: {
-              id: cursor,
-            },
+            cursor: { id: cursor },
             skip: 1,
           }
         : {}),
-      orderBy: {
-        id: "asc",
-      },
+      orderBy: { id: "asc" },
       select: {
         id: true,
         sourceUrl: true,
@@ -1036,84 +691,10 @@ export async function cleanupMovieTitles(
       }
 
       await prisma.movie.update({
-        where: {
-          id: movie.id,
-        },
-        data: {
-          title: nextTitle,
-        },
+        where: { id: movie.id },
+        data: { title: nextTitle },
       });
       summary.changed += 1;
-    }
-
-    cursor = movies[movies.length - 1]?.id;
-
-    if (movies.length < batchSize) {
-      break;
-    }
-  }
-
-  return summary;
-}
-
-export async function hideRedirectMovies(
-  options: { batchSize?: number } = {},
-): Promise<RedirectMovieCleanupSummary> {
-  const batchSize = Math.min(Math.max(options.batchSize ?? 200, 25), 500);
-  let cursor: string | undefined;
-  const summary: RedirectMovieCleanupSummary = {
-    alreadyHidden: 0,
-    hidden: 0,
-    matched: 0,
-    scanned: 0,
-  };
-
-  while (true) {
-    const movies = await prisma.movie.findMany({
-      ...(cursor
-        ? {
-            cursor: {
-              id: cursor,
-            },
-            skip: 1,
-          }
-        : {}),
-      orderBy: {
-        id: "asc",
-      },
-      select: {
-        description: true,
-        id: true,
-        inHome: true,
-        inNew: true,
-        inPopular: true,
-        sourceUrl: true,
-        thumbnail: true,
-        title: true,
-      },
-      take: batchSize,
-    });
-
-    if (!movies.length) {
-      break;
-    }
-
-    for (const movie of movies) {
-      summary.scanned += 1;
-
-      if (!isBlockedMovieCandidate(movie)) {
-        continue;
-      }
-
-      summary.matched += 1;
-
-      if (!movie.inHome && !movie.inPopular && !movie.inNew) {
-        summary.alreadyHidden += 1;
-        continue;
-      }
-
-      await hideMovieFromCatalog(movie.id);
-      summary.hidden += 1;
     }
 
     cursor = movies[movies.length - 1]?.id;

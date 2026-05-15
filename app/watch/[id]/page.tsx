@@ -14,6 +14,10 @@ type WatchPageProps = {
   params: Promise<{
     id: string;
   }>;
+  searchParams: Promise<{
+    se?: string;
+    ep?: string;
+  }>;
 };
 
 async function getWatchData(id: string) {
@@ -26,6 +30,10 @@ async function getWatchData(id: string) {
       description: true,
       rating: true,
       quality: true,
+      subjectType: true,
+      totalSeason: true,
+      totalEpisode: true,
+      hasIndonesianSubtitle: true,
     },
   });
 
@@ -36,8 +44,29 @@ async function getWatchData(id: string) {
   return { movie };
 }
 
-export default async function WatchPage({ params }: WatchPageProps) {
-  const [{ id }] = await Promise.all([params, requireUserSession()]);
+function clampInt(value: string | undefined, fallback: number, max: number) {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(Math.trunc(parsed), 1), Math.max(1, max));
+}
+
+export default async function WatchPage({
+  params,
+  searchParams,
+}: WatchPageProps) {
+  const [{ id }, query] = await Promise.all([
+    params,
+    searchParams,
+    requireUserSession(),
+  ]);
   const data = await getWatchData(id);
 
   if (!data) {
@@ -45,6 +74,16 @@ export default async function WatchPage({ params }: WatchPageProps) {
   }
 
   const { movie } = data;
+  const isSeries = movie.subjectType === 2;
+  const seasonNumber = isSeries
+    ? clampInt(query.se, 1, movie.totalSeason || 1)
+    : 0;
+  const episodeNumber = isSeries
+    ? clampInt(query.ep, 1, movie.totalEpisode || 1)
+    : 0;
+  const episodeLabel = isSeries
+    ? `Season ${seasonNumber} · Episode ${episodeNumber}`
+    : null;
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -67,6 +106,8 @@ export default async function WatchPage({ params }: WatchPageProps) {
             <WatchPlayer
               movieId={movie.id}
               poster={movie.thumbnail}
+              season={seasonNumber}
+              episode={episodeNumber}
             />
 
             <ImmersiveHidden>
@@ -75,6 +116,16 @@ export default async function WatchPage({ params }: WatchPageProps) {
                   {movie.quality ? (
                     <Badge className="border-red-300/30 bg-red-600 text-white">
                       {movie.quality}
+                    </Badge>
+                  ) : null}
+                  {movie.hasIndonesianSubtitle ? (
+                    <Badge className="border-emerald-300/30 bg-emerald-600 text-white">
+                      Subtitle: Indonesia
+                    </Badge>
+                  ) : null}
+                  {episodeLabel ? (
+                    <Badge className="border-sky-300/30 bg-sky-600 text-white">
+                      {episodeLabel}
                     </Badge>
                   ) : null}
                   <span className="inline-flex items-center gap-1.5 text-sm font-medium text-yellow-300">

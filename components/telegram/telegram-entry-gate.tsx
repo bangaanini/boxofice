@@ -254,9 +254,12 @@ export function TelegramEntryGate({
           </div>
 
           <div className="mt-6 flex items-center justify-between gap-3 border-t border-white/10 pt-5">
-            <p className="text-xs leading-5 text-neutral-500">
-              Halaman web publik sekarang hanya jadi pintu masuk ke Telegram.
-            </p>
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-neutral-300 transition-colors hover:text-white"
+            >
+              Pakai email & password
+            </Link>
             <Link
               href={adminLoginUrl}
               className="inline-flex items-center gap-2 text-xs font-semibold text-neutral-300 transition-colors hover:text-white"

@@ -1,10 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { MessageCircle, Sparkles, UserRound } from "lucide-react";
+import { KeyRound, LogOut, MessageCircle, Sparkles, UserRound } from "lucide-react";
 
+import { logoutUserAction } from "@/app/user-auth/actions";
 import { AddToHomeScreenCard } from "@/components/pwa/add-to-home-screen-card";
 import { Button } from "@/components/ui/button";
 import { getCinematicBackdropMovies } from "@/lib/movie-feeds";
+import { prisma } from "@/lib/prisma";
 import { getOwnedPartnerBotsForUser } from "@/lib/telegram-partner-bots";
 import { requireUserSession } from "@/lib/user-auth";
 import { repairPaidVipOrdersForUser } from "@/lib/vip-checkout";
@@ -28,11 +30,19 @@ export default async function ProfilePage() {
   const user =
     (await repairPaidVipOrdersForUser(sessionUser.id).catch(() => null)) ??
     sessionUser;
-  const ownedPartnerBots = await getOwnedPartnerBotsForUser(user.id).catch(
-    () => [],
-  );
+  const [ownedPartnerBots, accountFlags] = await Promise.all([
+    getOwnedPartnerBotsForUser(user.id).catch(() => []),
+    prisma.user
+      .findUnique({
+        where: { id: user.id },
+        select: { passwordHash: true },
+      })
+      .catch(() => null),
+  ]);
   const vipStatus = getVipStatus(user);
   const vipSettings = vipSettingsResult.settings;
+  const isWebAccount = Boolean(accountFlags?.passwordHash);
+  const isTelegramAccount = Boolean(user.telegramId);
 
   const heroMovie = backdropMovies[0] ?? null;
   const stackMovies = backdropMovies.slice(1, 4);
@@ -104,11 +114,10 @@ export default async function ProfilePage() {
                   {user.name}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-
                   <span className="truncate text-sm text-neutral-300">
                     {user.telegramUsername
                       ? `@${user.telegramUsername}`
-                      : user.email ?? `ID ${user.telegramId}`}
+                      : user.email ?? (user.telegramId ? `ID ${user.telegramId}` : "Akun Box Office")}
                   </span>
                 </div>
               </div>
@@ -171,27 +180,48 @@ export default async function ProfilePage() {
             <div className="rounded-[20px] border border-white/10 bg-white/[0.05] p-4">
               <p className="inline-flex items-center gap-2 text-sm font-semibold text-white">
                 <MessageCircle className="size-4 text-red-300" />
-                Username
+                {isTelegramAccount ? "Username" : "Email"}
               </p>
               <p className="mt-2 text-sm text-neutral-300">
-                {user.telegramUsername
-                  ? `@${user.telegramUsername}`
-                  : "Belum ada username publik"}
+                {isTelegramAccount
+                  ? user.telegramUsername
+                    ? `@${user.telegramUsername}`
+                    : "Belum ada username publik"
+                  : user.email ?? "—"}
               </p>
             </div>
 
             <div className="rounded-[20px] border border-white/10 bg-white/[0.05] p-4">
               <p className="inline-flex items-center gap-2 text-sm font-semibold text-white">
                 <UserRound className="size-4 text-red-300" />
-                User ID
+                Tipe akun
               </p>
               <p className="mt-2 text-sm text-neutral-300">
-                {user.telegramId
+                {isTelegramAccount
                   ? `Telegram ID ${user.telegramId}`
-                  : "Akun web lokal"}
+                  : "Akun web (email & password)"}
               </p>
             </div>
           </div>
+
+          {isWebAccount ? (
+            <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.05] p-4">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-white">
+                <KeyRound className="size-4 text-red-300" />
+                Keamanan akun
+              </p>
+              <p className="mt-2 text-sm leading-6 text-neutral-300">
+                Ganti password akun web kamu kapan saja.
+              </p>
+              <Button
+                asChild
+                variant="secondary"
+                className="mt-4 h-11 border border-white/10 bg-white/[0.08] text-white hover:bg-white/[0.14]"
+              >
+                <Link href="/profile/password">Ganti password</Link>
+              </Button>
+            </div>
+          ) : null}
 
           {ownedPartnerBots.length ? (
             <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.05] p-4">
@@ -213,6 +243,17 @@ export default async function ProfilePage() {
           ) : null}
 
           <AddToHomeScreenCard />
+
+          <form action={logoutUserAction} className="mt-4">
+            <Button
+              type="submit"
+              variant="secondary"
+              className="h-11 w-full border border-white/10 bg-white/[0.04] text-neutral-200 hover:bg-white/[0.08]"
+            >
+              <LogOut className="size-4" />
+              Keluar dari akun
+            </Button>
+          </form>
         </div>
       </section>
     </main>

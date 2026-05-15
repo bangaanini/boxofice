@@ -285,7 +285,7 @@ export async function requireUserSession() {
   const user = await getCurrentUserSession();
 
   if (!user) {
-    redirect("/");
+    redirect("/login");
   }
 
   return user;

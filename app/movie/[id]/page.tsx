@@ -232,9 +232,8 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
     getRelatedMovies({
       currentMovieId: movie.id,
       genre: movie.genre,
-      inHome: movie.inHome,
-      inNew: movie.inNew,
-      inPopular: movie.inPopular,
+      subjectType: movie.subjectType,
+      homeSections: movie.homeSections,
       limit: 14,
     }),
     !user ? getTelegramBotSettingsSafe() : Promise.resolve(null),
@@ -337,6 +336,16 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
               {movie.quality ? (
                 <Badge className="border-red-300/30 bg-red-600 text-white">
                   {movie.quality}
+                </Badge>
+              ) : null}
+              {movie.hasIndonesianSubtitle ? (
+                <Badge className="border-emerald-300/30 bg-emerald-600 text-white">
+                  Subtitle: Indonesia
+                </Badge>
+              ) : null}
+              {movie.subjectType === 2 ? (
+                <Badge className="border-sky-300/30 bg-sky-600 text-white">
+                  Series · {movie.totalSeason ?? 1} season
                 </Badge>
               ) : null}
               <Badge className="border-white/10 bg-white/10 text-white">

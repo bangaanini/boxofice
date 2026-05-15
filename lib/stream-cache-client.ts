@@ -7,17 +7,25 @@ export type CachedStreamSource = {
   type?: string;
 };
 
+export type CachedStreamSubtitle = {
+  src: string;
+  lang: string;
+  label: string;
+  default?: boolean;
+};
+
 export type CachedStreamResponse = {
   accessToken?: string;
   accessTokenExpiresAt?: string;
-  iframe?: string;
-  m3u8?: string;
-  originalUrl?: string;
+  episode?: number;
+  format?: string;
+  ownerPlaybackAccess?: boolean;
   paywallDescription?: string;
   paywallTitle?: string;
   previewLimitSeconds?: number;
-  resolvedFrom?: string;
+  season?: number;
   sources: CachedStreamSource[];
+  subtitles?: CachedStreamSubtitle[];
   upgradeLabel?: string;
   upgradeUrl?: string;
   vipActive?: boolean;
@@ -30,13 +38,16 @@ type StreamCacheEntry = {
 };
 
 const STREAM_CACHE_TTL_MS = 10 * 60 * 1000;
-const STREAM_CACHE_PREFIX = "boxofice:stream:v4:";
+const STREAM_CACHE_PREFIX = "boxofice:stream:v5:";
 const memoryCache = new Map<string, StreamCacheEntry>();
 
 type StreamLookup = {
   cacheKey: string;
   movieId?: string;
   sourceUrl?: string;
+  detailPath?: string;
+  season?: number;
+  episode?: number;
 };
 
 function storageKey(key: string) {
@@ -47,9 +58,7 @@ function isCacheEntryValid(
   entry: StreamCacheEntry | null | undefined,
 ): entry is StreamCacheEntry {
   return Boolean(
-    entry &&
-      entry.expiresAt > Date.now() &&
-      entry.value.sources.length,
+    entry && entry.expiresAt > Date.now() && entry.value.sources.length,
   );
 }
 
@@ -90,11 +99,27 @@ function writeSessionCache(key: string, entry: StreamCacheEntry) {
   }
 }
 
-export function getMovieStreamCacheKey(movieId: string) {
+export function getMovieStreamCacheKey(
+  movieId: string,
+  season?: number,
+  episode?: number,
+) {
+  if (season && episode) {
+    return `movie:${movieId}:s${season}:e${episode}`;
+  }
+
   return `movie:${movieId}`;
 }
 
-export function getSourceStreamCacheKey(sourceUrl: string) {
+export function getSourceStreamCacheKey(
+  sourceUrl: string,
+  season?: number,
+  episode?: number,
+) {
+  if (season && episode) {
+    return `source:${sourceUrl}:s${season}:e${episode}`;
+  }
+
   return `source:${sourceUrl}`;
 }
 
@@ -162,12 +187,21 @@ export async function prefetchCachedStream(lookup: StreamLookup) {
 
   const params = new URLSearchParams();
 
-  if (lookup.sourceUrl) {
+  if (lookup.detailPath) {
+    params.set("detailPath", lookup.detailPath);
+  } else if (lookup.sourceUrl) {
     params.set("sourceUrl", lookup.sourceUrl);
   } else if (lookup.movieId) {
     params.set("id", lookup.movieId);
   } else {
     throw new Error("Sumber video belum valid.");
+  }
+
+  if (lookup.season !== undefined && lookup.season > 0) {
+    params.set("se", String(lookup.season));
+  }
+  if (lookup.episode !== undefined && lookup.episode > 0) {
+    params.set("ep", String(lookup.episode));
   }
 
   const response = await fetch(`/api/stream?${params.toString()}`);

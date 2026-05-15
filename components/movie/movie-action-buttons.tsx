@@ -38,10 +38,15 @@ export function MovieActionButtons({
   const [isSaved, setIsSaved] = React.useState(initialSaved);
   const [isSaving, setIsSaving] = React.useState(false);
   const [shareLabel, setShareLabel] = React.useState("Bagikan");
+  const [isTelegram, setIsTelegram] = React.useState(false);
 
   React.useEffect(() => {
     setIsSaved(initialSaved);
   }, [initialSaved]);
+
+  React.useEffect(() => {
+    setIsTelegram(isTelegramMiniAppBrowser());
+  }, []);
 
   async function toggleSave() {
     if (requiresAuth) {
@@ -135,7 +140,7 @@ export function MovieActionButtons({
         className="h-12 border border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
       >
         <Share2 className="size-4" />
-        {isTelegramMiniAppBrowser() ? "Bagikan Telegram" : shareLabel}
+        {isTelegram ? "Bagikan Telegram" : shareLabel}
       </Button>
     </div>
   );

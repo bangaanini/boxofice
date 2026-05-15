@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { hasBotOwnerPlaybackAccess } from "@/lib/bot-access";
-import { fetchPlayableStream, MovieApiError } from "@/lib/movie-api";
+import { fetchGetPlay, MovieApiError } from "@/lib/movie-api";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserSession } from "@/lib/user-auth";
 import {
@@ -13,121 +13,92 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-const STREAM_CACHE_FRESH_MS = 15 * 60 * 1000;
 
-type CachedStreamSource = {
-  url: string;
-  label: string;
-  quality?: string;
-  type?: string;
+type StreamLookup = {
+  movieId: string;
+  detailPath: string;
+  subjectId: string;
+  subjectType: number;
+  totalSeason: number;
+  totalEpisode: number;
 };
 
-type CachedMovieStream = {
-  checkedAt: Date;
-  iframe: string | null;
-  m3u8: string | null;
-  originalUrl: string | null;
-  resolvedFrom: string | null;
-  sources: unknown;
-};
-
-function normalizeCachedSources(value: unknown): CachedStreamSource[] {
-  if (!Array.isArray(value)) {
-    return [];
+function clampInt(value: string | null, fallback: number): number {
+  if (!value) {
+    return fallback;
   }
 
-  return value.filter((source): source is CachedStreamSource => {
-    return (
-      typeof source === "object" &&
-      source !== null &&
-      "url" in source &&
-      "label" in source &&
-      typeof source.url === "string" &&
-      typeof source.label === "string"
-    );
-  });
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
 }
 
-function cachedStreamResponse(cache: CachedMovieStream) {
-  const sources = normalizeCachedSources(cache.sources);
+async function resolveStreamLookup(
+  request: NextRequest,
+): Promise<StreamLookup | null> {
+  const detailPathQuery = request.nextUrl.searchParams.get("detailPath");
+  const idQuery = request.nextUrl.searchParams.get("id");
+  const sourceUrlQuery = request.nextUrl.searchParams.get("sourceUrl");
+  const findBy = detailPathQuery ?? sourceUrlQuery;
 
-  if (!sources.length) {
+  const movie = idQuery
+    ? await prisma.movie.findUnique({
+        where: { id: idQuery },
+        select: {
+          id: true,
+          detailPath: true,
+          sourceUrl: true,
+          subjectId: true,
+          subjectType: true,
+          totalSeason: true,
+          totalEpisode: true,
+        },
+      })
+    : findBy
+      ? await prisma.movie.findUnique({
+          where: { sourceUrl: findBy },
+          select: {
+            id: true,
+            detailPath: true,
+            sourceUrl: true,
+            subjectId: true,
+            subjectType: true,
+            totalSeason: true,
+            totalEpisode: true,
+          },
+        })
+      : null;
+
+  if (!movie || !movie.subjectId) {
     return null;
   }
 
   return {
-    iframe: cache.iframe ?? undefined,
-    m3u8: cache.m3u8 ?? undefined,
-    originalUrl: cache.originalUrl ?? undefined,
-    resolvedFrom: cache.resolvedFrom ?? undefined,
-    sources,
+    movieId: movie.id,
+    detailPath: movie.detailPath ?? movie.sourceUrl,
+    subjectId: movie.subjectId,
+    subjectType: movie.subjectType,
+    totalSeason: movie.totalSeason,
+    totalEpisode: movie.totalEpisode,
   };
 }
 
-function isCacheFresh(checkedAt: Date) {
-  return Date.now() - checkedAt.getTime() <= STREAM_CACHE_FRESH_MS;
-}
+function resolveEpisode(lookup: StreamLookup, request: NextRequest) {
+  const isSeries = lookup.subjectType === 2;
 
-async function resolveStreamLookup(request: NextRequest) {
-  const sourceUrl = request.nextUrl.searchParams.get("sourceUrl");
-
-  if (sourceUrl) {
-    const movie = await prisma.movie.findUnique({
-      where: { sourceUrl },
-      select: {
-        id: true,
-        sourceUrl: true,
-        streamCache: {
-          select: {
-            checkedAt: true,
-            iframe: true,
-            m3u8: true,
-            originalUrl: true,
-            resolvedFrom: true,
-            sources: true,
-          },
-        },
-      },
-    });
-
-    return {
-      movieId: movie?.id,
-      sourceUrl,
-      streamCache: movie?.streamCache ?? null,
-    };
+  if (!isSeries) {
+    return { se: 0, ep: 0 };
   }
 
-  const id = request.nextUrl.searchParams.get("id");
+  const seParam = clampInt(request.nextUrl.searchParams.get("se"), 1);
+  const epParam = clampInt(request.nextUrl.searchParams.get("ep"), 1);
+  const seasonCap = Math.max(1, lookup.totalSeason || 1);
+  const episodeCap = Math.max(1, lookup.totalEpisode || 1);
 
-  if (!id) {
-    return null;
-  }
-
-  const movie = await prisma.movie.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      sourceUrl: true,
-      streamCache: {
-        select: {
-          checkedAt: true,
-          iframe: true,
-          m3u8: true,
-          originalUrl: true,
-          resolvedFrom: true,
-          sources: true,
-        },
-      },
-    },
-  });
-
-  return movie
-    ? {
-        movieId: movie.id,
-        sourceUrl: movie.sourceUrl,
-        streamCache: movie.streamCache,
-      }
-    : null;
+  return {
+    se: Math.min(Math.max(seParam, 1), seasonCap),
+    ep: Math.min(Math.max(epParam, 1), episodeCap),
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -141,9 +112,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!lookup?.sourceUrl) {
+  if (!lookup) {
     return NextResponse.json(
-      { error: "A valid sourceUrl or id query parameter is required" },
+      {
+        error:
+          "Berikan parameter id, detailPath, atau sourceUrl yang valid.",
+      },
       { status: 400 },
     );
   }
@@ -164,95 +138,66 @@ export async function GET(request: NextRequest) {
       userId: user.id,
       vipActive: vipLikeAccess,
     });
-    const streamCache = lookup.streamCache;
-    const cachedStream = streamCache ? cachedStreamResponse(streamCache) : null;
+    const { se, ep } = resolveEpisode(lookup, request);
+    const playback = await fetchGetPlay({
+      detailPath: lookup.detailPath,
+      ep,
+      lang: "in_id",
+      se,
+      subjectId: lookup.subjectId,
+    });
 
-    if (cachedStream && streamCache && isCacheFresh(streamCache.checkedAt)) {
+    if (!playback.vidUrlProxy) {
       return NextResponse.json(
         {
-          ...cachedStream,
-          accessToken: accessToken.token,
-          accessTokenExpiresAt: accessToken.expiresAt.toISOString(),
-          paywallDescription: vipSettingsResult.settings.paywallDescription,
-          paywallTitle: vipSettingsResult.settings.paywallTitle,
-          previewLimitSeconds,
-          upgradeLabel: vipSettingsResult.settings.joinVipLabel,
-          upgradeUrl: vipSettingsResult.settings.joinVipUrl,
-          vipActive: vipLikeAccess,
-          vipExpiresAt: vipStatus.expiresAt?.toISOString() ?? null,
-          ownerPlaybackAccess,
+          error: "Sumber video belum tersedia dari Filmbox.",
         },
-        {
-          headers: {
-            "Cache-Control": "private, no-store",
-          },
-        },
+        { status: 502 },
       );
     }
 
-    const stream = await fetchPlayableStream(lookup.sourceUrl, {
-      revalidate: 3600,
-    });
-
-    if (lookup.movieId) {
-      if (stream.sources.length) {
-        await prisma.movieStreamCache
-          .upsert({
-            where: {
-              movieId: lookup.movieId,
-            },
-            create: {
-              movieId: lookup.movieId,
-              sourceUrl: lookup.sourceUrl,
-              resolvedFrom: stream.resolvedFrom,
-              originalUrl: stream.originalUrl,
-              iframe: stream.iframe,
-              m3u8: stream.m3u8,
-              sources: stream.sources,
-              checkedAt: new Date(),
-            },
-            update: {
-              resolvedFrom: stream.resolvedFrom,
-              originalUrl: stream.originalUrl,
-              iframe: stream.iframe,
-              m3u8: stream.m3u8,
-              sources: stream.sources,
-              checkedAt: new Date(),
-            },
-          })
-          .catch((error) => {
-            console.error("Failed to write stream cache", error);
-          });
-      } else {
-        await prisma.movieStreamCache
-          .deleteMany({
-            where: {
-              movieId: lookup.movieId,
-            },
-          })
-          .catch((error) => {
-            console.error("Failed to clear broken stream cache", error);
-          });
-      }
-    }
+    const sources = [
+      {
+        url: playback.vidUrlProxy,
+        label:
+          typeof playback.quality === "number"
+            ? `${playback.quality}p`
+            : String(playback.quality ?? "Auto"),
+        quality:
+          typeof playback.quality === "number"
+            ? String(playback.quality)
+            : String(playback.quality ?? "auto"),
+        type: "video/mp4",
+      },
+    ];
+    const subtitles = playback.subUrl
+      ? [
+          {
+            src: `/api/subtitle?url=${encodeURIComponent(playback.subUrl)}`,
+            lang: "id",
+            label: "Indonesia",
+            default: true,
+          },
+        ]
+      : [];
 
     return NextResponse.json(
       {
         accessToken: accessToken.token,
         accessTokenExpiresAt: accessToken.expiresAt.toISOString(),
-        iframe: stream.iframe,
-        m3u8: stream.m3u8,
-        originalUrl: stream.originalUrl,
+        episode: playback.episode,
+        format: playback.format,
+        ownerPlaybackAccess,
         paywallDescription: vipSettingsResult.settings.paywallDescription,
         paywallTitle: vipSettingsResult.settings.paywallTitle,
         previewLimitSeconds,
-        sources: stream.sources,
-        resolvedFrom: stream.resolvedFrom,
+        season: playback.se,
+        sources,
+        subtitles,
         upgradeLabel: vipSettingsResult.settings.joinVipLabel,
         upgradeUrl: vipSettingsResult.settings.joinVipUrl,
         vipActive: vipLikeAccess,
         vipExpiresAt: vipStatus.expiresAt?.toISOString() ?? null,
-        ownerPlaybackAccess,
       },
       {
         headers: {
@@ -261,14 +206,15 @@ export async function GET(request: NextRequest) {
       },
     );
   } catch (error) {
-    const status = error instanceof MovieApiError && error.status === 404 ? 404 : 502;
+    const status =
+      error instanceof MovieApiError && error.status === 404 ? 404 : 502;
 
     return NextResponse.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "Unable to fetch stream information",
+            : "Tidak bisa mengambil sumber video saat ini.",
       },
       { status },
     );

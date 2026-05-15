@@ -7,12 +7,22 @@ import { getPaymentGatewaySettingsSafe, getVipPlansSafe } from "@/lib/payments";
 import { getVipProgramSettingsSafe } from "@/lib/vip";
 
 export async function getAdminOverviewData() {
-  const [totalMovies, homeCount, popularCount, newCount, totalUsers, totalFavorites, totalHistory, totalVipUsers] =
-    await Promise.all([
+  const [
+    totalMovies,
+    movieCount,
+    seriesCount,
+    inHeroCount,
+    indonesianSubtitleCount,
+    totalUsers,
+    totalFavorites,
+    totalHistory,
+    totalVipUsers,
+  ] = await Promise.all([
     prisma.movie.count(),
-    prisma.movie.count({ where: { inHome: true } }),
-    prisma.movie.count({ where: { inPopular: true } }),
-    prisma.movie.count({ where: { inNew: true } }),
+    prisma.movie.count({ where: { subjectType: 1 } }),
+    prisma.movie.count({ where: { subjectType: 2 } }),
+    prisma.movie.count({ where: { inHero: true } }),
+    prisma.movie.count({ where: { hasIndonesianSubtitle: true } }),
     prisma.user.count(),
     prisma.userFavorite.count(),
     prisma.watchHistory.count(),
@@ -37,9 +47,10 @@ export async function getAdminOverviewData() {
     affiliateSchemaReady:
       affiliateProfiles.schemaReady && settings.schemaReady,
     defaultCommissionRate: settings.settings.defaultCommissionRate,
-    homeCount,
-    newCount,
-    popularCount,
+    movieCount,
+    seriesCount,
+    inHeroCount,
+    indonesianSubtitleCount,
     totalVipUsers,
     totalAffiliateProfiles: affiliateProfiles.count,
     totalFavorites,

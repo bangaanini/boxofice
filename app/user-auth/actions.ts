@@ -16,12 +16,29 @@ export type UserAuthFormState = {
   error?: string;
 };
 
+function sanitizeNextPath(value: string | undefined | null): string {
+  if (!value || typeof value !== "string") {
+    return "/profile";
+  }
+
+  if (!value.startsWith("/")) {
+    return "/profile";
+  }
+
+  if (value.startsWith("//") || value.startsWith("/api/")) {
+    return "/profile";
+  }
+
+  return value;
+}
+
 export async function loginUserAction(
   _previousState: UserAuthFormState,
   formData: FormData,
 ): Promise<UserAuthFormState> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+  const nextPath = sanitizeNextPath(String(formData.get("next") ?? ""));
 
   if (!email.includes("@")) {
     return { error: "Format email belum valid." };
@@ -37,7 +54,7 @@ export async function loginUserAction(
     };
   }
 
-  redirect("/profile");
+  redirect(nextPath);
 }
 
 export async function signupUserAction(
@@ -49,6 +66,7 @@ export async function signupUserAction(
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
   const referralCode = String(formData.get("referralCode") ?? "");
+  const nextPath = sanitizeNextPath(String(formData.get("next") ?? ""));
 
   if (name.trim().length < 2) {
     return { error: "Nama minimal 2 karakter." };
@@ -80,7 +98,7 @@ export async function signupUserAction(
     };
   }
 
-  redirect("/profile");
+  redirect(nextPath);
 }
 
 export async function logoutUserAction() {

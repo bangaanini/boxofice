@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Expand, Minimize, RotateCcw, RotateCw } from "lucide-react";
-import type Hls from "hls.js";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,11 +18,13 @@ import { cn } from "@/lib/utils";
 type WatchPlayerProps = {
   autoPlay?: boolean;
   defaultQuality?: string;
+  episode?: number;
   immersiveRequestId?: number;
   initialProgressSeconds?: number;
   movieId?: string;
   onRequestClose?: () => void;
   poster?: string | null;
+  season?: number;
   sourceUrl?: string;
 };
 
@@ -64,18 +65,6 @@ function isHlsSource(source: CachedStreamSource) {
     source.type === "application/x-mpegURL" ||
     decodeURIComponent(source.url).toLowerCase().includes(".m3u8")
   );
-}
-
-function toMediaSourceUrl(source: CachedStreamSource, accessToken?: string) {
-  const params = new URLSearchParams({
-    url: source.url,
-  });
-
-  if (accessToken) {
-    params.set("token", accessToken);
-  }
-
-  return `/api/hls?${params.toString()}`;
 }
 
 function normalizeQuality(value: string | undefined) {
@@ -194,22 +183,23 @@ function getPointerAreaFromBounds(options: {
 export function WatchPlayer({
   autoPlay = false,
   defaultQuality,
+  episode = 0,
   immersiveRequestId = 0,
   initialProgressSeconds = 0,
   movieId,
   onRequestClose,
   poster,
+  season = 0,
   sourceUrl,
 }: WatchPlayerProps) {
   const streamCacheKey = React.useMemo(() => {
     if (sourceUrl) {
-      return getSourceStreamCacheKey(sourceUrl);
+      return getSourceStreamCacheKey(sourceUrl, season, episode);
     }
 
-    return movieId ? getMovieStreamCacheKey(movieId) : null;
-  }, [movieId, sourceUrl]);
+    return movieId ? getMovieStreamCacheKey(movieId, season, episode) : null;
+  }, [episode, movieId, season, sourceUrl]);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
-  const hlsRef = React.useRef<Hls | null>(null);
   const hideChromeTimeoutRef = React.useRef<number | null>(null);
   const lastTapRef = React.useRef<{ time: number; x: number } | null>(null);
   const dismissedRotateSourceUrlRef = React.useRef<string | null>(null);
@@ -220,17 +210,10 @@ export function WatchPlayer({
   const initialResumeAppliedRef = React.useRef(false);
   const lastProgressReportRef = React.useRef(0);
   const failedSourceUrlsRef = React.useRef<string[]>([]);
-  const [stream, setStream] = React.useState<CachedStreamResponse | null>(() =>
-    streamCacheKey ? readCachedStream(streamCacheKey) : null,
-  );
+  const [stream, setStream] = React.useState<CachedStreamResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedSourceUrl, setSelectedSourceUrl] = React.useState<string | null>(
-    streamCacheKey
-      ? chooseDefaultSource(
-          readCachedStream(streamCacheKey)?.sources ?? [],
-          defaultQuality,
-        )?.url ?? null
-      : null,
+    null,
   );
   const [seekFeedback, setSeekFeedback] = React.useState<SeekFeedback | null>(
     null,
@@ -279,7 +262,9 @@ export function WatchPlayer({
       try {
         const payload = await prefetchCachedStream({
           cacheKey: streamCacheKey,
+          episode,
           movieId,
+          season,
           sourceUrl,
         });
 
@@ -425,7 +410,6 @@ export function WatchPlayer({
     const video = videoRef.current;
     const activeSource = selectedSource;
     let disposed = false;
-    let hls: Hls | null = null;
     const resumeTimeoutIds: number[] = [];
     const resumeSnapshot =
       resumeSnapshotRef.current ??
@@ -437,11 +421,10 @@ export function WatchPlayer({
         : null);
     resumeSnapshotRef.current = null;
     initialResumeAppliedRef.current = true;
-    const mediaUrl = toMediaSourceUrl(activeSource, stream?.accessToken);
+    const mediaUrl = activeSource.url;
     const resumeTime = resumeSnapshot?.time ?? 0;
     const hasResumeTarget = resumeTime > 1;
     let hasStartedPlayback = false;
-    let hlsErrorRecoveryCount = 0;
     const resumeEvents = ["loadedmetadata", "loadeddata", "canplay", "seeked"] as const;
 
     function scheduleResumeStep(delayMs: number) {
@@ -466,10 +449,6 @@ export function WatchPlayer({
     }
 
     function applyResumeSeek() {
-      if (hls !== null) {
-        return true;
-      }
-
       if (!hasResumeTarget || disposed) {
         return true;
       }
@@ -501,7 +480,6 @@ export function WatchPlayer({
       }
 
       if (
-        hls === null &&
         hasResumeTarget &&
         Math.abs(video.currentTime - getResumeTargetTime()) > 2
       ) {
@@ -509,8 +487,28 @@ export function WatchPlayer({
       }
 
       hasStartedPlayback = true;
-      void video.play().catch(() => {
+      const playPromise = video.play();
+
+      if (!playPromise || typeof playPromise.then !== "function") {
+        return;
+      }
+
+      playPromise.catch((error: unknown) => {
         hasStartedPlayback = false;
+
+        const name = (error as DOMException | null)?.name;
+
+        if (
+          name === "NotAllowedError" ||
+          name === "AbortError" ||
+          name === "NotSupportedError"
+        ) {
+          return;
+        }
+
+        if (!disposed) {
+          console.warn("Video resume play gagal:", error);
+        }
       });
     }
 
@@ -528,98 +526,41 @@ export function WatchPlayer({
       }
     }
 
-    async function setupPlayer() {
+    function setupPlayer() {
       video.controls = true;
       video.playsInline = true;
       video.preload = "metadata";
       video.poster = poster ?? "";
+      video.crossOrigin = "anonymous";
       resumeEvents.forEach((eventName) => {
         video.addEventListener(eventName, runResumeStep);
       });
 
-      if (!isHlsSource(activeSource)) {
-        video.addEventListener("error", handleNativeError);
-        video.src = mediaUrl;
-        video.load();
-        scheduleResumeStep(250);
-        scheduleResumeStep(900);
+      if (isHlsSource(activeSource)) {
+        if (
+          video.canPlayType("application/vnd.apple.mpegurl") ||
+          video.canPlayType("application/x-mpegURL")
+        ) {
+          video.addEventListener("error", handleNativeError);
+          video.src = mediaUrl;
+          video.load();
+          scheduleResumeStep(250);
+          scheduleResumeStep(900);
+          return;
+        }
+
+        moveToNextPlayableSource(activeSource.url);
         return;
       }
 
-      const { default: Hls } = await import("hls.js");
-
-      if (disposed) {
-        return;
-      }
-
-      if (Hls.isSupported()) {
-        hls = new Hls({
-          backBufferLength: 60,
-          enableWorker: true,
-          maxBufferLength: 45,
-          startPosition: hasResumeTarget ? resumeTime : -1,
-        });
-        hlsRef.current = hls;
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          playWhenResumeReady();
-        });
-        hls.on(Hls.Events.LEVEL_LOADED, () => {
-          runResumeStep();
-          scheduleResumeStep(200);
-        });
-        hls.on(Hls.Events.FRAG_BUFFERED, () => {
-          runResumeStep();
-        });
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (!data.fatal || disposed) {
-            return;
-          }
-
-          if (
-            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
-            hls &&
-            hlsErrorRecoveryCount < 2
-          ) {
-            hlsErrorRecoveryCount += 1;
-            hls.startLoad();
-            return;
-          }
-
-          if (
-            data.type === Hls.ErrorTypes.MEDIA_ERROR &&
-            hls &&
-            hlsErrorRecoveryCount < 2
-          ) {
-            hlsErrorRecoveryCount += 1;
-            hls.recoverMediaError();
-            return;
-          }
-
-          hls?.destroy();
-          hlsRef.current = null;
-          moveToNextPlayableSource(activeSource.url);
-        });
-        hls.loadSource(mediaUrl);
-        hls.attachMedia(video);
-        return;
-      }
-
-      if (
-        video.canPlayType("application/vnd.apple.mpegurl") ||
-        video.canPlayType("application/x-mpegURL")
-      ) {
-        video.addEventListener("error", handleNativeError);
-        video.src = mediaUrl;
-        video.load();
-        scheduleResumeStep(250);
-        scheduleResumeStep(900);
-        return;
-      }
-
-      moveToNextPlayableSource(activeSource.url);
+      video.addEventListener("error", handleNativeError);
+      video.src = mediaUrl;
+      video.load();
+      scheduleResumeStep(250);
+      scheduleResumeStep(900);
     }
 
-    void setupPlayer();
+    setupPlayer();
 
     return () => {
       disposed = true;
@@ -630,10 +571,17 @@ export function WatchPlayer({
         video.removeEventListener(eventName, runResumeStep);
       });
       video.removeEventListener("error", handleNativeError);
-      hls?.destroy();
-      hlsRef.current = null;
-      video.pause();
+      try {
+        video.pause();
+      } catch {
+        // ignore
+      }
       video.removeAttribute("src");
+      try {
+        video.load();
+      } catch {
+        // ignore
+      }
       unlockOrientationIfPossible();
     };
   }, [
@@ -723,17 +671,10 @@ export function WatchPlayer({
   }, [movieId, sources.length]);
 
   React.useEffect(() => {
-    if (!selectedSourceUrl || previewEnded) {
-      setShowRotateGate(false);
-      return;
+    if (selectedSourceUrl) {
+      dismissedRotateSourceUrlRef.current = selectedSourceUrl;
     }
-
-    if (dismissedRotateSourceUrlRef.current === selectedSourceUrl) {
-      setShowRotateGate(false);
-      return;
-    }
-
-    setShowRotateGate(true);
+    setShowRotateGate(false);
   }, [previewEnded, selectedSourceUrl]);
 
   React.useEffect(() => {
@@ -1115,7 +1056,19 @@ export function WatchPlayer({
           poster={poster ?? undefined}
           playsInline
           controls
-        />
+          crossOrigin="anonymous"
+        >
+          {(stream?.subtitles ?? []).map((subtitle) => (
+            <track
+              key={subtitle.src}
+              kind="subtitles"
+              src={subtitle.src}
+              srcLang={subtitle.lang}
+              label={subtitle.label}
+              default={subtitle.default}
+            />
+          ))}
+        </video>
         <div
           className={cn(
             "pointer-events-none absolute inset-x-0 top-0 z-20 transition-opacity duration-300",

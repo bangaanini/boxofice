@@ -23,6 +23,7 @@ type TelegramHomeScreenStatus =
 type TelegramWebApp = {
   addToHomeScreen?: () => void;
   checkHomeScreenStatus?: (callback?: (status: TelegramHomeScreenStatus) => void) => void;
+  isVersionAtLeast?: (version: string) => boolean;
   offEvent?: (eventType: string, eventHandler: (...args: unknown[]) => void) => void;
   onEvent?: (eventType: string, eventHandler: (...args: unknown[]) => void) => void;
 };
@@ -116,21 +117,37 @@ export function AddToHomeScreenCard() {
 
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onInstalled);
-    telegramWebApp?.onEvent?.("homeScreenAdded", onInstalled);
-    telegramWebApp?.onEvent?.(
-      "homeScreenChecked",
-      handleTelegramStatus as (...args: unknown[]) => void,
+
+    // Telegram homescreen API hanya tersedia di Telegram client v8+. Hindari panggil
+    // method-nya di browser biasa atau Telegram lama supaya tidak bocor warning.
+    const telegramSupportsHomescreen = Boolean(
+      telegramWebApp?.isVersionAtLeast?.("8.0"),
     );
-    telegramWebApp?.checkHomeScreenStatus?.(handleTelegramStatus);
+
+    if (telegramSupportsHomescreen && telegramWebApp) {
+      telegramWebApp.onEvent?.("homeScreenAdded", onInstalled);
+      telegramWebApp.onEvent?.(
+        "homeScreenChecked",
+        handleTelegramStatus as (...args: unknown[]) => void,
+      );
+      try {
+        telegramWebApp.checkHomeScreenStatus?.(handleTelegramStatus);
+      } catch {
+        // Telegram lama bisa throw walau method ada di prototype.
+      }
+    }
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onInstalled);
-      telegramWebApp?.offEvent?.("homeScreenAdded", onInstalled);
-      telegramWebApp?.offEvent?.(
-        "homeScreenChecked",
-        handleTelegramStatus as (...args: unknown[]) => void,
-      );
+
+      if (telegramSupportsHomescreen && telegramWebApp) {
+        telegramWebApp.offEvent?.("homeScreenAdded", onInstalled);
+        telegramWebApp.offEvent?.(
+          "homeScreenChecked",
+          handleTelegramStatus as (...args: unknown[]) => void,
+        );
+      }
     };
   }, []);
 
@@ -156,11 +173,18 @@ export function AddToHomeScreenCard() {
 
     if (isTelegramMiniApp()) {
       const telegramWebApp = getTelegramWebApp();
+      const supportsAddToHomeScreen = Boolean(
+        telegramWebApp?.isVersionAtLeast?.("8.0"),
+      );
 
-      if (telegramWebApp?.addToHomeScreen) {
-        telegramWebApp.addToHomeScreen();
-        setFeedback("Telegram sedang membuka prompt homescreen.");
-        return;
+      if (supportsAddToHomeScreen && telegramWebApp?.addToHomeScreen) {
+        try {
+          telegramWebApp.addToHomeScreen();
+          setFeedback("Telegram sedang membuka prompt homescreen.");
+          return;
+        } catch {
+          // Telegram lama bisa throw walau method ada di prototype.
+        }
       }
 
       setFeedback("Telegram di perangkat ini belum membuka prompt homescreen otomatis.");

@@ -76,9 +76,9 @@ export default async function AdminOverviewPage() {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <AdminMetricCard label="Home" value={overview.homeCount} />
-            <AdminMetricCard label="Populer" value={overview.popularCount} />
-            <AdminMetricCard label="New" value={overview.newCount} />
+            <AdminMetricCard label="Movie" value={overview.movieCount} />
+            <AdminMetricCard label="Series" value={overview.seriesCount} />
+            <AdminMetricCard label="Hero" value={overview.inHeroCount} />
           </div>
 
           <Link

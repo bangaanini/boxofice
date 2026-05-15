@@ -1,24 +1,26 @@
 import Image from "next/image";
 import Link from "next/link";
+import { MessageCircle } from "lucide-react";
 
 import { HomeCatalog } from "@/components/movie/home-catalog";
-import { TelegramEntryGate } from "@/components/telegram/telegram-entry-gate";
+import { HomeHero } from "@/components/movie/home-hero";
+import { HomeSectionRow } from "@/components/movie/home-section-row";
+import { LazyMount } from "@/components/movie/lazy-mount";
 import { resolveChannelBroadcastStartParam } from "@/lib/channel-broadcasts";
 import { extractChannelBroadcastTokenFromStartParam } from "@/lib/channel-broadcast-tokens";
 import {
   getCatalogPage,
+  getHomepageData,
   getHomepageFilterOptions,
   type HomepageFilters,
 } from "@/lib/movie-feeds";
-import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
-import {
-  buildTelegramBotChatUrlForUsername,
-  buildTelegramMainMiniAppUrlForUsername,
-  extractSearchRouteFromStartParam,
-} from "@/lib/telegram-miniapp";
+import { extractSearchRouteFromStartParam } from "@/lib/telegram-miniapp";
 import { getCurrentUserSession } from "@/lib/user-auth";
 
-export const dynamic = "force-dynamic";
+// Halaman home boleh di-cache 60 detik di server. Data dari getHomepageData()
+// sendiri di-cache via unstable_cache di lib/movie-feeds.ts. force-dynamic dihapus
+// supaya navigasi balik ke "/" pakai cached HTML/RSC, tidak re-render setiap kali.
+export const revalidate = 60;
 
 type HomePageProps = {
   searchParams: Promise<{
@@ -100,22 +102,6 @@ export default async function Home({ searchParams }: HomePageProps) {
   ]);
   const { genre, year } = params;
 
-  if (!user) {
-    const telegram = await getTelegramBotSettingsSafe();
-
-    return (
-      <TelegramEntryGate
-        adminLoginUrl="/admin/login"
-        botChatUrl={buildTelegramBotChatUrlForUsername(
-          telegram.runtime.botUsername,
-        )}
-        miniAppUrl={buildTelegramMainMiniAppUrlForUsername(
-          telegram.runtime.botUsername,
-        )}
-      />
-    );
-  }
-
   const selectedGenre = normalizeQueryValue(genre);
   const selectedYear = normalizeQueryValue(year);
   const incomingStartParam =
@@ -193,7 +179,7 @@ export default async function Home({ searchParams }: HomePageProps) {
     );
   }
 
-  const [filters, catalog] = await Promise.all([
+  const [filters, catalog, homepage] = await Promise.all([
     getHomepageFilterOptions(),
     getCatalogPage({
       genre: selectedGenre,
@@ -201,50 +187,76 @@ export default async function Home({ searchParams }: HomePageProps) {
       offset: 0,
       year: selectedYear,
     }),
+    getHomepageData(),
   ]);
   const currentFilters = {
     genre: selectedGenre,
     year: selectedYear,
   } satisfies HomepageFilters;
-  const displayName =
-    user.telegramFirstName?.trim() ||
-    user.name.trim() ||
-    user.telegramUsername ||
-    "Teman";
-  const usernameLabel = user.telegramUsername
-    ? `@${user.telegramUsername}`
-    : "Akun Telegram aktif";
+  const showSections = !selectedGenre && !selectedYear;
+  const displayName = user
+    ? user.telegramFirstName?.trim() ||
+      user.name.trim() ||
+      user.telegramUsername ||
+      "Teman"
+    : null;
+  const usernameLabel = user
+    ? user.telegramUsername
+      ? `@${user.telegramUsername}`
+      : "Akun Telegram aktif"
+    : null;
 
   return (
     <main className="min-h-screen bg-black pb-24 text-white sm:pb-8">
-      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.96),rgba(10,10,10,0.88))] backdrop-blur-xl">
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.96),rgba(10,10,10,0.88))] backdrop-blur-xl sm:hidden">
         <div className="mx-auto w-full max-w-7xl px-4 pb-2 pt-[calc(env(safe-area-inset-top)+8px)] sm:px-8 lg:px-10">
-          <div className="flex items-center gap-3">
-            <div className="relative size-11 shrink-0 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
-              {user.telegramPhotoUrl ? (
-                <Image
-                  src={user.telegramPhotoUrl}
-                  alt={displayName}
-                  fill
-                  unoptimized
-                  sizes="44px"
-                  className="object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white">
-                  {displayName.charAt(0).toUpperCase()}
-                </div>
-              )}
+          {user && displayName ? (
+            <div className="flex items-center gap-3">
+              <div className="relative size-11 shrink-0 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+                {user.telegramPhotoUrl ? (
+                  <Image
+                    src={user.telegramPhotoUrl}
+                    alt={displayName}
+                    fill
+                    unoptimized
+                    sizes="44px"
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white">
+                    {displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-base font-semibold text-white">
+                  {displayName}
+                </p>
+                <p className="truncate text-xs text-neutral-400">
+                  {usernameLabel}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-white">
-                {displayName}
-              </p>
-              <p className="truncate text-xs text-neutral-400">
-                {usernameLabel}
-              </p>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-base font-semibold text-white">
+                  Box Office
+                </p>
+                <p className="text-xs text-neutral-400">
+                  Pratinjau katalog publik
+                </p>
+              </div>
+              <Link
+                href="/login-telegram"
+                prefetch={false}
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-red-400/30 bg-red-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-red-500"
+              >
+                <MessageCircle className="size-4" />
+                Buka via Telegram
+              </Link>
             </div>
-          </div>
+          )}
 
           <div className="mt-3 space-y-2">
             <div>
@@ -273,12 +285,48 @@ export default async function Home({ searchParams }: HomePageProps) {
         </div>
       </header>
 
-      <div className="pt-[118px] sm:pt-[126px]">
-        <HomeCatalog
-          filters={currentFilters}
-          initialMovies={catalog.items}
-          initialNextOffset={catalog.nextOffset}
-        />
+      <div className="pt-[118px] sm:pt-2">
+        {showSections && homepage.heroBanners.length ? (
+          <HomeHero banners={homepage.heroBanners} />
+        ) : null}
+
+        {showSections && homepage.sections.length ? (
+          <div className="space-y-8 py-6 sm:space-y-10 sm:py-8">
+            {homepage.sections.map((section, index) =>
+              index < 1 ? (
+                <HomeSectionRow
+                  key={section.slug}
+                  title={section.title}
+                  slug={section.slug}
+                  movies={section.movies}
+                  eager
+                />
+              ) : (
+                <LazyMount
+                  key={section.slug}
+                  rootMargin="800px 0px"
+                  minHeight={260}
+                >
+                  <HomeSectionRow
+                    title={section.title}
+                    slug={section.slug}
+                    movies={section.movies}
+                  />
+                </LazyMount>
+              ),
+            )}
+          </div>
+        ) : null}
+
+        <LazyMount rootMargin="800px 0px" minHeight={600}>
+          <div className={showSections ? "pt-2" : ""}>
+            <HomeCatalog
+              filters={currentFilters}
+              initialMovies={catalog.items}
+              initialNextOffset={catalog.nextOffset}
+            />
+          </div>
+        </LazyMount>
       </div>
     </main>
   );

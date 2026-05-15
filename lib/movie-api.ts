@@ -1,9 +1,7 @@
 import { formatMovieTitle } from "@/lib/movie-title";
 import { isBlockedMovieCandidate } from "@/lib/movie-visibility";
 
-const DEFAULT_BASE_URL =
-  "https://dgucknjvjhmdzhhfouyg.supabase.co/functions/v1/lk21";
-const LEGACY_BASE_PATH = "/lk21";
+const DEFAULT_BASE_URL = "https://indocast.site/api/filmbox";
 
 function normalizeBaseUrl(value: string | undefined) {
   const trimmed = value?.trim();
@@ -15,15 +13,17 @@ function normalizeBaseUrl(value: string | undefined) {
   return trimmed.replace(/\/+$/, "");
 }
 
-const BASE_URL = normalizeBaseUrl(process.env.MOVIE_API_BASE_URL);
+const BASE_URL = normalizeBaseUrl(process.env.FILMBOX_BASE_URL);
+const API_KEY = process.env.FILMBOX_API_KEY?.trim() ?? "";
+const API_REQUEST_TIMEOUT_MS = 10000;
 
 type JsonRecord = Record<string, unknown>;
-const API_REQUEST_TIMEOUT_MS = 10000;
-const MEDIA_PROBE_TIMEOUT_MS = 8000;
-const MAX_STREAM_CHAIN_DEPTH = 4;
 
 export type NormalizedMovieMetadata = {
   sourceUrl: string;
+  detailPath: string;
+  subjectId: string;
+  subjectType: number;
   title: string;
   thumbnail?: string;
   description?: string;
@@ -32,6 +32,12 @@ export type NormalizedMovieMetadata = {
   rating?: string;
   quality?: string;
   year?: string;
+  releaseDate?: string;
+  country?: string;
+  bahasa?: string;
+  hasIndonesianSubtitle?: boolean;
+  totalEpisode?: number;
+  totalSeason?: number;
 };
 
 export type MovieListResult = {
@@ -41,32 +47,56 @@ export type MovieListResult = {
   movies: NormalizedMovieMetadata[];
 };
 
-export type StreamSource = {
-  url: string;
-  label: string;
-  quality?: string;
-  type?: string;
+export type FilmboxHomeBanner = NormalizedMovieMetadata;
+
+export type FilmboxHomeSection = {
+  title: string;
+  slug: string;
+  position: number;
+  items: NormalizedMovieMetadata[];
 };
 
-export type SanitizedStreamResponse = {
-  originalUrl: string;
-  iframe?: string;
-  m3u8?: string;
-  sources: StreamSource[];
-  resolvedFrom?: string;
+export type FilmboxHomeResult = {
+  heroBanners: FilmboxHomeBanner[];
+  sections: FilmboxHomeSection[];
+};
+
+export type SeasonInfo = {
+  season: number;
+  totalEpisodes: number;
+  episodes: number[];
 };
 
 export type MovieDetail = {
   sourceUrl: string;
+  detailPath: string;
+  subjectId: string;
+  subjectType: number;
   title?: string;
   poster?: string;
   synopsis?: string;
   genres: string[];
   releaseDate?: string;
-  actors: string[];
-  directors: string[];
-  streams?: string;
+  country?: string;
+  bahasa?: string;
+  hasIndonesianSubtitle?: boolean;
+  rating?: string;
+  totalEpisode?: number;
+  totalSeason?: number;
+  seasonsList: SeasonInfo[];
+  trailerUrl?: string;
   raw: JsonRecord;
+};
+
+export type FilmboxPlayback = {
+  subjectId: string;
+  se: number;
+  episode: number;
+  quality: number | string;
+  format: string;
+  vidUrl: string | null;
+  vidUrlProxy: string | null;
+  subUrl: string | null;
 };
 
 export class MovieApiError extends Error {
@@ -109,6 +139,11 @@ function asNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function asInt(value: unknown, fallback: number): number {
+  const parsed = asNumber(value);
+  return parsed === undefined ? fallback : Math.trunc(parsed);
+}
+
 function getString(record: JsonRecord, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = asString(record[key]);
@@ -120,98 +155,19 @@ function getString(record: JsonRecord, keys: string[]): string | undefined {
   return undefined;
 }
 
-function getArray(record: JsonRecord, keys: string[]): unknown[] {
-  for (const key of keys) {
-    const value = record[key];
-    if (Array.isArray(value)) {
-      return value;
-    }
-  }
+function buildUpstreamUrl(
+  path: string,
+  query?: Record<string, string | number | undefined>,
+) {
+  const url = new URL(`${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`);
 
-  return [];
-}
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === null || value === "") {
+        continue;
+      }
 
-function getStringArray(record: JsonRecord, keys: string[]): string[] {
-  return getArray(record, keys)
-    .map((value) => asString(value))
-    .filter((value): value is string => Boolean(value));
-}
-
-function getStringList(record: JsonRecord, keys: string[]): string[] {
-  const arrayValue = getStringArray(record, keys);
-
-  if (arrayValue.length > 0) {
-    return arrayValue;
-  }
-
-  const stringValue = getString(record, keys);
-
-  if (!stringValue) {
-    return [];
-  }
-
-  return stringValue
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function cleanSynopsis(value: string | undefined): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const markers = ["Share Save", "DOWNLOAD Share Save"];
-  let cleaned = value;
-
-  for (const marker of markers) {
-    const index = cleaned.indexOf(marker);
-    if (index >= 0) {
-      cleaned = cleaned.slice(index + marker.length);
-      break;
-    }
-  }
-
-  cleaned = cleaned
-    .replace(/\s*Subtitle:\s*.*$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (cleaned.length < 40) {
-    return value.replace(/\s+/g, " ").trim();
-  }
-
-  return cleaned;
-}
-
-function isSupabaseEdgeBaseUrl(baseUrl: string) {
-  return (
-    baseUrl.includes(".supabase.co/functions/v1/") &&
-    /\/functions\/v1\/[^/]+$/i.test(baseUrl)
-  );
-}
-
-function buildUpstreamUrl(path: string) {
-  if (!isSupabaseEdgeBaseUrl(BASE_URL)) {
-    return `${BASE_URL}${path}`;
-  }
-
-  const [pathname, search = ""] = path.split("?");
-  const normalizedPath = pathname.startsWith(LEGACY_BASE_PATH)
-    ? pathname.slice(LEGACY_BASE_PATH.length) || "/"
-    : pathname;
-  const url = new URL(BASE_URL);
-  const pathValue = normalizedPath.startsWith("/")
-    ? normalizedPath
-    : `/${normalizedPath}`;
-
-  url.searchParams.set("path", pathValue);
-
-  if (search) {
-    const incoming = new URLSearchParams(search);
-
-    for (const [key, value] of incoming.entries()) {
-      url.searchParams.set(key, value);
+      url.searchParams.set(key, String(value));
     }
   }
 
@@ -220,11 +176,14 @@ function buildUpstreamUrl(path: string) {
 
 async function requestJson<T>(
   path: string,
-  init?: RequestInit & { next?: { revalidate?: number } },
+  init?: RequestInit & {
+    next?: { revalidate?: number };
+    query?: Record<string, string | number | undefined>;
+  },
 ): Promise<T> {
-  const { headers, ...restInit } = init ?? {};
+  const { headers, query, ...restInit } = init ?? {};
   let lastError: unknown;
-  const requestUrl = buildUpstreamUrl(path);
+  const requestUrl = buildUpstreamUrl(path, query);
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const controller = new AbortController();
@@ -235,7 +194,9 @@ async function requestJson<T>(
         ...restInit,
         headers: {
           Accept: "application/json",
+          "Content-Type": "application/json",
           "User-Agent": "boxofice/1.0",
+          "x-api-key": API_KEY,
           ...headers,
         },
         signal: restInit.signal ?? controller.signal,
@@ -243,7 +204,7 @@ async function requestJson<T>(
 
       if (!response.ok) {
         throw new MovieApiError(
-          `LK21 upstream request failed with ${response.status}`,
+          `Filmbox upstream request failed with ${response.status}`,
           response.status,
         );
       }
@@ -252,7 +213,7 @@ async function requestJson<T>(
         return (await response.json()) as T;
       } catch {
         throw new MovieApiError(
-          "LK21 upstream returned invalid JSON",
+          "Filmbox upstream returned invalid JSON",
           response.status,
         );
       }
@@ -276,7 +237,38 @@ async function requestJson<T>(
 
   throw lastError instanceof Error
     ? lastError
-    : new MovieApiError("LK21 upstream request failed");
+    : new MovieApiError("Filmbox upstream request failed");
+}
+
+export function slugifyHomeSection(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9À-ɏ\s-]+/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 96)
+    .replace(/^-+|-+$/g, "");
+}
+
+function detectIndonesianSubtitle(bahasa: string | undefined) {
+  return /\bIndonesian\b/i.test(bahasa ?? "");
+}
+
+function deriveYear(record: JsonRecord) {
+  const explicit = getString(record, ["year"]);
+
+  if (explicit) {
+    return explicit;
+  }
+
+  const releaseDate = getString(record, ["releaseDate"]);
+
+  if (releaseDate && releaseDate.length >= 4) {
+    return releaseDate.slice(0, 4);
+  }
+
+  return undefined;
 }
 
 export function normalizeMovieMetadata(
@@ -286,24 +278,39 @@ export function normalizeMovieMetadata(
     return null;
   }
 
-  const sourceUrl = getString(value, ["sourceUrl", "url", "source", "slug"]);
-  const title = getString(value, ["title", "name"]);
-  const year = getString(value, ["year", "releaseYear"]);
+  const detailPath = getString(value, ["detailPath"]);
+  const subjectId = getString(value, ["subjectId"]);
+  const subjectType = asInt(value.subjectType, 1);
+  const title = getString(value, ["title"]);
+  const year = deriveYear(value);
 
-  if (!sourceUrl || !title) {
+  if (!detailPath || !subjectId || !title) {
     return null;
   }
 
-  const normalizedMovie = {
-    sourceUrl,
-    title: formatMovieTitle(title, { sourceUrl, year }),
-    thumbnail: getString(value, ["thumbnail", "poster", "image", "cover"]),
+  const ratingValue = value.rating;
+  const rating =
+    typeof ratingValue === "number" && Number.isFinite(ratingValue)
+      ? ratingValue.toString()
+      : asString(ratingValue);
+  const bahasa = getString(value, ["bahasa"]);
+  const normalizedMovie: NormalizedMovieMetadata = {
+    sourceUrl: detailPath,
+    detailPath,
+    subjectId,
+    subjectType,
+    title: formatMovieTitle(title, { sourceUrl: detailPath, year }),
+    thumbnail: getString(value, ["cover_url", "poster", "thumbnail", "image"]),
     description: getString(value, ["description", "synopsis", "overview"]),
-    duration: getString(value, ["duration", "runtime"]),
     genre: getString(value, ["genre", "genres"]),
-    rating: getString(value, ["rating", "imdbRating", "score"]),
-    quality: getString(value, ["quality", "resolution"]),
+    rating,
     year,
+    releaseDate: getString(value, ["releaseDate", "release_date"]),
+    country: getString(value, ["country"]),
+    bahasa,
+    hasIndonesianSubtitle: detectIndonesianSubtitle(bahasa),
+    totalEpisode: asNumber(value.totalEpisode),
+    totalSeason: asNumber(value.totalSeason),
   };
 
   if (isBlockedMovieCandidate(normalizedMovie)) {
@@ -313,444 +320,211 @@ export function normalizeMovieMetadata(
   return normalizedMovie;
 }
 
-function normalizeMovieListResponse(value: unknown): MovieListResult {
-  const root = isRecord(value) ? value : {};
-  const data = isRecord(root.data) ? root.data : root;
-  const candidates = getArray(data, ["movies", "items", "results", "data"]);
-  const movies = candidates
-    .map((movie) => normalizeMovieMetadata(movie))
-    .filter((movie): movie is NormalizedMovieMetadata => movie !== null);
+function normalizeMovieList(value: unknown): NormalizedMovieMetadata[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
-  return {
-    page: asNumber(data.page),
-    totalPages: asNumber(data.totalPages),
-    fetched: candidates.length,
-    movies,
-  };
+  return value
+    .map((item) => normalizeMovieMetadata(item))
+    .filter((item): item is NormalizedMovieMetadata => item !== null);
 }
 
-function sourceTypeFromUrl(url: string): string | undefined {
-  const lowered = url.split("?")[0]?.toLowerCase() ?? "";
-  const decoded = decodeURIComponent(url).toLowerCase();
-
-  if (lowered.endsWith(".m3u8") || decoded.includes(".m3u8")) {
-    return "application/x-mpegURL";
-  }
-
-  if (lowered.endsWith(".mp4")) {
-    return "video/mp4";
-  }
-
-  if (lowered.endsWith(".webm")) {
-    return "video/webm";
-  }
-
-  return undefined;
-}
-
-function normalizeSourceCandidate(
-  value: unknown,
-): StreamSource | null {
-  if (typeof value === "string") {
-    const url = asString(value);
-    return url
-      ? {
-          url,
-          label: sourceTypeFromUrl(url) === "application/x-mpegURL" ? "Auto" : "Source",
-          type: sourceTypeFromUrl(url),
-        }
-      : null;
-  }
-
+function unwrapData(value: unknown): JsonRecord {
   if (!isRecord(value)) {
-    return null;
+    return {};
   }
 
-  const url = getString(value, ["url", "file", "src", "source", "link", "playUrl"]);
-
-  if (!url) {
-    return null;
-  }
-
-  const quality = getString(value, ["quality", "resolution", "label", "name"]);
-  const type = getString(value, ["type", "mimeType"]) ?? sourceTypeFromUrl(url);
-
-  return {
-    url,
-    label: quality ?? (type === "application/x-mpegURL" ? "Auto" : "Source"),
-    quality,
-    type,
-  };
+  return isRecord(value.data) ? value.data : value;
 }
 
-function normalizeStreamSources(data: JsonRecord): StreamSource[] {
-  const sources: StreamSource[] = [];
-  const m3u8 = data.m3u8;
+export async function fetchFilmboxHome(): Promise<FilmboxHomeResult> {
+  const response = await requestJson<unknown>("/home", {
+    cache: "no-store",
+  });
+  const data = unwrapData(response);
+  const heroSource = Array.isArray(data.hero_banners) ? data.hero_banners : [];
+  const heroBanners = normalizeMovieList(heroSource);
+  const sectionSource = Array.isArray(data.content_sections)
+    ? data.content_sections
+    : [];
+  const sections: FilmboxHomeSection[] = [];
 
-  if (typeof m3u8 === "string") {
-    const source = normalizeSourceCandidate(m3u8);
-    if (source) {
-      sources.push({ ...source, label: source.quality ?? "Auto" });
-    }
-  } else if (Array.isArray(m3u8)) {
-    sources.push(
-      ...m3u8
-        .map((candidate) => normalizeSourceCandidate(candidate))
-        .filter((source): source is StreamSource => source !== null),
-    );
-  }
-
-  for (const key of ["sources", "files", "qualities", "resolutions", "videos"]) {
-    const candidates = data[key];
-    if (!Array.isArray(candidates)) {
+  for (const entry of sectionSource) {
+    if (!isRecord(entry)) {
       continue;
     }
 
-    sources.push(
-      ...candidates
-        .map((candidate) => normalizeSourceCandidate(candidate))
-        .filter((source): source is StreamSource => source !== null),
+    const title = getString(entry, ["section_title"]);
+    const items = normalizeMovieList(
+      Array.isArray(entry.items) ? entry.items : [],
     );
-  }
 
-  const unique = new Map<string, StreamSource>();
-  for (const source of sources) {
-    unique.set(source.url, source);
-  }
-
-  const normalizedSources = Array.from(unique.values());
-
-  return normalizedSources.sort((left, right) => {
-    if (left.label === "Auto" && right.label !== "Auto") {
-      return -1;
+    if (!title || items.length === 0) {
+      continue;
     }
 
-    if (left.label !== "Auto" && right.label === "Auto") {
-      return 1;
-    }
-
-    return 0;
-  });
-}
-
-function normalizeStreamResponse(
-  value: unknown,
-  fallbackSourceUrl: string,
-): SanitizedStreamResponse {
-  const root = isRecord(value) ? value : {};
-  const data = isRecord(root.data) ? root.data : root;
-
-  return {
-    originalUrl: getString(data, ["originalUrl", "sourceUrl", "url"]) ?? fallbackSourceUrl,
-    iframe: getString(data, ["iframe", "embed", "embedUrl", "player"]),
-    m3u8: typeof data.m3u8 === "string" ? data.m3u8 : undefined,
-    sources: normalizeStreamSources(data),
-  };
-}
-
-async function resolveStreamResponseChain(
-  sourceUrl: string,
-  options: { revalidate?: number } = {},
-): Promise<SanitizedStreamResponse> {
-  const visited = new Set<string>();
-  let currentUrl = sourceUrl;
-  let lastResponse: SanitizedStreamResponse | null = null;
-  let lastResolvedFrom = sourceUrl;
-
-  for (let depth = 0; depth < MAX_STREAM_CHAIN_DEPTH; depth += 1) {
-    if (visited.has(currentUrl)) {
-      break;
-    }
-
-    visited.add(currentUrl);
-
-    const response = await fetchStream(currentUrl, options);
-    lastResponse = response;
-    lastResolvedFrom = currentUrl;
-
-    if (response.sources.length > 0) {
-      return {
-        ...response,
-        resolvedFrom: currentUrl,
-      };
-    }
-
-    const nextUrl = response.iframe?.trim();
-
-    if (!nextUrl || nextUrl === currentUrl) {
-      break;
-    }
-
-    currentUrl = nextUrl;
-  }
-
-  return {
-    ...(lastResponse ?? {
-      originalUrl: sourceUrl,
-      sources: [],
-    }),
-    resolvedFrom: lastResolvedFrom,
-  };
-}
-
-function isLikelyBadMediaContentType(contentType: string) {
-  const lowered = contentType.toLowerCase();
-
-  return (
-    lowered.includes("text/html") ||
-    lowered.includes("application/json") ||
-    lowered.includes("image/")
-  );
-}
-
-function looksLikeImageBytes(bytes: Uint8Array) {
-  if (bytes.length < 12) {
-    return false;
-  }
-
-  const pngSignature = [0x89, 0x50, 0x4e, 0x47];
-  const gifSignature = [0x47, 0x49, 0x46, 0x38];
-
-  return (
-    pngSignature.every((byte, index) => bytes[index] === byte) ||
-    gifSignature.every((byte, index) => bytes[index] === byte) ||
-    (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||
-    (bytes[0] === 0x52 &&
-      bytes[1] === 0x49 &&
-      bytes[2] === 0x46 &&
-      bytes[3] === 0x46 &&
-      bytes[8] === 0x57 &&
-      bytes[9] === 0x45 &&
-      bytes[10] === 0x42 &&
-      bytes[11] === 0x50)
-  );
-}
-
-async function fetchForMediaProbe(url: string, init: RequestInit = {}) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), MEDIA_PROBE_TIMEOUT_MS);
-
-  try {
-    return await fetch(url, {
-      ...init,
-      headers: {
-        Accept: "*/*",
-        "User-Agent": "Mozilla/5.0 Boxofice/1.0",
-        ...init.headers,
-      },
-      signal: controller.signal,
+    sections.push({
+      title,
+      slug: slugifyHomeSection(title),
+      position: asInt(entry.position, sections.length + 1),
+      items,
     });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function isPlayableMediaUrl(url: string, depth = 0): Promise<boolean> {
-  if (depth > 2) {
-    return false;
   }
 
-  const isPlaylist = sourceTypeFromUrl(url) === "application/x-mpegURL";
-  const response = await fetchForMediaProbe(url);
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (!response.ok || isLikelyBadMediaContentType(contentType)) {
-    return false;
-  }
-
-  if (isPlaylist || contentType.toLowerCase().includes("mpegurl")) {
-    const playlist = await response.text();
-
-    return playlist.includes("#EXTM3U");
-  }
-
-  if (
-    contentType.toLowerCase().startsWith("video/") ||
-    contentType.toLowerCase().includes("octet-stream")
-  ) {
-    await response.body?.cancel().catch(() => undefined);
-    return true;
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-
-  return bytes.length > 0 && !looksLikeImageBytes(bytes);
+  return {
+    heroBanners,
+    sections,
+  };
 }
 
-async function filterPlayableSources(sources: StreamSource[]) {
-  const checkedSources = await Promise.all(
-    sources.map(async (source) => {
-      try {
-        return (await isPlayableMediaUrl(source.url)) ? source : null;
-      } catch {
-        return null;
-      }
-    }),
-  );
+export async function fetchTrending(
+  page = 0,
+  perPage = 18,
+): Promise<MovieListResult> {
+  const response = await requestJson<unknown>("/trending", {
+    cache: "no-store",
+    query: { page, perPage },
+  });
+  const data = unwrapData(response);
+  const items = Array.isArray(data.items) ? data.items : [];
 
-  return checkedSources.filter(
-    (source): source is StreamSource => source !== null,
-  );
-}
-
-function shouldResolveDetailBeforeStream(sourceUrl: string) {
-  try {
-    const url = new URL(sourceUrl);
-
-    return url.hostname.includes("lk21official");
-  } catch {
-    return false;
-  }
-}
-
-export async function fetchHome(page = 1): Promise<MovieListResult> {
-  const response = await requestJson<unknown>(`/lk21/home?page=${page}`);
-  return normalizeMovieListResponse(response);
-}
-
-export async function fetchPopular(page = 1): Promise<MovieListResult> {
-  const response = await requestJson<unknown>(`/lk21/populer?page=${page}`);
-  return normalizeMovieListResponse(response);
-}
-
-export async function fetchNew(page = 1): Promise<MovieListResult> {
-  const response = await requestJson<unknown>(`/lk21/new?page=${page}`);
-  return normalizeMovieListResponse(response);
+  return {
+    page,
+    totalPages: undefined,
+    fetched: items.length,
+    movies: normalizeMovieList(items),
+  };
 }
 
 export async function fetchSearch(
   query: string,
   page = 1,
+  perPage = 18,
+  subjectType?: number,
 ): Promise<MovieListResult> {
-  const response = await requestJson<unknown>(
-    `/lk21/search?q=${encodeURIComponent(query)}&page=${page}`,
-    {
-      cache: "no-store",
-    },
-  );
+  const body: Record<string, string> = {
+    keyword: query,
+    page: String(page),
+    perPage: String(perPage),
+  };
 
-  return normalizeMovieListResponse(response);
+  if (subjectType !== undefined) {
+    body.subjectType = String(subjectType);
+  }
+
+  const response = await requestJson<unknown>("/search", {
+    body: JSON.stringify(body),
+    cache: "no-store",
+    method: "POST",
+  });
+  const data = unwrapData(response);
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  return {
+    page,
+    fetched: items.length,
+    movies: normalizeMovieList(items),
+  };
 }
 
 export async function fetchDetail(
-  sourceUrl: string,
+  detailPath: string,
   options: { revalidate?: number } = {},
 ): Promise<MovieDetail> {
-  const response = await requestJson<unknown>(
-    `/lk21/detail?url=${encodeURIComponent(sourceUrl)}`,
-    {
-      next: {
-        revalidate: options.revalidate ?? 3600,
-      },
+  const response = await requestJson<unknown>("/details", {
+    next: {
+      revalidate: options.revalidate ?? 3600,
     },
-  );
-  const root = isRecord(response) ? response : {};
-  const data = isRecord(root.data) ? root.data : root;
-  const resolvedSourceUrl = getString(data, ["source", "sourceUrl", "url"]) ?? sourceUrl;
-  const year = getString(data, ["year", "releaseYear"]);
-  const title = getString(data, ["title", "name"]);
+    query: { detailPath },
+  });
+  const data = unwrapData(response);
+  const subjectId = getString(data, ["subjectId"]) ?? "";
+  const subjectType = asInt(data.subjectType, 1);
+  const resolvedDetailPath = getString(data, ["detailPath"]) ?? detailPath;
+  const title = getString(data, ["title"]);
+  const year = deriveYear(data);
+  const seasonsRaw = Array.isArray(data.seasons_list) ? data.seasons_list : [];
+  const seasonsList: SeasonInfo[] = seasonsRaw
+    .map((entry) => {
+      if (!isRecord(entry)) {
+        return null;
+      }
+
+      const episodes = Array.isArray(entry.episodes)
+        ? entry.episodes
+            .map((value) => asNumber(value))
+            .filter((value): value is number => typeof value === "number")
+        : [];
+
+      return {
+        season: asInt(entry.season, 1),
+        totalEpisodes: asInt(entry.total_episodes, episodes.length),
+        episodes,
+      };
+    })
+    .filter((value): value is SeasonInfo => value !== null);
+  const bahasa = getString(data, ["bahasa"]);
+  const ratingValue = data.rating;
+  const rating =
+    typeof ratingValue === "number" && Number.isFinite(ratingValue)
+      ? ratingValue.toString()
+      : asString(ratingValue);
 
   return {
-    sourceUrl: resolvedSourceUrl,
+    sourceUrl: resolvedDetailPath,
+    detailPath: resolvedDetailPath,
+    subjectId,
+    subjectType,
     title: title
-      ? formatMovieTitle(title, { sourceUrl: resolvedSourceUrl, year })
+      ? formatMovieTitle(title, { sourceUrl: resolvedDetailPath, year })
       : undefined,
-    poster: getString(data, ["poster", "thumbnail", "image"]),
-    synopsis: cleanSynopsis(getString(data, ["synopsis", "description", "overview"])),
-    genres: getStringList(data, ["genres", "genre"]),
-    releaseDate: getString(data, ["releaseDate", "released", "date"]),
-    actors: getStringArray(data, ["actors", "cast", "stars"]),
-    directors: getStringArray(data, ["directors", "director"]),
-    streams: getString(data, ["streams", "iframe", "player"]),
+    poster: getString(data, ["cover_url", "poster", "thumbnail"]),
+    synopsis: getString(data, ["description", "synopsis", "overview"]),
+    genres: (getString(data, ["genre"]) ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+    releaseDate: getString(data, ["releaseDate", "release_date"]),
+    country: getString(data, ["country"]),
+    bahasa,
+    hasIndonesianSubtitle: detectIndonesianSubtitle(bahasa),
+    rating,
+    totalEpisode: asNumber(data.totalEpisode),
+    totalSeason: asNumber(data.totalSeason),
+    seasonsList,
+    trailerUrl: getString(data, ["trailer_url", "trailerUrl"]),
     raw: data,
   };
 }
 
-export async function fetchStream(
-  sourceUrl: string,
-  options: { revalidate?: number } = {},
-): Promise<SanitizedStreamResponse> {
-  const response = await requestJson<unknown>(
-    `/lk21/stream?url=${encodeURIComponent(sourceUrl)}`,
-    {
-      next: {
-        revalidate: options.revalidate ?? 3600,
-      },
+export async function fetchGetPlay(input: {
+  subjectId: string;
+  detailPath: string;
+  se?: number;
+  ep?: number;
+  lang?: string;
+}): Promise<FilmboxPlayback> {
+  const response = await requestJson<unknown>("/getplay", {
+    cache: "no-store",
+    query: {
+      subjectId: input.subjectId,
+      detailPath: input.detailPath,
+      se: input.se ?? 0,
+      ep: input.ep ?? 0,
+      lang: input.lang ?? "in_id",
     },
-  );
-
-  return normalizeStreamResponse(response, sourceUrl);
-}
-
-export async function fetchPlayableStream(
-  sourceUrl: string,
-  options: { revalidate?: number } = {},
-): Promise<SanitizedStreamResponse> {
-  let initialStream: SanitizedStreamResponse | null = null;
-  let initialError: unknown;
-
-  if (!shouldResolveDetailBeforeStream(sourceUrl)) {
-    try {
-      initialStream = await resolveStreamResponseChain(sourceUrl, options);
-    } catch (error) {
-      initialError = error;
-    }
-  }
-
-  if (initialStream && initialStream.sources.length > 0) {
-    const playableSources = await filterPlayableSources(initialStream.sources);
-
-    if (playableSources.length > 0) {
-      return {
-        ...initialStream,
-        sources: playableSources,
-        resolvedFrom: sourceUrl,
-      };
-    }
-  }
-
-  const detail = await fetchDetail(sourceUrl);
-
-  if (!detail.streams || detail.streams === sourceUrl) {
-    if (initialStream) {
-      return {
-        ...initialStream,
-        resolvedFrom: sourceUrl,
-      };
-    }
-
-    throw initialError instanceof Error
-      ? initialError
-      : new MovieApiError("LK21 stream source is unavailable");
-  }
-
-  const playerStream = await resolveStreamResponseChain(detail.streams, options);
-
-  if (playerStream.sources.length === 0) {
-    return initialStream
-      ? {
-          ...initialStream,
-          resolvedFrom: sourceUrl,
-        }
-      : {
-          ...playerStream,
-          resolvedFrom: detail.streams,
-        };
-  }
-
-  const playableSources = await filterPlayableSources(playerStream.sources);
-
-  if (playableSources.length === 0) {
-    return {
-      ...playerStream,
-      sources: [],
-      resolvedFrom: detail.streams,
-    };
-  }
+  });
+  const data = unwrapData(response);
 
   return {
-    ...playerStream,
-    sources: playableSources,
-    resolvedFrom: detail.streams,
+    subjectId: getString(data, ["subjectId"]) ?? input.subjectId,
+    se: asInt(data.se, input.se ?? 0),
+    episode: asInt(data.episode, input.ep ?? 0),
+    quality: asNumber(data.quality) ?? getString(data, ["quality"]) ?? "auto",
+    format: getString(data, ["format"]) ?? "MP4",
+    vidUrl: getString(data, ["vid_url"]) ?? null,
+    vidUrlProxy: getString(data, ["vid_url_proxy"]) ?? null,
+    subUrl: getString(data, ["sub_url"]) ?? null,
   };
 }

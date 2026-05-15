@@ -5,7 +5,10 @@ import {
   getPreferredPartnerBotShareLink,
   getPreferredTelegramShareLinksForUser,
 } from "@/lib/telegram-partner-bots";
-import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
+import {
+  getEnvPublicAppUrl,
+  getTelegramBotSettingsSafe,
+} from "@/lib/telegram-bot-settings";
 import {
   buildAffiliateStartParam,
   buildTelegramMiniAppUrlForConfig,
@@ -163,6 +166,17 @@ export async function getAffiliateSharePath(
   } catch {
     return `/r/${encodeURIComponent(referralCode)}`;
   }
+}
+
+export function getAffiliateWebSharePath(referralCode: string) {
+  const trimmed = referralCode.trim();
+
+  if (!trimmed) {
+    return getEnvPublicAppUrl();
+  }
+
+  const base = getEnvPublicAppUrl().replace(/\/+$/, "");
+  return `${base}/r/${encodeURIComponent(trimmed.toUpperCase())}?w=1`;
 }
 
 export async function ensureAffiliateProgramSettings() {

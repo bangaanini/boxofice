@@ -17,9 +17,27 @@ function clampPage(value: string | null) {
   return Math.min(Math.max(Math.trunc(parsed), 1), 100);
 }
 
+function parseSubjectType(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  const truncated = Math.trunc(parsed);
+  return truncated === 1 || truncated === 2 ? truncated : undefined;
+}
+
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
   const page = clampPage(request.nextUrl.searchParams.get("page"));
+  const subjectType = parseSubjectType(
+    request.nextUrl.searchParams.get("subjectType"),
+  );
 
   if (query.length < 2) {
     return NextResponse.json(
@@ -29,8 +47,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await fetchSearch(query, page);
-    const safeMovies = result.movies.filter((movie) => !isBlockedMovieCandidate(movie));
+    const result = await fetchSearch(query, page, 18, subjectType);
+    const safeMovies = result.movies.filter(
+      (movie) => !isBlockedMovieCandidate(movie),
+    );
     const sourceUrls = Array.from(
       new Set(
         safeMovies
@@ -49,9 +69,6 @@ export async function GET(request: NextRequest) {
             select: {
               description: true,
               id: true,
-              inHome: true,
-              inNew: true,
-              inPopular: true,
               sourceUrl: true,
               thumbnail: true,
               title: true,
@@ -90,7 +107,8 @@ export async function GET(request: NextRequest) {
       },
     );
   } catch (error) {
-    const status = error instanceof MovieApiError && error.status === 404 ? 404 : 502;
+    const status =
+      error instanceof MovieApiError && error.status === 404 ? 404 : 502;
 
     return NextResponse.json(
       {

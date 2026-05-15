@@ -55,6 +55,7 @@ type AffiliateDashboardProps = {
   pendingBalanceLabel: string;
   referralCode: string;
   referralUrl: string;
+  webReferralUrl?: string;
   signups: number;
   totalCommissionLabel: string;
   withdrawnBalanceLabel: string;
@@ -234,6 +235,7 @@ export function AffiliateDashboard({
   pendingBalanceLabel,
   referralCode,
   referralUrl,
+  webReferralUrl,
   signups,
   totalCommissionLabel,
   withdrawnBalanceLabel,
@@ -246,10 +248,16 @@ export function AffiliateDashboard({
   const [copied, setCopied] = React.useState(false);
   const [shareFeedback, setShareFeedback] = React.useState<string | null>(null);
   const [showPayoutModal, setShowPayoutModal] = React.useState(false);
+  const [webLink, setWebLink] = React.useState(webReferralUrl ?? "");
+  const [webCopied, setWebCopied] = React.useState(false);
 
   React.useEffect(() => {
     setLink(referralUrl);
   }, [referralUrl]);
+
+  React.useEffect(() => {
+    setWebLink(webReferralUrl ?? "");
+  }, [webReferralUrl]);
 
   React.useEffect(() => {
     if (!copied) {
@@ -280,6 +288,54 @@ export function AffiliateDashboard({
       setShowPayoutModal(false);
     }
   }, [actionState.success]);
+
+  React.useEffect(() => {
+    if (!webCopied) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setWebCopied(false), 1800);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [webCopied]);
+
+  async function copyWebLink() {
+    if (!webLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(webLink);
+      setWebCopied(true);
+      setShareFeedback("Link affiliate web berhasil disalin.");
+    } catch {
+      setShareFeedback("Clipboard belum bisa dipakai di perangkat ini.");
+    }
+  }
+
+  async function shareWebLink() {
+    if (!webLink) {
+      return;
+    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          text: "Daftar Box Office dari link web ini.",
+          title: "Box Office Affiliate",
+          url: webLink,
+        });
+      } else {
+        await navigator.clipboard.writeText(webLink);
+        setWebCopied(true);
+        setShareFeedback("Link affiliate web berhasil disalin.");
+      }
+    } catch {
+      // user cancel
+    }
+  }
 
   async function copyLink() {
     try {
@@ -390,6 +446,58 @@ export function AffiliateDashboard({
           <p className="mt-3 text-sm text-neutral-300">{shareFeedback}</p>
         ) : null}
       </section>
+
+      {webLink ? (
+        <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,24,0.94),rgba(8,8,8,0.96))] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.4)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-white">
+                Link referral Web
+              </p>
+              <p className="mt-1 text-sm leading-6 text-neutral-400">
+                Cocok untuk teman yang tidak pakai Telegram. Klik link ini akan
+                bawa mereka ke halaman daftar web.
+              </p>
+            </div>
+            <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 ring-1 ring-emerald-400/15">
+              Web
+            </span>
+          </div>
+
+          <div className="mt-4 rounded-[18px] border border-white/10 bg-black/25 p-3">
+            <p className="text-[11px] uppercase tracking-[0.08em] text-neutral-500">
+              Web link
+            </p>
+            <p className="mt-2 break-all text-sm leading-6 text-white">
+              {webLink}
+            </p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={copyWebLink}
+              className="h-11 border border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.12]"
+            >
+              {webCopied ? (
+                <Check className="size-4" />
+              ) : (
+                <Copy className="size-4" />
+              )}
+              {webCopied ? "Tersalin" : "Salin"}
+            </Button>
+            <Button
+              type="button"
+              onClick={shareWebLink}
+              className="h-11 bg-emerald-600 text-white hover:bg-emerald-500"
+            >
+              <Share2 className="size-4" />
+              Bagikan
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-3 gap-2">
         <div className="rounded-[20px] border border-white/10 bg-white/[0.05] p-4">

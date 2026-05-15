@@ -4,9 +4,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCronAuthorizationError } from "@/lib/cron-route";
 import {
   resolveSyncPage,
-  type FeedSyncSummary,
-  syncMovieFeed,
-  type MovieFeedTarget,
+  syncFilmboxHome,
+  syncTrendingPages,
+  type FilmboxHomeSyncSummary,
+  type FilmboxTrendingSyncSummary,
 } from "@/lib/movie-sync";
 import { prisma } from "@/lib/prisma";
 
@@ -14,168 +15,60 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const DEFAULT_FROM_PAGE = 1;
-const DEFAULT_TO_PAGE = 50;
+const DEFAULT_BATCH_PAGES = 5;
+const MAX_TRENDING_PAGE = 200;
+const DEFAULT_PER_PAGE = 18;
 const DEFAULT_CURSOR_SLUG = "movie-sync-nightly";
-
-type SyncMode = "cursor" | "range";
 
 type CursorState = {
   currentPage: number;
-  currentTarget: MovieFeedTarget;
-  fromPage: number;
-  target: MovieFeedTarget | "all";
-  toPage: number;
+  syncedHomeAt?: string;
 };
 
-function resolveMode(value: string | null): SyncMode {
-  return value === "range" ? "range" : "cursor";
-}
-
-function resolveTarget(value: string | null): MovieFeedTarget | "all" {
-  return value === "home" || value === "popular" || value === "new" || value === "all"
-    ? value
-    : "all";
-}
-
-function resolveFromPage(value: string | null) {
-  return resolveSyncPage(value ?? DEFAULT_FROM_PAGE);
-}
-
-function resolveToPage(value: string | null, fromPage: number) {
-  return Math.max(fromPage, resolveSyncPage(value ?? DEFAULT_TO_PAGE));
-}
-
-function resolveCursorSlug(
-  value: string | null,
-  target: MovieFeedTarget | "all",
-) {
-  const rawValue = value?.trim().toLowerCase() ?? "";
-  const sanitized = rawValue.replace(/[^a-z0-9_-]/g, "");
-
-  if (sanitized) {
-    return sanitized;
+function clampPerPage(value: string | null) {
+  if (!value) {
+    return DEFAULT_PER_PAGE;
   }
 
-  return target === "all" ? DEFAULT_CURSOR_SLUG : `${DEFAULT_CURSOR_SLUG}-${target}`;
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed)
+    ? Math.min(Math.max(Math.trunc(parsed), 1), 60)
+    : DEFAULT_PER_PAGE;
 }
 
-function resolveTargetSequence(target: MovieFeedTarget | "all") {
-  return target === "all" ? (["home", "popular", "new"] as MovieFeedTarget[]) : [target];
-}
+function clampBatchPages(value: string | null) {
+  if (!value) {
+    return DEFAULT_BATCH_PAGES;
+  }
 
-function createFeedAccumulator(
-  target: MovieFeedTarget,
-  pages: number,
-): FeedSyncSummary {
-  return {
-    target,
-    pages,
-    fetched: 0,
-    created: 0,
-    existing: 0,
-    updated: 0,
-    unchanged: 0,
-    upserted: 0,
-    duplicateSkipped: 0,
-    skippedUnsupported: 0,
-    deactivated: 0,
-    hadFetchErrors: false,
-    active: 0,
-    errors: [],
-  };
-}
+  const parsed = Number(value);
 
-function mergeFeedSyncSummary(
-  accumulator: FeedSyncSummary,
-  summary: FeedSyncSummary,
-) {
-  accumulator.fetched += summary.fetched;
-  accumulator.created += summary.created;
-  accumulator.existing += summary.existing;
-  accumulator.updated += summary.updated;
-  accumulator.unchanged += summary.unchanged;
-  accumulator.upserted += summary.upserted;
-  accumulator.duplicateSkipped += summary.duplicateSkipped;
-  accumulator.skippedUnsupported += summary.skippedUnsupported;
-  accumulator.deactivated += summary.deactivated;
-  accumulator.active += summary.active;
-  accumulator.hadFetchErrors = accumulator.hadFetchErrors || summary.hadFetchErrors;
-  accumulator.errors.push(...summary.errors);
+  return Number.isFinite(parsed)
+    ? Math.min(Math.max(Math.trunc(parsed), 1), 20)
+    : DEFAULT_BATCH_PAGES;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeCursorState(
-  value: unknown,
-  target: MovieFeedTarget | "all",
-  fromPage: number,
-  toPage: number,
-): CursorState {
-  const targets = resolveTargetSequence(target);
-  const fallbackTarget = targets[0];
-
+function normalizeCursorState(value: unknown): CursorState {
   if (!isRecord(value)) {
-    return {
-      currentPage: fromPage,
-      currentTarget: fallbackTarget,
-      fromPage,
-      target,
-      toPage,
-    };
+    return { currentPage: 0 };
   }
 
   const rawCurrentPage = Number(value.currentPage);
   const currentPage = Number.isFinite(rawCurrentPage)
-    ? Math.min(Math.max(Math.trunc(rawCurrentPage), fromPage), toPage)
-    : fromPage;
-  const rawCurrentTarget = value.currentTarget;
-  const currentTarget =
-    typeof rawCurrentTarget === "string" && targets.includes(rawCurrentTarget as MovieFeedTarget)
-      ? (rawCurrentTarget as MovieFeedTarget)
-      : fallbackTarget;
-  const rawTarget = value.target;
+    ? Math.max(0, Math.trunc(rawCurrentPage))
+    : 0;
+  const syncedHomeAt =
+    typeof value.syncedHomeAt === "string" ? value.syncedHomeAt : undefined;
 
-  if (rawTarget !== target) {
-    return {
-      currentPage: fromPage,
-      currentTarget: fallbackTarget,
-      fromPage,
-      target,
-      toPage,
-    };
-  }
-
-  const rawFromPage = Number(value.fromPage);
-  const rawToPage = Number(value.toPage);
-
-  if (
-    !Number.isFinite(rawFromPage) ||
-    !Number.isFinite(rawToPage) ||
-    Math.trunc(rawFromPage) !== fromPage ||
-    Math.trunc(rawToPage) !== toPage
-  ) {
-    return {
-      currentPage: fromPage,
-      currentTarget: fallbackTarget,
-      fromPage,
-      target,
-      toPage,
-    };
-  }
-
-  return {
-    currentPage,
-    currentTarget,
-    fromPage,
-    target,
-    toPage,
-  };
+  return { currentPage, syncedHomeAt };
 }
 
-async function readCursorState(slug: string) {
+async function readCursorState(slug: string): Promise<CursorState> {
   const rows = await prisma.$queryRaw<Array<{ state: unknown }>>`
     SELECT "state"
     FROM "CronJobCursor"
@@ -183,7 +76,7 @@ async function readCursorState(slug: string) {
     LIMIT 1
   `;
 
-  return rows[0]?.state ?? null;
+  return normalizeCursorState(rows[0]?.state ?? null);
 }
 
 async function writeCursorState(slug: string, state: CursorState) {
@@ -214,149 +107,33 @@ async function writeCursorState(slug: string, state: CursorState) {
   `;
 }
 
-function buildNextCursorState(state: CursorState): CursorState {
-  const targets = resolveTargetSequence(state.target);
-  const currentIndex = Math.max(targets.indexOf(state.currentTarget), 0);
-
-  if (state.currentPage < state.toPage) {
-    return {
-      ...state,
-      currentPage: state.currentPage + 1,
-    };
-  }
-
-  if (currentIndex < targets.length - 1) {
-    return {
-      ...state,
-      currentPage: state.fromPage,
-      currentTarget: targets[currentIndex + 1],
-    };
-  }
-
-  return {
-    ...state,
-    currentPage: state.fromPage,
-    currentTarget: targets[0],
-  };
-}
-
-async function syncTargetRange(
-  target: MovieFeedTarget,
-  fromPage: number,
-  toPage: number,
-) {
-  const pages = toPage - fromPage + 1;
-  const summary = createFeedAccumulator(target, pages);
-
-  for (let page = fromPage; page <= toPage; page += 1) {
-    const pageSummary = await syncMovieFeed(target, { page });
-    mergeFeedSyncSummary(summary, pageSummary);
-  }
-
-  return summary;
-}
-
 function revalidateCatalogPages() {
   revalidatePath("/");
   revalidatePath("/search");
   revalidatePath("/library");
-  revalidatePath("/browse/home");
-  revalidatePath("/browse/populer");
-  revalidatePath("/browse/new");
+  revalidatePath("/browse/[slug]", "page");
   revalidatePath("/movie/[id]", "page");
   revalidatePath("/admin");
   revalidatePath("/admin/sync");
 }
 
-async function handleCursorMode(request: NextRequest) {
-  const target = resolveTarget(request.nextUrl.searchParams.get("target"));
-  const fromPage = resolveFromPage(request.nextUrl.searchParams.get("fromPage"));
-  const toPage = resolveToPage(request.nextUrl.searchParams.get("toPage"), fromPage);
-  const slug = resolveCursorSlug(request.nextUrl.searchParams.get("slug"), target);
-  const storedState = await readCursorState(slug);
-  const cursorState = normalizeCursorState(storedState, target, fromPage, toPage);
-  const processedTarget = cursorState.currentTarget;
-  const processedPage = cursorState.currentPage;
-  const pageSummary = await syncMovieFeed(processedTarget, { page: processedPage });
-  const nextState = buildNextCursorState(cursorState);
-  const wrapped =
-    nextState.currentTarget === resolveTargetSequence(target)[0] &&
-    nextState.currentPage === fromPage &&
-    (processedTarget !== nextState.currentTarget || processedPage !== nextState.currentPage);
-
-  await writeCursorState(slug, nextState);
-  revalidateCatalogPages();
-
-  return NextResponse.json({
-    ok: pageSummary.errors.length === 0,
-    mode: "cursor",
-    processed: {
-      page: processedPage,
-      target: processedTarget,
-    },
-    next: {
-      page: nextState.currentPage,
-      target: nextState.currentTarget,
-    },
-    range: {
-      fromPage,
-      toPage,
-    },
-    slug,
-    summary: pageSummary,
-    target,
-    wrapped,
-  });
-}
-
-async function handleRangeMode(request: NextRequest) {
-  const target = resolveTarget(request.nextUrl.searchParams.get("target"));
-  const fromPage = resolveFromPage(request.nextUrl.searchParams.get("fromPage"));
-  const toPage = resolveToPage(request.nextUrl.searchParams.get("toPage"), fromPage);
-  const targets: MovieFeedTarget[] =
-    target === "all" ? ["home", "popular", "new"] : [target];
-  const summaries: FeedSyncSummary[] = [];
-
-  for (const item of targets) {
-    summaries.push(await syncTargetRange(item, fromPage, toPage));
+function shouldRunHomeSync(state: CursorState, force: boolean) {
+  if (force) {
+    return true;
   }
 
-  const targetSummaries: Partial<Record<MovieFeedTarget, FeedSyncSummary>> = {};
-
-  for (const item of summaries) {
-    targetSummaries[item.target] = item;
+  if (!state.syncedHomeAt) {
+    return true;
   }
 
-  const summary = {
-    fromPage,
-    toPage,
-    targets: targetSummaries,
-    totalFetched: summaries.reduce((sum, item) => sum + item.fetched, 0),
-    totalCreated: summaries.reduce((sum, item) => sum + item.created, 0),
-    totalExisting: summaries.reduce((sum, item) => sum + item.existing, 0),
-    totalUpdated: summaries.reduce((sum, item) => sum + item.updated, 0),
-    totalUnchanged: summaries.reduce((sum, item) => sum + item.unchanged, 0),
-    totalUpserted: summaries.reduce((sum, item) => sum + item.upserted, 0),
-    totalDuplicateSkipped: summaries.reduce(
-      (sum, item) => sum + item.duplicateSkipped,
-      0,
-    ),
-    totalSkippedUnsupported: summaries.reduce(
-      (sum, item) => sum + item.skippedUnsupported,
-      0,
-    ),
-    totalDeactivated: summaries.reduce((sum, item) => sum + item.deactivated, 0),
-    totalErrors: summaries.reduce((sum, item) => sum + item.errors.length, 0),
-  };
+  const lastRun = new Date(state.syncedHomeAt).getTime();
 
-  revalidateCatalogPages();
+  if (!Number.isFinite(lastRun)) {
+    return true;
+  }
 
-  return NextResponse.json({
-    ok: summary.totalErrors === 0,
-    mode: "range",
-    summary,
-    target,
-  });
+  const sixHoursMs = 6 * 60 * 60 * 1000;
+  return Date.now() - lastRun > sixHoursMs;
 }
 
 export async function GET(request: NextRequest) {
@@ -366,14 +143,73 @@ export async function GET(request: NextRequest) {
     return authorizationError;
   }
 
-  try {
-    const mode = resolveMode(request.nextUrl.searchParams.get("mode"));
+  const slug = (request.nextUrl.searchParams.get("slug")?.trim() ||
+    DEFAULT_CURSOR_SLUG)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "");
+  const cursorSlug = slug || DEFAULT_CURSOR_SLUG;
+  const target = request.nextUrl.searchParams.get("target") ?? "all";
+  const batchPages = clampBatchPages(
+    request.nextUrl.searchParams.get("batchPages"),
+  );
+  const perPage = clampPerPage(request.nextUrl.searchParams.get("perPage"));
+  const fromPageOverride = request.nextUrl.searchParams.get("fromPage");
+  const toPageOverride = request.nextUrl.searchParams.get("toPage");
+  const force = request.nextUrl.searchParams.get("force") === "1";
 
-    if (mode === "range") {
-      return await handleRangeMode(request);
+  try {
+    const state = await readCursorState(cursorSlug);
+    let homeSummary: FilmboxHomeSyncSummary | null = null;
+    let trendingSummary: FilmboxTrendingSyncSummary | null = null;
+    let nextState: CursorState = state;
+
+    if (target === "home" || target === "all") {
+      if (shouldRunHomeSync(state, force)) {
+        homeSummary = await syncFilmboxHome();
+        nextState = {
+          ...nextState,
+          syncedHomeAt: new Date().toISOString(),
+        };
+      }
     }
 
-    return await handleCursorMode(request);
+    if (target === "trending" || target === "all") {
+      const explicitFrom =
+        fromPageOverride !== null ? resolveSyncPage(fromPageOverride) : null;
+      const explicitTo =
+        toPageOverride !== null ? resolveSyncPage(toPageOverride) : null;
+      const fromPage = explicitFrom ?? state.currentPage;
+      const toPage = explicitTo ?? fromPage + batchPages - 1;
+
+      trendingSummary = await syncTrendingPages({
+        fromPage,
+        toPage,
+        perPage,
+      });
+
+      const nextPage = trendingSummary.fetched > 0 ? toPage + 1 : 0;
+      nextState = {
+        ...nextState,
+        currentPage:
+          nextPage > MAX_TRENDING_PAGE ? 0 : Math.max(0, nextPage),
+      };
+    }
+
+    await writeCursorState(cursorSlug, nextState);
+    revalidateCatalogPages();
+
+    return NextResponse.json({
+      ok:
+        (homeSummary?.errors.length ?? 0) === 0 &&
+        (trendingSummary?.errors.length ?? 0) === 0,
+      slug: cursorSlug,
+      state: nextState,
+      target,
+      summary: {
+        home: homeSummary,
+        trending: trendingSummary,
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       {

@@ -10,6 +10,9 @@ datasource db {
 model Movie {
   id             String            @id @default(uuid())
   sourceUrl      String            @unique
+  detailPath     String?
+  subjectId      String?           @unique
+  subjectType    Int               @default(1)
   title          String
   thumbnail      String?
   description    String?           @db.Text
@@ -19,42 +22,29 @@ model Movie {
   rating         String?
   quality        String?
   releaseDate    String?
+  country        String?
+  bahasa         String?           @db.Text
+  hasIndonesianSubtitle Boolean    @default(false)
+  totalEpisode   Int               @default(1)
+  totalSeason    Int               @default(1)
+  seasonsList    Json?             @db.JsonB
+  trailerUrl     String?           @db.Text
   actors         String[]          @default([])
   directors      String[]          @default([])
   streams        String?           @db.Text
   detailSyncedAt DateTime?
-  inHome         Boolean           @default(false)
-  inPopular      Boolean           @default(false)
-  inNew          Boolean           @default(false)
+  inHero         Boolean           @default(false)
+  homeSections   String[]          @default([])
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
-  streamCache    MovieStreamCache?
   favorites      UserFavorite[]
   watchHistories WatchHistory[]
   broadcasts     ChannelBroadcast[]
 
   @@index([updatedAt])
-  @@index([inHome, updatedAt])
-  @@index([inPopular, updatedAt])
-  @@index([inNew, updatedAt])
+  @@index([inHero, updatedAt])
+  @@index([subjectType, updatedAt])
   @@index([detailSyncedAt])
-}
-
-model MovieStreamCache {
-  id           String   @id @default(uuid())
-  movieId      String   @unique
-  sourceUrl    String   @unique
-  resolvedFrom String?  @db.Text
-  originalUrl  String?  @db.Text
-  iframe       String?  @db.Text
-  m3u8         String?  @db.Text
-  sources      Json     @db.JsonB
-  checkedAt    DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  movie        Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
-
-  @@index([checkedAt])
 }
 
 model User {
@@ -334,31 +324,6 @@ model VipPaymentOrder {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([planId, createdAt])
-}
-
-model CatalogAuditRun {
-  id             String   @id @default(uuid())
-  target         String
-  status         String   @default("running")
-  autoHide       Boolean  @default(true)
-  batchSize      Int
-  totalMovies    Int      @default(0)
-  processedMovies Int     @default(0)
-  completedBatches Int    @default(0)
-  checked        Int      @default(0)
-  playable       Int      @default(0)
-  broken         Int      @default(0)
-  hidden         Int      @default(0)
-  refreshed      Int      @default(0)
-  errorCount     Int      @default(0)
-  messages       String[] @default([])
-  summary        Json     @db.JsonB
-  startedAt      DateTime @default(now())
-  finishedAt     DateTime?
-  updatedAt      DateTime @updatedAt
-
-  @@index([startedAt])
-  @@index([status, startedAt])
 }
 
 model AffiliateReferral {

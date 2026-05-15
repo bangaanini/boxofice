@@ -24,12 +24,12 @@ import {
 } from "@/lib/telegram-bot-settings";
 import { createPartnerBotWebhookSecret } from "@/lib/telegram-partner-bots";
 import {
-  auditMovieCatalog,
   cleanupMovieTitles,
-  hideRedirectMovies,
   resolveSyncPage,
-  syncMovieFeed,
-  type MovieFeedTarget,
+  syncFilmboxHome,
+  syncTrendingPages,
+  type FilmboxHomeSyncSummary,
+  type FilmboxTrendingSyncSummary,
 } from "@/lib/movie-sync";
 import { prisma } from "@/lib/prisma";
 import { getVipProgramSettingsSafe } from "@/lib/vip";
@@ -49,226 +49,116 @@ function resolveRedirectTarget(
   return path || fallbackPath;
 }
 
-function buildSingleTargetParams(
-  target: MovieFeedTarget,
-  page: number,
-  summary: Awaited<ReturnType<typeof syncMovieFeed>>,
-) {
+function buildHomeSyncParams(summary: FilmboxHomeSyncSummary) {
   return new URLSearchParams({
-    active: String(summary.active),
-    created: String(summary.created),
-    deactivated: String(summary.deactivated),
-    duplicateSkipped: String(summary.duplicateSkipped),
-    errors: String(summary.errors.length),
-    existing: String(summary.existing),
-    fetched: String(summary.fetched),
-    message: summary.errors[0] ?? "",
-    page: String(page),
-    skippedUnsupported: String(summary.skippedUnsupported),
     sync: summary.errors.length ? "partial" : "ok",
-    target,
-    unchanged: String(summary.unchanged),
+    target: "home",
+    created: String(summary.created),
     updated: String(summary.updated),
+    unchanged: String(summary.unchanged),
+    skippedUnsupported: String(summary.skippedUnsupported),
     upserted: String(summary.upserted),
+    fetched: String(summary.fetched),
+    errors: String(summary.errors.length),
+    heroBanners: String(summary.heroBanners),
+    sectionCount: String(summary.sections.length),
+    message: summary.errors[0] ?? "",
   });
 }
 
-function buildAllTargetsParams(
-  page: number,
-  summary: {
-    targets: Record<
-      MovieFeedTarget,
-      Awaited<ReturnType<typeof syncMovieFeed>>
-    >;
-    totalCreated: number;
-    totalDeactivated: number;
-    totalDuplicateSkipped: number;
-    totalErrors: number;
-    totalExisting: number;
-    totalFetched: number;
-    totalSkippedUnsupported: number;
-    totalUnchanged: number;
-    totalUpdated: number;
-  },
-) {
-  const home = summary.targets.home;
-  const popular = summary.targets.popular;
-  const latest = summary.targets.new;
-  const syncState = Object.values(summary.targets).some((item) => item.errors.length)
-    ? "partial"
-    : "ok";
-
+function buildTrendingSyncParams(summary: FilmboxTrendingSyncSummary) {
   return new URLSearchParams({
-    page: String(page),
-    sync: syncState,
-    target: "all",
-    totalCreated: String(summary.totalCreated),
-    totalDeactivated: String(summary.totalDeactivated),
-    totalDuplicateSkipped: String(summary.totalDuplicateSkipped),
-    totalErrors: String(summary.totalErrors),
-    totalExisting: String(summary.totalExisting),
-    totalFetched: String(summary.totalFetched),
-    totalSkippedUnsupported: String(summary.totalSkippedUnsupported),
-    totalUnchanged: String(summary.totalUnchanged),
-    totalUpdated: String(summary.totalUpdated),
-    message: home.errors[0] ?? popular.errors[0] ?? latest.errors[0] ?? "",
-    homeCreated: String(home.created),
-    homeDeactivated: String(home.deactivated),
-    homeExisting: String(home.existing),
-    homeFetched: String(home.fetched),
-    homeSkippedUnsupported: String(home.skippedUnsupported),
-    homeUnchanged: String(home.unchanged),
-    homeUpdated: String(home.updated),
-    homeErrors: String(home.errors.length),
-    popularCreated: String(popular.created),
-    popularDeactivated: String(popular.deactivated),
-    popularExisting: String(popular.existing),
-    popularFetched: String(popular.fetched),
-    popularSkippedUnsupported: String(popular.skippedUnsupported),
-    popularUnchanged: String(popular.unchanged),
-    popularUpdated: String(popular.updated),
-    popularErrors: String(popular.errors.length),
-    newCreated: String(latest.created),
-    newDeactivated: String(latest.deactivated),
-    newExisting: String(latest.existing),
-    newFetched: String(latest.fetched),
-    newSkippedUnsupported: String(latest.skippedUnsupported),
-    newUnchanged: String(latest.unchanged),
-    newUpdated: String(latest.updated),
-    newErrors: String(latest.errors.length),
-  });
-}
-
-async function syncAllFeedsForPage(page: number) {
-  const [home, popular, latest] = await Promise.all([
-    syncMovieFeed("home", { page }),
-    syncMovieFeed("popular", { page }),
-    syncMovieFeed("new", { page }),
-  ]);
-
-  return {
-    targets: {
-      home,
-      new: latest,
-      popular,
-    },
-    totalCreated: home.created + popular.created + latest.created,
-    totalDeactivated:
-      home.deactivated + popular.deactivated + latest.deactivated,
-    totalDuplicateSkipped:
-      home.duplicateSkipped +
-      popular.duplicateSkipped +
-      latest.duplicateSkipped,
-    totalErrors: home.errors.length + popular.errors.length + latest.errors.length,
-    totalExisting: home.existing + popular.existing + latest.existing,
-    totalFetched: home.fetched + popular.fetched + latest.fetched,
-    totalSkippedUnsupported:
-      home.skippedUnsupported +
-      popular.skippedUnsupported +
-      latest.skippedUnsupported,
-    totalUnchanged: home.unchanged + popular.unchanged + latest.unchanged,
-    totalUpdated: home.updated + popular.updated + latest.updated,
-  };
-}
-
-function buildSingleAuditParams(
-  target: MovieFeedTarget,
-  summary: Awaited<ReturnType<typeof auditMovieCatalog>>,
-) {
-  const resolvedSummary = summary as Extract<
-    Awaited<ReturnType<typeof auditMovieCatalog>>,
-    { target: MovieFeedTarget }
-  >;
-
-  return new URLSearchParams({
-    audit: resolvedSummary.errors.length ? "partial" : "ok",
-    auditBroken: String(resolvedSummary.broken),
-    auditChecked: String(resolvedSummary.checked),
-    auditErrors: String(resolvedSummary.errors.length),
-    auditHidden: String(resolvedSummary.hidden),
-    auditMessage: resolvedSummary.errors[0] ?? "",
-    auditPlayable: String(resolvedSummary.playable),
-    auditRefreshed: String(resolvedSummary.refreshed),
-    auditTarget: target,
-  });
-}
-
-function buildAllAuditParams(
-  summary: Extract<
-    Awaited<ReturnType<typeof auditMovieCatalog>>,
-    { targets: Record<MovieFeedTarget, unknown> }
-  >,
-) {
-  const home = summary.targets.home;
-  const popular = summary.targets.popular;
-  const latest = summary.targets.new;
-
-  return new URLSearchParams({
-    audit: summary.totalErrors > 0 ? "partial" : "ok",
-    auditBroken: String(summary.totalBroken),
-    auditChecked: String(summary.totalChecked),
-    auditErrors: String(summary.totalErrors),
-    auditHidden: String(summary.totalHidden),
-    auditMessage:
-      summary.errors[0] ??
-      home.errors[0] ??
-      popular.errors[0] ??
-      latest.errors[0] ??
-      "",
-    auditPlayable: String(summary.totalPlayable),
-    auditRefreshed: String(summary.totalRefreshed),
-    auditTarget: "all",
-    auditHomeBroken: String(home.broken),
-    auditHomeChecked: String(home.checked),
-    auditHomeErrors: String(home.errors.length),
-    auditHomeHidden: String(home.hidden),
-    auditHomePlayable: String(home.playable),
-    auditPopularBroken: String(popular.broken),
-    auditPopularChecked: String(popular.checked),
-    auditPopularErrors: String(popular.errors.length),
-    auditPopularHidden: String(popular.hidden),
-    auditPopularPlayable: String(popular.playable),
-    auditNewBroken: String(latest.broken),
-    auditNewChecked: String(latest.checked),
-    auditNewErrors: String(latest.errors.length),
-    auditNewHidden: String(latest.hidden),
-    auditNewPlayable: String(latest.playable),
+    sync: summary.errors.length ? "partial" : "ok",
+    target: "trending",
+    created: String(summary.created),
+    updated: String(summary.updated),
+    unchanged: String(summary.unchanged),
+    skippedUnsupported: String(summary.skippedUnsupported),
+    upserted: String(summary.upserted),
+    fetched: String(summary.fetched),
+    errors: String(summary.errors.length),
+    fromPage: String(summary.fromPage),
+    toPage: String(summary.toPage),
+    perPage: String(summary.perPage),
+    message: summary.errors[0] ?? "",
   });
 }
 
 export async function syncMoviesFromAdmin(formData: FormData) {
   await requireAdminSession();
-  const rawTarget = String(formData.get("target") ?? "");
-  const page = resolveSyncPage(formData.get("page"));
+  const rawTarget = String(formData.get("target") ?? "home");
+  const target = rawTarget === "trending" || rawTarget === "all"
+    ? rawTarget
+    : "home";
   const redirectBasePath = resolveRedirectTarget(formData, "/admin/sync");
-  const target =
-    rawTarget === "home" || rawTarget === "popular" || rawTarget === "new"
-      ? rawTarget
-      : rawTarget === "all"
-        ? "all"
-        : "home";
+  const fromPage = resolveSyncPage(formData.get("fromPage") ?? formData.get("page") ?? 0);
+  const toPage = resolveSyncPage(formData.get("toPage") ?? fromPage);
+  const perPageRaw = Number(formData.get("perPage") ?? 18);
+  const perPage = Number.isFinite(perPageRaw)
+    ? Math.min(Math.max(Math.trunc(perPageRaw), 1), 60)
+    : 18;
 
-  let redirectPath = `${redirectBasePath}?sync=ok&target=${target}&page=${page}`;
+  let redirectPath = `${redirectBasePath}?sync=ok&target=${target}`;
 
   try {
-    const params =
-      target === "all"
-        ? buildAllTargetsParams(page, await syncAllFeedsForPage(page))
-        : buildSingleTargetParams(target, page, await syncMovieFeed(target, { page }));
+    if (target === "home") {
+      const summary = await syncFilmboxHome();
+      const params = buildHomeSyncParams(summary);
+      redirectPath = `${redirectBasePath}?${params.toString()}`;
+    } else if (target === "trending") {
+      const summary = await syncTrendingPages({
+        fromPage,
+        toPage,
+        perPage,
+      });
+      const params = buildTrendingSyncParams(summary);
+      redirectPath = `${redirectBasePath}?${params.toString()}`;
+    } else {
+      const home = await syncFilmboxHome();
+      const trending = await syncTrendingPages({
+        fromPage,
+        toPage,
+        perPage,
+      });
+      const totalErrors = home.errors.length + trending.errors.length;
+      const params = new URLSearchParams({
+        sync: totalErrors ? "partial" : "ok",
+        target: "all",
+        homeCreated: String(home.created),
+        homeUpdated: String(home.updated),
+        homeUnchanged: String(home.unchanged),
+        homeUpserted: String(home.upserted),
+        homeSkippedUnsupported: String(home.skippedUnsupported),
+        homeFetched: String(home.fetched),
+        homeHeroBanners: String(home.heroBanners),
+        homeSectionCount: String(home.sections.length),
+        homeErrors: String(home.errors.length),
+        trendingCreated: String(trending.created),
+        trendingUpdated: String(trending.updated),
+        trendingUnchanged: String(trending.unchanged),
+        trendingUpserted: String(trending.upserted),
+        trendingSkippedUnsupported: String(trending.skippedUnsupported),
+        trendingFetched: String(trending.fetched),
+        trendingFromPage: String(trending.fromPage),
+        trendingToPage: String(trending.toPage),
+        trendingErrors: String(trending.errors.length),
+        message: home.errors[0] ?? trending.errors[0] ?? "",
+      });
+      redirectPath = `${redirectBasePath}?${params.toString()}`;
+    }
 
     revalidatePath("/");
     revalidatePath("/admin");
     revalidatePath("/admin/sync");
     revalidatePath("/admin/users");
     revalidatePath("/admin/settings");
-    revalidatePath("/browse/home");
-    revalidatePath("/browse/populer");
-    revalidatePath("/browse/new");
-    redirectPath = `${redirectBasePath}?${params.toString()}`;
+    revalidatePath("/search");
+    revalidatePath("/library");
+    revalidatePath("/browse/[slug]", "page");
+    revalidatePath("/movie/[id]", "page");
   } catch (error) {
     const params = new URLSearchParams({
       message: error instanceof Error ? error.message : "Sync gagal",
-      page: String(page),
       sync: "error",
       target,
     });
@@ -297,52 +187,14 @@ export async function cleanupMovieTitlesFromAdmin(formData: FormData) {
     revalidatePath("/");
     revalidatePath("/admin");
     revalidatePath("/admin/sync");
-    revalidatePath("/browse/home");
-    revalidatePath("/browse/populer");
-    revalidatePath("/browse/new");
+    revalidatePath("/browse/[slug]", "page");
+    revalidatePath("/movie/[id]", "page");
     redirectPath = `${redirectBasePath}?${params.toString()}`;
   } catch (error) {
     const params = new URLSearchParams({
       message:
         error instanceof Error ? error.message : "Gagal membersihkan judul",
       titleCleanup: "error",
-    });
-
-    redirectPath = `${redirectBasePath}?${params.toString()}`;
-  }
-
-  redirect(redirectPath);
-}
-
-export async function hideRedirectMoviesFromAdmin(formData: FormData) {
-  await requireAdminSession();
-  const redirectBasePath = resolveRedirectTarget(formData, "/admin/sync");
-
-  let redirectPath = `${redirectBasePath}?redirectCleanup=ok`;
-
-  try {
-    const summary = await hideRedirectMovies();
-    const params = new URLSearchParams({
-      redirectCleanup: "ok",
-      redirectHidden: String(summary.hidden),
-      redirectAlreadyHidden: String(summary.alreadyHidden),
-      redirectMatched: String(summary.matched),
-      redirectScanned: String(summary.scanned),
-    });
-
-    revalidatePath("/");
-    revalidatePath("/admin");
-    revalidatePath("/admin/sync");
-    revalidatePath("/browse/home");
-    revalidatePath("/browse/populer");
-    revalidatePath("/browse/new");
-    revalidatePath("/search");
-    redirectPath = `${redirectBasePath}?${params.toString()}`;
-  } catch (error) {
-    const params = new URLSearchParams({
-      message:
-        error instanceof Error ? error.message : "Gagal menyembunyikan judul redirect",
-      redirectCleanup: "error",
     });
 
     redirectPath = `${redirectBasePath}?${params.toString()}`;
@@ -373,59 +225,6 @@ export async function refreshWebCacheFromAdmin(formData: FormData) {
     redirectPath = `${redirectBasePath}?webCache=error&message=${encodeURIComponent(
       error instanceof Error ? error.message : "Gagal refresh cache web",
     )}`;
-  }
-
-  redirect(redirectPath);
-}
-
-export async function auditCatalogFromAdmin(formData: FormData) {
-  await requireAdminSession();
-  const rawTarget = String(formData.get("target") ?? "");
-  const redirectBasePath = resolveRedirectTarget(formData, "/admin/sync");
-  const target =
-    rawTarget === "home" || rawTarget === "popular" || rawTarget === "new"
-      ? rawTarget
-      : rawTarget === "all"
-        ? "all"
-        : "all";
-
-  let redirectPath = `${redirectBasePath}?audit=ok&auditTarget=${target}`;
-
-  try {
-    const summary = await auditMovieCatalog(target, {
-      autoHide: formData.get("autoHideBroken") === "on",
-    });
-    const params =
-      target === "all"
-        ? buildAllAuditParams(
-            summary as Extract<
-              Awaited<ReturnType<typeof auditMovieCatalog>>,
-              { targets: Record<MovieFeedTarget, unknown> }
-            >,
-          )
-        : buildSingleAuditParams(
-            target,
-            summary as Extract<
-              Awaited<ReturnType<typeof auditMovieCatalog>>,
-              { target: MovieFeedTarget }
-            >,
-          );
-
-    revalidatePath("/");
-    revalidatePath("/admin");
-    revalidatePath("/admin/sync");
-    revalidatePath("/browse/home");
-    revalidatePath("/browse/populer");
-    revalidatePath("/browse/new");
-    redirectPath = `${redirectBasePath}?${params.toString()}`;
-  } catch (error) {
-    const params = new URLSearchParams({
-      audit: "error",
-      auditMessage: error instanceof Error ? error.message : "Audit gagal",
-      auditTarget: target,
-    });
-
-    redirectPath = `${redirectBasePath}?${params.toString()}`;
   }
 
   redirect(redirectPath);
