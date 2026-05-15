@@ -7,6 +7,7 @@ import {
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 import {
   buildTelegramAppStartParam,
+  extractAffiliateCodeFromStartParam,
   extractMovieIdFromStartParam,
 } from "@/lib/telegram-miniapp";
 import {
@@ -78,12 +79,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
-  const referralCode = ownerReferralCode;
   const originalStartPayload = parseStartPayload(update?.message?.text);
+  const referralCode =
+    extractAffiliateCodeFromStartParam(originalStartPayload) ?? ownerReferralCode;
   const movieId = extractMovieIdFromStartParam(originalStartPayload);
   const startParam = buildTelegramAppStartParam({
     movieId,
-    referralCode: ownerReferralCode,
+    referralCode,
   });
 
   await registerAffiliateClick(referralCode).catch(() => undefined);

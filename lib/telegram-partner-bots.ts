@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 
+import { getActiveBotContext, type ActiveBotContext } from "@/lib/bot-access";
 import { prisma } from "@/lib/prisma";
 import {
   buildLegacyInlineButtonsFromSettings,
@@ -75,7 +76,10 @@ function isMissingPartnerBotSchemaError(error: unknown) {
 
   return (
     typeof error.message === "string" &&
-    error.message.includes("PartnerBot")
+    (error.message.includes("PartnerBot") ||
+      error.message.includes("AffiliateReferral") ||
+      error.message.includes("botKind") ||
+      error.message.includes("partnerBotId"))
   );
 }
 
@@ -281,29 +285,106 @@ export async function getPreferredPartnerBotShareLink(input: {
   }
 }
 
+function buildDefaultTelegramShareLinks(input: {
+  botUsername: string;
+  miniAppShortName: string | null;
+  startParam: string;
+}) {
+  return {
+    chatUrl: buildTelegramBotChatUrlForUsername(
+      input.botUsername,
+      input.startParam,
+    ),
+    mainMiniAppUrl: buildTelegramMainMiniAppUrlForUsername(
+      input.botUsername,
+      input.startParam,
+    ),
+    miniAppUrl: buildTelegramMiniAppUrlForConfig(
+      {
+        botUsername: input.botUsername,
+        miniAppShortName: input.miniAppShortName,
+      },
+      input.startParam,
+    ),
+  };
+}
+
+export async function getTelegramShareLinksForBotContext(input: {
+  botContext?: ActiveBotContext | null;
+  startParam: string;
+}) {
+  const telegram = await getTelegramBotSettingsSafe();
+  const fallback = {
+    ...buildDefaultTelegramShareLinks({
+      botUsername: telegram.runtime.botUsername,
+      miniAppShortName: telegram.runtime.miniAppShortName,
+      startParam: input.startParam,
+    }),
+    source: "default" as const,
+  };
+
+  if (!input.botContext || input.botContext.kind === "default") {
+    return fallback;
+  }
+
+  try {
+    const partnerBot = await prisma.partnerBot.findFirst({
+      where: {
+        active: true,
+        id: input.botContext.partnerBotId,
+      },
+      select: {
+        botUsername: true,
+        miniAppShortName: true,
+      },
+    });
+
+    if (!partnerBot) {
+      return null;
+    }
+
+    return {
+      ...buildDefaultTelegramShareLinks({
+        botUsername: partnerBot.botUsername,
+        miniAppShortName: partnerBot.miniAppShortName,
+        startParam: input.startParam,
+      }),
+      source: "partner" as const,
+    };
+  } catch (error) {
+    if (isMissingPartnerBotSchemaError(error)) {
+      return fallback;
+    }
+
+    throw error;
+  }
+}
+
 export async function getPreferredTelegramShareLinksForUser(input: {
   startParam: string;
   userId: string;
 }) {
   const telegram = await getTelegramBotSettingsSafe();
   const fallback = {
-    chatUrl: buildTelegramBotChatUrlForUsername(
-      telegram.runtime.botUsername,
-      input.startParam,
-    ),
-    mainMiniAppUrl: buildTelegramMainMiniAppUrlForUsername(
-      telegram.runtime.botUsername,
-      input.startParam,
-    ),
-    miniAppUrl: buildTelegramMiniAppUrlForConfig(
-      {
-        botUsername: telegram.runtime.botUsername,
-        miniAppShortName: telegram.runtime.miniAppShortName,
-      },
-      input.startParam,
-    ),
+    ...buildDefaultTelegramShareLinks({
+      botUsername: telegram.runtime.botUsername,
+      miniAppShortName: telegram.runtime.miniAppShortName,
+      startParam: input.startParam,
+    }),
     source: "default" as const,
   };
+
+  const activeBotContext = await getActiveBotContext().catch(() => null);
+  const activeBotLinks = activeBotContext
+    ? await getTelegramShareLinksForBotContext({
+        botContext: activeBotContext,
+        startParam: input.startParam,
+      }).catch(() => null)
+    : null;
+
+  if (activeBotLinks) {
+    return activeBotLinks;
+  }
 
   try {
     const partnerBot = await prisma.partnerBot.findFirst({
@@ -320,27 +401,98 @@ export async function getPreferredTelegramShareLinksForUser(input: {
       },
     });
 
-    if (!partnerBot) {
+    if (partnerBot) {
+      return {
+        ...buildDefaultTelegramShareLinks({
+          botUsername: partnerBot.botUsername,
+          miniAppShortName: partnerBot.miniAppShortName,
+          startParam: input.startParam,
+        }),
+        source: "partner" as const,
+      };
+    }
+  } catch (error) {
+    if (isMissingPartnerBotSchemaError(error)) {
+      return fallback;
+    }
+
+    throw error;
+  }
+
+  try {
+    const referredByPartnerBot = await prisma.affiliateReferral.findUnique({
+      where: {
+        referredUserId: input.userId,
+      },
+      select: {
+        botKind: true,
+        partnerBotId: true,
+      },
+    });
+
+    if (
+      referredByPartnerBot?.botKind === "partner" &&
+      referredByPartnerBot.partnerBotId
+    ) {
+      const referredBotLinks = await getTelegramShareLinksForBotContext({
+        botContext: {
+          kind: "partner",
+          partnerBotId: referredByPartnerBot.partnerBotId,
+        },
+        startParam: input.startParam,
+      });
+
+      if (referredBotLinks) {
+        return referredBotLinks;
+      }
+    }
+  } catch (error) {
+    if (!isMissingPartnerBotSchemaError(error)) {
+      throw error;
+    }
+  }
+
+  return fallback;
+}
+
+export async function getTelegramNotificationBotForContext(input: {
+  botKind?: string | null;
+  partnerBotId?: string | null;
+}) {
+  const telegram = await getTelegramBotSettingsSafe();
+  const fallback = {
+    affiliateUrl: `${telegram.runtime.publicAppUrl}/affiliate`,
+    botLabel: telegram.runtime.botUsername || telegram.settings.brandName,
+    botToken: telegram.runtime.botToken || null,
+    kind: "default" as const,
+  };
+
+  if (input.botKind !== "partner" || !input.partnerBotId) {
+    return fallback;
+  }
+
+  try {
+    const partnerBot = await prisma.partnerBot.findFirst({
+      where: {
+        active: true,
+        id: input.partnerBotId,
+      },
+      select: {
+        botName: true,
+        botToken: true,
+        label: true,
+      },
+    });
+
+    if (!partnerBot?.botToken?.trim()) {
       return fallback;
     }
 
     return {
-      chatUrl: buildTelegramBotChatUrlForUsername(
-        partnerBot.botUsername,
-        input.startParam,
-      ),
-      mainMiniAppUrl: buildTelegramMainMiniAppUrlForUsername(
-        partnerBot.botUsername,
-        input.startParam,
-      ),
-      miniAppUrl: buildTelegramMiniAppUrlForConfig(
-        {
-          botUsername: partnerBot.botUsername,
-          miniAppShortName: partnerBot.miniAppShortName,
-        },
-        input.startParam,
-      ),
-      source: "partner" as const,
+      affiliateUrl: `${telegram.runtime.publicAppUrl}/affiliate`,
+      botLabel: partnerBot.label?.trim() || partnerBot.botName,
+      botToken: partnerBot.botToken.trim(),
+      kind: "partner" as const,
     };
   } catch (error) {
     if (isMissingPartnerBotSchemaError(error)) {

@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 
+import { getBotContextFields, type ActiveBotContext } from "@/lib/bot-access";
 import { prisma } from "@/lib/prisma";
 import {
-  getPreferredPartnerBotShareLink,
   getPreferredTelegramShareLinksForUser,
 } from "@/lib/telegram-partner-bots";
 import {
@@ -95,6 +95,9 @@ function isMissingAffiliateSchemaError(error: unknown) {
     message.includes("AffiliateProgramSettings") ||
     message.includes("commissionRate") ||
     message.includes("AffiliateProfile") ||
+    message.includes("AffiliateReferral") ||
+    message.includes("botKind") ||
+    message.includes("partnerBotId") ||
     message.includes("TelegramReferralIntent")
   );
 }
@@ -134,33 +137,22 @@ export async function getAffiliateSharePath(
   const startParam = buildAffiliateStartParam(referralCode);
 
   if (userId) {
-    const partnerShareLink = await getPreferredPartnerBotShareLink({
-      referralCode,
+    const preferredShareLinks = await getPreferredTelegramShareLinksForUser({
+      startParam,
       userId,
     }).catch(() => null);
 
-    if (partnerShareLink) {
-      return partnerShareLink;
+    if (preferredShareLinks?.mainMiniAppUrl) {
+      return preferredShareLinks.mainMiniAppUrl;
+    }
+
+    if (preferredShareLinks?.miniAppUrl) {
+      return preferredShareLinks.miniAppUrl;
     }
   }
 
   try {
     const telegram = await getTelegramBotSettingsSafe();
-
-    if (userId) {
-      const preferredShareLinks = await getPreferredTelegramShareLinksForUser({
-        startParam,
-        userId,
-      }).catch(() => null);
-
-      if (preferredShareLinks?.mainMiniAppUrl) {
-        return preferredShareLinks.mainMiniAppUrl;
-      }
-
-      if (preferredShareLinks?.miniAppUrl) {
-        return preferredShareLinks.miniAppUrl;
-      }
-    }
 
     return buildTelegramMiniAppUrlForConfig(telegram.runtime, startParam);
   } catch {
@@ -515,6 +507,7 @@ export async function consumeTelegramReferralIntent(input: {
 }
 
 export async function attachAffiliateReferral(input: {
+  botContext?: ActiveBotContext | null;
   referralCode?: string | null;
   referredUserId: string;
 }) {
@@ -538,18 +531,34 @@ export async function attachAffiliateReferral(input: {
     return null;
   }
 
+  const botContextFields = getBotContextFields(input.botContext);
   const existingReferral = await prisma.affiliateReferral.findUnique({
     where: { referredUserId: input.referredUserId },
-    select: { id: true },
+    select: {
+      botKind: true,
+      id: true,
+      partnerBotId: true,
+    },
   });
 
   if (existingReferral) {
+    if (
+      botContextFields.botKind === "partner" &&
+      (existingReferral.botKind !== "partner" || !existingReferral.partnerBotId)
+    ) {
+      await prisma.affiliateReferral.update({
+        where: { id: existingReferral.id },
+        data: botContextFields,
+      }).catch(() => undefined);
+    }
+
     return existingReferral;
   }
 
   const referral = await prisma.$transaction(async (tx) => {
     const createdReferral = await tx.affiliateReferral.create({
       data: {
+        ...botContextFields,
         profileId: profile.id,
         referredUserId: input.referredUserId,
       },

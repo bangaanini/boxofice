@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { applyAffiliateCommissionForVipOrder } from "@/lib/affiliate";
+import { getBotContextFields, getValidActiveBotContext } from "@/lib/bot-access";
 import {
   getOrderPaymentMetadata,
   getPaymentGatewaySettingsSafe,
   getPaymenkuChannels,
 } from "@/lib/payments";
-import { getPreferredAffiliateNotificationBotForUser } from "@/lib/telegram-partner-bots";
-import { sendTelegramRuntimeMessage, sendTelegramUserMessage } from "@/lib/telegram-bot";
+import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
+import { getTelegramNotificationBotForContext } from "@/lib/telegram-partner-bots";
+import { sendTelegramRuntimeMessage } from "@/lib/telegram-bot";
 
 type PaymenkuCreateTransactionResponse = {
   data?: {
@@ -52,6 +54,22 @@ type PaymenkuCheckStatusResponse = {
   message?: string;
   status?: string;
 };
+
+type OrderMetadataValue = string | number | boolean | null;
+type OrderMetadataRecord = Record<string, OrderMetadataValue>;
+type VipCommissionResult = {
+  commissionAmount: number;
+  profile: {
+    availableBalance: number;
+    user: {
+      id: string;
+      name: string;
+      telegramId: string | null;
+      telegramUsername: string | null;
+    };
+  };
+  referralActivated: boolean;
+} | null;
 
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
@@ -104,12 +122,52 @@ function formatTelegramHandle(username: string | null | undefined) {
   return normalized ? `@${normalized}` : "-";
 }
 
+function getMasterOwnerTelegramId(settingsOwnerTelegramId: string | null) {
+  return (
+    settingsOwnerTelegramId?.trim() ||
+    process.env.TELEGRAM_BOT_OWNER_TELEGRAM_ID?.trim() ||
+    null
+  );
+}
+
+function readOrderMetadataRecord(value: unknown): OrderMetadataRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const output: OrderMetadataRecord = {};
+
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      item === null ||
+      typeof item === "string" ||
+      typeof item === "number" ||
+      typeof item === "boolean"
+    ) {
+      output[key] = item;
+    }
+  }
+
+  return output;
+}
+
+function mergeOrderMetadata(
+  currentMetadata: unknown,
+  nextMetadata: OrderMetadataRecord,
+) {
+  return {
+    ...readOrderMetadataRecord(currentMetadata),
+    ...nextMetadata,
+  };
+}
+
 async function notifyAffiliateOwnerForVipJoin(input: {
+  botKind?: string | null;
   buyerName: string;
   buyerUsername?: string | null;
   commissionAmount: number;
   ownerTelegramId?: string | null;
-  ownerUserId: string;
+  partnerBotId?: string | null;
   packageTitle: string;
   totalActiveCommission: number;
   transactionAmount: number;
@@ -118,9 +176,10 @@ async function notifyAffiliateOwnerForVipJoin(input: {
     return false;
   }
 
-  const deliveryBot = await getPreferredAffiliateNotificationBotForUser(
-    input.ownerUserId,
-  ).catch(() => null);
+  const deliveryBot = await getTelegramNotificationBotForContext({
+    botKind: input.botKind,
+    partnerBotId: input.partnerBotId,
+  }).catch(() => null);
 
   const text =
     "💸 Komisi affiliate baru\n\n" +
@@ -147,6 +206,91 @@ async function notifyAffiliateOwnerForVipJoin(input: {
     telegramId: input.ownerTelegramId,
     text,
   }).catch(() => false);
+}
+
+async function notifyMasterOwnerForPartnerVipOrder(input: {
+  botKind?: string | null;
+  buyerName: string;
+  buyerUsername?: string | null;
+  commissionResult: VipCommissionResult;
+  metadata: unknown;
+  orderId: string;
+  packageTitle: string;
+  paidAt: Date;
+  partnerBotId?: string | null;
+  transactionAmount: number;
+}) {
+  if (input.botKind !== "partner" || !input.partnerBotId) {
+    return false;
+  }
+
+  const metadata = readOrderMetadataRecord(input.metadata);
+
+  if (typeof metadata.masterNotificationSentAt === "string") {
+    return false;
+  }
+
+  const [telegram, partnerBot] = await Promise.all([
+    getTelegramBotSettingsSafe(),
+    prisma.partnerBot.findUnique({
+      where: { id: input.partnerBotId },
+      select: {
+        botName: true,
+        botUsername: true,
+        label: true,
+      },
+    }).catch(() => null),
+  ]);
+  const ownerTelegramId = getMasterOwnerTelegramId(
+    telegram.settings.ownerTelegramId,
+  );
+  const masterBotToken = telegram.runtime.botToken?.trim();
+
+  if (!ownerTelegramId || !masterBotToken) {
+    return false;
+  }
+
+  const partnerBotLabel = partnerBot
+    ? `${partnerBot.label?.trim() || partnerBot.botName} (@${partnerBot.botUsername})`
+    : input.partnerBotId;
+  const commissionLine = input.commissionResult
+    ? `${formatCurrency(input.commissionResult.commissionAmount)} untuk ${input.commissionResult.profile.user.name} (${formatTelegramHandle(input.commissionResult.profile.user.telegramUsername)})`
+    : "Tidak ada komisi baru";
+  const text =
+    "🧾 Transaksi partner baru\n\n" +
+    `Bot partner: ${partnerBotLabel}\n` +
+    `Pembeli: ${input.buyerName} (${formatTelegramHandle(input.buyerUsername)})\n` +
+    `Paket VIP: ${input.packageTitle}\n` +
+    `Nilai transaksi: ${formatCurrency(input.transactionAmount)}\n` +
+    `Komisi: ${commissionLine}\n` +
+    `Order: ${input.orderId}\n` +
+    `Waktu: ${input.paidAt.toLocaleString("id-ID", {
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      month: "long",
+      year: "numeric",
+    })}`;
+  const sent = await sendTelegramRuntimeMessage({
+    botToken: masterBotToken,
+    telegramId: ownerTelegramId,
+    text,
+  }).catch(() => false);
+
+  if (!sent) {
+    return false;
+  }
+
+  await prisma.vipPaymentOrder.update({
+    where: { id: input.orderId },
+    data: {
+      metadata: mergeOrderMetadata(input.metadata, {
+        masterNotificationSentAt: new Date().toISOString(),
+      }),
+    },
+  }).catch(() => null);
+
+  return true;
 }
 
 function isLikelyVipOrderExpiry(input: {
@@ -253,32 +397,19 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
   const commissionBaseAmount =
     parseAmount(metadata?.amountReceived) || order.plan.priceAmount;
   const sendAffiliateOwnerNotification = async (
-    commissionResult:
-      | {
-          commissionAmount: number;
-          profile: {
-            availableBalance: number;
-            user: {
-              id: string;
-              name: string;
-              telegramId: string | null;
-              telegramUsername: string | null;
-            };
-          };
-          referralActivated: boolean;
-        }
-      | null,
+    commissionResult: VipCommissionResult,
   ) => {
     if (!commissionResult?.profile.user.telegramId) {
       return;
     }
 
     await notifyAffiliateOwnerForVipJoin({
+      botKind: order.botKind,
       buyerName: order.user.name,
       buyerUsername: order.user.telegramUsername,
       commissionAmount: commissionResult.commissionAmount,
       ownerTelegramId: commissionResult.profile.user.telegramId,
-      ownerUserId: commissionResult.profile.user.id,
+      partnerBotId: order.partnerBotId,
       packageTitle: order.plan.title,
       totalActiveCommission: commissionResult.profile.availableBalance,
       transactionAmount: commissionBaseAmount,
@@ -292,6 +423,18 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
       referredUserId: order.user.id,
     }).catch(() => null);
     await sendAffiliateOwnerNotification(commissionResult);
+    await notifyMasterOwnerForPartnerVipOrder({
+      botKind: order.botKind,
+      buyerName: order.user.name,
+      buyerUsername: order.user.telegramUsername,
+      commissionResult,
+      metadata: order.metadata,
+      orderId: order.id,
+      packageTitle: order.plan.title,
+      paidAt: now,
+      partnerBotId: order.partnerBotId,
+      transactionAmount: commissionBaseAmount,
+    }).catch(() => null);
 
     return order;
   }
@@ -332,8 +475,26 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
     referredUserId: order.user.id,
   }).catch(() => null);
   await sendAffiliateOwnerNotification(commissionResult);
+  await notifyMasterOwnerForPartnerVipOrder({
+    botKind: order.botKind,
+    buyerName: order.user.name,
+    buyerUsername: order.user.telegramUsername,
+    commissionResult,
+    metadata: order.metadata,
+    orderId: order.id,
+    packageTitle: order.plan.title,
+    paidAt: now,
+    partnerBotId: order.partnerBotId,
+    transactionAmount: commissionBaseAmount,
+  }).catch(() => null);
 
-  await sendTelegramUserMessage({
+  const buyerNotificationBot = await getTelegramNotificationBotForContext({
+    botKind: order.botKind,
+    partnerBotId: order.partnerBotId,
+  }).catch(() => null);
+
+  await sendTelegramRuntimeMessage({
+    botToken: buyerNotificationBot?.botToken,
     telegramId: order.user.telegramId,
     text:
       `🎉 VIP Box Office aktif untuk ${order.user.name}.\n\n` +
@@ -446,17 +607,22 @@ export async function createVipPaymentForUser(input: {
     throw new Error("Metode pembayaran yang dipilih belum tersedia.");
   }
 
+  const activeBotContext = await getValidActiveBotContext().catch(() => null);
+  const botContextFields = getBotContextFields(activeBotContext);
   const order = await prisma.vipPaymentOrder.create({
     data: {
       amount: plan.priceAmount,
+      ...botContextFields,
       currency: plan.currency,
       metadata: {
+        botKind: botContextFields.botKind,
         channelCode: selectedChannel.code,
         channelName: selectedChannel.name,
         channelType: selectedChannel.type,
         customerEmail: user.email,
         customerName: user.name,
         customerPhone: input.userPhone ?? null,
+        partnerBotId: botContextFields.partnerBotId,
         referenceId: null,
       },
       planId: plan.id,
@@ -500,6 +666,7 @@ export async function createVipPaymentForUser(input: {
       externalPaymentId: payload.data.payment_info?.transaction_id ?? null,
       metadata: {
         bank: payload.data.payment_info?.bank ?? null,
+        botKind: botContextFields.botKind,
         channelCode: selectedChannel.code,
         channelName: selectedChannel.name,
         channelType: selectedChannel.type,
@@ -507,6 +674,7 @@ export async function createVipPaymentForUser(input: {
         customerName: user.name,
         customerPhone: input.userPhone ?? null,
         expirationDate: payload.data.payment_info?.expiration_date ?? null,
+        partnerBotId: botContextFields.partnerBotId,
         payUrl: payload.data.pay_url ?? null,
         qrString: payload.data.payment_info?.qr_string ?? null,
         qrUrl: payload.data.payment_info?.qr_url ?? null,
@@ -575,6 +743,7 @@ export async function syncVipOrderFromPaymenkuStatus(input: {
       checkoutUrl: payload.data.pay_url ?? undefined,
       externalCheckoutId: payload.data.trx_id ?? undefined,
       metadata: {
+        ...readOrderMetadataRecord(order.metadata),
         amountFee: payload.data.total_fee ?? null,
         amountReceived: payload.data.amount_received ?? null,
         channelCode: payload.data.payment_channel?.code ?? orderMeta?.channelCode ?? null,
@@ -654,6 +823,7 @@ export async function handlePaymenkuWebhook(input: {
     data: {
       externalCheckoutId: input.trxId ?? undefined,
       metadata: {
+        ...readOrderMetadataRecord(order.metadata),
         amountFee: input.amountFee ?? meta?.amountFee ?? null,
         amountReceived: input.amountReceived ?? meta?.amountReceived ?? null,
         channelCode: meta?.channelCode ?? null,

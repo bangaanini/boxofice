@@ -55,14 +55,9 @@ export default async function BrowsePage({ params }: BrowsePageProps) {
 
         <div className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-8 pt-6 sm:px-8 sm:pb-10 lg:px-10">
           <div className="mt-16 max-w-3xl sm:mt-24">
-            <p className="text-sm font-semibold text-red-400">Section</p>
             <h1 className="mt-3 text-4xl font-black leading-none text-white sm:text-6xl">
               {title}
             </h1>
-            <p className="mt-4 text-sm leading-6 text-neutral-300 sm:text-lg sm:leading-8">
-              Semua film yang tergabung di section &ldquo;{title}&rdquo; dari
-              homepage Filmbox.
-            </p>
           </div>
         </div>
       </section>

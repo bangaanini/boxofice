@@ -8,38 +8,38 @@ datasource db {
 }
 
 model Movie {
-  id             String            @id @default(uuid())
-  sourceUrl      String            @unique
-  detailPath     String?
-  subjectId      String?           @unique
-  subjectType    Int               @default(1)
-  title          String
-  thumbnail      String?
-  description    String?           @db.Text
-  genre          String?
-  year           String?
-  duration       String?
-  rating         String?
-  quality        String?
-  releaseDate    String?
-  country        String?
-  bahasa         String?           @db.Text
-  hasIndonesianSubtitle Boolean    @default(false)
-  totalEpisode   Int               @default(1)
-  totalSeason    Int               @default(1)
-  seasonsList    Json?             @db.JsonB
-  trailerUrl     String?           @db.Text
-  actors         String[]          @default([])
-  directors      String[]          @default([])
-  streams        String?           @db.Text
-  detailSyncedAt DateTime?
-  inHero         Boolean           @default(false)
-  homeSections   String[]          @default([])
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  favorites      UserFavorite[]
-  watchHistories WatchHistory[]
-  broadcasts     ChannelBroadcast[]
+  id                    String             @id @default(uuid())
+  sourceUrl             String             @unique
+  detailPath            String?
+  subjectId             String?            @unique
+  subjectType           Int                @default(1)
+  title                 String
+  thumbnail             String?
+  description           String?            @db.Text
+  genre                 String?
+  year                  String?
+  duration              String?
+  rating                String?
+  quality               String?
+  releaseDate           String?
+  country               String?
+  bahasa                String?            @db.Text
+  hasIndonesianSubtitle Boolean            @default(false)
+  totalEpisode          Int                @default(1)
+  totalSeason           Int                @default(1)
+  seasonsList           Json?              @db.JsonB
+  trailerUrl            String?            @db.Text
+  actors                String[]           @default([])
+  directors             String[]           @default([])
+  streams               String?            @db.Text
+  detailSyncedAt        DateTime?
+  inHero                Boolean            @default(false)
+  homeSections          String[]           @default([])
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  favorites             UserFavorite[]
+  watchHistories        WatchHistory[]
+  broadcasts            ChannelBroadcast[]
 
   @@index([updatedAt])
   @@index([inHero, updatedAt])
@@ -48,39 +48,39 @@ model Movie {
 }
 
 model User {
-  id                String             @id @default(uuid())
-  name              String
-  email             String?            @unique
-  passwordHash      String?
-  passwordSalt      String?
-  telegramId        String?            @unique
-  telegramUsername  String?
-  telegramFirstName String?
-  telegramLastName  String?
-  telegramPhotoUrl  String?            @db.Text
-  telegramAuthDate  DateTime?
+  id                 String             @id @default(uuid())
+  name               String
+  email              String?            @unique
+  passwordHash       String?
+  passwordSalt       String?
+  telegramId         String?            @unique
+  telegramUsername   String?
+  telegramFirstName  String?
+  telegramLastName   String?
+  telegramPhotoUrl   String?            @db.Text
+  telegramAuthDate   DateTime?
   lastTelegramAuthAt DateTime?
-  vipStartedAt      DateTime?
-  vipExpiresAt      DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  sessions          UserSession[]
-  favorites         UserFavorite[]
-  watchHistory      WatchHistory[]
-  vipPaymentOrders  VipPaymentOrder[]
-  affiliateProfile  AffiliateProfile?
-  affiliateReferral AffiliateReferral?
-  partnerBots       PartnerBot[]
-  channelBroadcasts ChannelBroadcast[]
+  vipStartedAt       DateTime?
+  vipExpiresAt       DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sessions           UserSession[]
+  favorites          UserFavorite[]
+  watchHistory       WatchHistory[]
+  vipPaymentOrders   VipPaymentOrder[]
+  affiliateProfile   AffiliateProfile?
+  affiliateReferral  AffiliateReferral?
+  partnerBots        PartnerBot[]
+  channelBroadcasts  ChannelBroadcast[]
 }
 
 model UserSession {
-  id         String   @id @default(uuid())
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -118,25 +118,25 @@ model WatchHistory {
 }
 
 model AffiliateProfile {
-  id               String                   @id @default(uuid())
-  userId           String                   @unique
-  referralCode     String                   @unique
-  commissionRate   Int                      @default(25)
+  id                     String                   @id @default(uuid())
+  userId                 String                   @unique
+  referralCode           String                   @unique
+  commissionRate         Int                      @default(25)
   commissionRateOverride Int?
-  totalClicks      Int                      @default(0)
-  totalSignups     Int                      @default(0)
-  activeReferrals  Int                      @default(0)
-  totalCommission  Int                      @default(0)
-  availableBalance Int                      @default(0)
-  pendingBalance   Int                      @default(0)
-  withdrawnBalance Int                      @default(0)
-  minimumWithdraw  Int                      @default(50000)
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
-  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  referrals        AffiliateReferral[]
-  payoutRequests   AffiliatePayoutRequest[]
-  activities       AffiliateActivity[]
+  totalClicks            Int                      @default(0)
+  totalSignups           Int                      @default(0)
+  activeReferrals        Int                      @default(0)
+  totalCommission        Int                      @default(0)
+  availableBalance       Int                      @default(0)
+  pendingBalance         Int                      @default(0)
+  withdrawnBalance       Int                      @default(0)
+  minimumWithdraw        Int                      @default(50000)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referrals              AffiliateReferral[]
+  payoutRequests         AffiliatePayoutRequest[]
+  activities             AffiliateActivity[]
 
   @@index([createdAt])
 }
@@ -199,47 +199,49 @@ model TelegramBotSettings {
 }
 
 model PartnerBot {
-  id               String   @id @default(uuid())
-  ownerUserId      String
-  label            String?
-  telegramBotId    String   @unique
-  botToken         String   @db.Text
-  botUsername      String   @unique
-  botName          String
-  miniAppShortName String?
+  id                     String              @id @default(uuid())
+  ownerUserId            String
+  label                  String?
+  telegramBotId          String              @unique
+  botToken               String              @db.Text
+  botUsername            String              @unique
+  botName                String
+  miniAppShortName       String?
   defaultChannelUsername String?
-  dramaBotUrl      String?  @db.Text
-  settingsOverrides Json?   @db.JsonB
-  webhookSecret    String
-  active           Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  owner            User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  channelBroadcasts ChannelBroadcast[]
+  dramaBotUrl            String?             @db.Text
+  settingsOverrides      Json?               @db.JsonB
+  webhookSecret          String
+  active                 Boolean             @default(true)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  owner                  User                @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  channelBroadcasts      ChannelBroadcast[]
+  affiliateReferrals     AffiliateReferral[]
+  vipPaymentOrders       VipPaymentOrder[]
 
   @@index([ownerUserId, active])
   @@index([active, updatedAt])
 }
 
 model ChannelBroadcast {
-  id               String      @id @default(uuid())
-  token            String      @unique
-  movieId          String
-  ownerUserId      String?
-  partnerBotId     String?
-  botKind          String      @default("default")
-  botUsername      String
-  channelUsername  String
-  buttonLabel      String
-  caption          String      @db.Text
+  id                String      @id @default(uuid())
+  token             String      @unique
+  movieId           String
+  ownerUserId       String?
+  partnerBotId      String?
+  botKind           String      @default("default")
+  botUsername       String
+  channelUsername   String
+  buttonLabel       String
+  caption           String      @db.Text
   telegramMessageId Int?
-  pinned           Boolean     @default(false)
-  postedAt         DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  movie            Movie       @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  owner            User?       @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
-  partnerBot       PartnerBot? @relation(fields: [partnerBotId], references: [id], onDelete: SetNull)
+  pinned            Boolean     @default(false)
+  postedAt          DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  movie             Movie       @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  owner             User?       @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  partnerBot        PartnerBot? @relation(fields: [partnerBotId], references: [id], onDelete: SetNull)
 
   @@index([movieId, createdAt])
   @@index([ownerUserId, createdAt])
@@ -248,12 +250,12 @@ model ChannelBroadcast {
 }
 
 model CronJobCursor {
-  id        String   @id @default(uuid())
-  slug      String   @unique
-  state     Json     @db.JsonB
+  id        String    @id @default(uuid())
+  slug      String    @unique
+  state     Json      @db.JsonB
   lastRunAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model MovieSyncJob {
@@ -321,47 +323,52 @@ model PaymentGatewaySettings {
 }
 
 model VipPlan {
-  id          String            @id @default(uuid())
-  slug        String            @unique
-  title       String
-  description String            @db.Text
-  badge       String?
+  id           String            @id @default(uuid())
+  slug         String            @unique
+  title        String
+  description  String            @db.Text
+  badge        String?
   durationDays Int
-  priceAmount Int
-  currency    String            @default("IDR")
-  ctaLabel    String            @default("Aktifkan sekarang")
-  highlight   Boolean           @default(false)
-  active      Boolean           @default(true)
-  sortOrder   Int               @default(0)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  orders      VipPaymentOrder[]
+  priceAmount  Int
+  currency     String            @default("IDR")
+  ctaLabel     String            @default("Aktifkan sekarang")
+  highlight    Boolean           @default(false)
+  active       Boolean           @default(true)
+  sortOrder    Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  orders       VipPaymentOrder[]
 
   @@index([active, sortOrder])
 }
 
 model VipPaymentOrder {
-  id                String   @id @default(uuid())
-  userId            String
-  planId            String
-  provider          String
-  status            String   @default("pending")
-  amount            Int
-  currency          String   @default("IDR")
-  checkoutUrl       String?  @db.Text
-  externalCheckoutId String? @unique
-  externalPaymentId String?
-  metadata          Json?    @db.JsonB
-  paidAt            DateTime?
-  expiresAt         DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan              VipPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  id                 String      @id @default(uuid())
+  userId             String
+  planId             String
+  provider           String
+  status             String      @default("pending")
+  amount             Int
+  currency           String      @default("IDR")
+  checkoutUrl        String?     @db.Text
+  externalCheckoutId String?     @unique
+  externalPaymentId  String?
+  metadata           Json?       @db.JsonB
+  botKind            String      @default("default")
+  partnerBotId       String?
+  paidAt             DateTime?
+  expiresAt          DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               VipPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  partnerBot         PartnerBot? @relation(fields: [partnerBotId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([planId, createdAt])
+  @@index([partnerBotId, createdAt])
+  @@index([botKind, createdAt])
 }
 
 model AffiliateReferral {
@@ -370,30 +377,35 @@ model AffiliateReferral {
   referredUserId   String           @unique
   status           String           @default("registered")
   commissionEarned Int              @default(0)
+  botKind          String           @default("default")
+  partnerBotId     String?
   activatedAt      DateTime?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   profile          AffiliateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   referredUser     User             @relation(fields: [referredUserId], references: [id], onDelete: Cascade)
+  partnerBot       PartnerBot?      @relation(fields: [partnerBotId], references: [id], onDelete: SetNull)
 
   @@index([profileId, createdAt])
   @@index([status])
+  @@index([partnerBotId, createdAt])
+  @@index([botKind, createdAt])
 }
 
 model AffiliatePayoutRequest {
-  id             String            @id @default(uuid())
+  id             String           @id @default(uuid())
   profileId      String
   amount         Int
   payoutMethod   String
   payoutProvider String
   recipientName  String
   accountNumber  String
-  status         String            @default("pending")
-  note           String?           @db.Text
+  status         String           @default("pending")
+  note           String?          @db.Text
   processedAt    DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  profile        AffiliateProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  profile        AffiliateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, createdAt])
   @@index([status])
@@ -402,13 +414,13 @@ model AffiliatePayoutRequest {
 
 model AffiliateActivity {
   id          String           @id @default(uuid())
-  profileId    String
-  type         String
-  title        String
-  description  String?         @db.Text
-  amount       Int?
-  createdAt    DateTime        @default(now())
-  profile      AffiliateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId   String
+  type        String
+  title       String
+  description String?          @db.Text
+  amount      Int?
+  createdAt   DateTime         @default(now())
+  profile     AffiliateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, createdAt])
   @@index([type])

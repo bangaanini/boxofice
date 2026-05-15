@@ -6,7 +6,7 @@ import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
 export const ACTIVE_BOT_CONTEXT_COOKIE = "boxofice_active_bot";
 const ACTIVE_BOT_CONTEXT_TTL_SECONDS = 60 * 60 * 24 * 30;
 
-type ActiveBotContext =
+export type ActiveBotContext =
   | {
       kind: "default";
     }
@@ -14,6 +14,20 @@ type ActiveBotContext =
       kind: "partner";
       partnerBotId: string;
     };
+
+export function getBotContextFields(context: ActiveBotContext | null | undefined) {
+  if (context?.kind === "partner") {
+    return {
+      botKind: "partner",
+      partnerBotId: context.partnerBotId,
+    };
+  }
+
+  return {
+    botKind: "default",
+    partnerBotId: null,
+  };
+}
 
 function getCookieOptions() {
   return {
@@ -80,6 +94,28 @@ export async function getActiveBotContext() {
   return parseBotContext(
     cookieStore.get(ACTIVE_BOT_CONTEXT_COOKIE)?.value,
   );
+}
+
+export async function getValidActiveBotContext() {
+  const context = await getActiveBotContext();
+
+  if (context?.kind !== "partner") {
+    return context ?? ({ kind: "default" } satisfies ActiveBotContext);
+  }
+
+  const partnerBot = await prisma.partnerBot.findUnique({
+    where: { id: context.partnerBotId },
+    select: {
+      active: true,
+      id: true,
+    },
+  });
+
+  if (!partnerBot?.active) {
+    return { kind: "default" } satisfies ActiveBotContext;
+  }
+
+  return context;
 }
 
 function getOwnerTelegramIdFromEnv() {

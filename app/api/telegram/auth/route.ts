@@ -39,6 +39,13 @@ export async function POST(request: NextRequest) {
   try {
     const { matchedBot, telegram } =
       await validateTelegramInitDataWithKnownBots(initData);
+    const botContext =
+      matchedBot.kind === "partner"
+        ? ({
+            kind: "partner",
+            partnerBotId: matchedBot.id,
+          } as const)
+        : ({ kind: "default" } as const);
     const user = await upsertTelegramUser(telegram);
     const fallbackStartParam =
       typeof body?.startParam === "string" ? body.startParam.trim() : "";
@@ -61,10 +68,10 @@ export async function POST(request: NextRequest) {
       telegram.startParam ?? fallbackStartParam,
     );
     const referralCode =
-      partnerReferralCode ??
       referralCodeFromInitData ??
       referralCodeFromUrl ??
-      referralCodeFromIntent;
+      referralCodeFromIntent ??
+      partnerReferralCode;
 
     if (referralCode) {
       if (partnerReferralCode || referralCodeFromInitData || referralCodeFromUrl) {
@@ -72,20 +79,14 @@ export async function POST(request: NextRequest) {
       }
 
       await attachAffiliateReferral({
+        botContext,
         referralCode,
         referredUserId: user.id,
       }).catch(() => undefined);
     }
 
     await createUserSession(user);
-    await setActiveBotContextCookie(
-      matchedBot.kind === "partner"
-        ? {
-            kind: "partner",
-            partnerBotId: matchedBot.id,
-          }
-        : { kind: "default" },
-    );
+    await setActiveBotContextCookie(botContext);
 
     return NextResponse.json({
       ok: true,
