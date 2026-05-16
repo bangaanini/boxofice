@@ -1,0 +1,878 @@
+{
+  "User": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "passwordHash",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "passwordSalt",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "telegramId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "telegramUsername",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "telegramFirstName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "telegramLastName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "telegramPhotoUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "telegramAuthDate",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "lastTelegramAuthAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "vipStartedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "vipExpiresAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    }
+  ],
+  "UserSession": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "tokenHash",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "expiresAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "VipProgramSettings": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "slug",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "previewEnabled",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "previewLimitMinutes",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "joinVipLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "joinVipUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "paywallTitle",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "paywallDescription",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    }
+  ],
+  "VipPlan": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "slug",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "title",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "badge",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "durationDays",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "priceAmount",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "currency",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "ctaLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "highlight",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "active",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "sortOrder",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    }
+  ],
+  "VipPaymentOrder": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "planId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "provider",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "amount",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "currency",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "checkoutUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "externalCheckoutId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "externalPaymentId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "metadata",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "paidAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "expiresAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    }
+  ],
+  "PartnerBot": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "ownerUserId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "label",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "telegramBotId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "botToken",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "botUsername",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "botName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "miniAppShortName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "webhookSecret",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "active",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "settingsOverrides",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "defaultChannelUsername",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "dramaBotUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ],
+  "TelegramBotSettings": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "slug",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "welcomeMessage",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "openAppLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "openAppUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "searchLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "searchUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "affiliateLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "affiliateUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "affiliateGroupLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "affiliateGroupUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "channelLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "channelUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "supportLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "supportUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "vipLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "vipUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "botToken",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "botUsername",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "webhookSecret",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "publicAppUrl",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "miniAppShortName",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "brandName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "appShortName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "seoTitle",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "seoDescription",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "seoKeywords",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "ownerTelegramId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "inlineButtons",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "dramaAppUrl",
+      "data_type": "text",
+      "is_nullable": "NO"
+    }
+  ],
+  "AffiliateProfile": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "userId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "referralCode",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "totalClicks",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "totalSignups",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "activeReferrals",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "totalCommission",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "availableBalance",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "pendingBalance",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "withdrawnBalance",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "minimumWithdraw",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "commissionRate",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "commissionRateOverride",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    }
+  ],
+  "AffiliateReferral": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "profileId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "referredUserId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "commissionEarned",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "activatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    }
+  ],
+  "AffiliatePayoutRequest": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "profileId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "amount",
+      "data_type": "integer",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "payoutMethod",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "payoutProvider",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "recipientName",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "accountNumber",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "processedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    }
+  ],
+  "AffiliateActivity": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "profileId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "title",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "amount",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    }
+  ],
+  "TelegramReferralIntent": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "telegramId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "referralCode",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "consumedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    }
+  ],
+  "ChannelBroadcast": [
+    {
+      "column_name": "id",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "token",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "movieId",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "ownerUserId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "partnerBotId",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "botKind",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "botUsername",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "channelUsername",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "buttonLabel",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "caption",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "telegramMessageId",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "pinned",
+      "data_type": "boolean",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "postedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "createdAt": "2026-05-16T01:51:55.717Z",
+  "source": "Supabase Postgres",
+  "tables": [
+    "User",
+    "UserSession",
+    "VipProgramSettings",
+    "VipPlan",
+    "VipPaymentOrder",
+    "PartnerBot",
+    "TelegramBotSettings",
+    "AffiliateProfile",
+    "AffiliateReferral",
+    "AffiliatePayoutRequest",
+    "AffiliateActivity",
+    "TelegramReferralIntent",
+    "ChannelBroadcast"
+  ],
+  "counts": {
+    "User": 51,
+    "UserSession": 186,
+    "VipProgramSettings": 1,
+    "VipPlan": 4,
+    "VipPaymentOrder": 5,
+    "PartnerBot": 11,
+    "TelegramBotSettings": 1,
+    "AffiliateProfile": 49,
+    "AffiliateReferral": 19,
+    "AffiliatePayoutRequest": 0,
+    "AffiliateActivity": 27,
+    "TelegramReferralIntent": 22,
+    "ChannelBroadcast": 50
+  },
+  "notes": [
+    "full-backup.json contains raw selected table data and may include secrets/tokens/password hashes.",
+    "redacted-preview.json masks sensitive fields for review."
+  ]
+}
