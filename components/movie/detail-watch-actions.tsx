@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { LogIn, Play, RefreshCw } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { MovieActionButtons } from "@/components/movie/movie-action-buttons";
@@ -17,6 +17,7 @@ import {
 
 type DetailWatchActionsProps = {
   authLoginUrl?: string | null;
+  guestPreview?: boolean;
   initialSaved: boolean;
   movieId: string;
   requiresAuth?: boolean;
@@ -32,6 +33,7 @@ type DetailWatchActionsProps = {
 
 export function DetailWatchActions({
   authLoginUrl,
+  guestPreview = false,
   initialSaved,
   movieId,
   requiresAuth = false,
@@ -75,6 +77,14 @@ export function DetailWatchActions({
   const selectedEpisodeNumber = episodeOptions.includes(selectedEpisode)
     ? selectedEpisode
     : episodeOptions[0];
+  const streamCacheScope = guestPreview ? "guest" : "user";
+  const watchButtonLabel = isOpening
+    ? "Membuka..."
+    : episodeGroups.length
+      ? `${guestPreview ? "Preview" : "Tonton"} S${selectedSeasonNumber} E${selectedEpisodeNumber}`
+      : guestPreview
+        ? "Tonton preview"
+        : "Tonton";
   const watchPath = React.useMemo(() => {
     if (!episodeGroups.length) {
       return `/watch/${movieId}`;
@@ -114,10 +124,6 @@ export function DetailWatchActions({
   }, [episodeGroups, selectedEpisode, selectedSeason]);
 
   React.useEffect(() => {
-    if (requiresAuth) {
-      return;
-    }
-
     router.prefetch(watchPath);
 
     const scheduleWarmup = () => {
@@ -126,6 +132,7 @@ export function DetailWatchActions({
           movieId,
           episodeGroups.length ? selectedSeasonNumber : undefined,
           episodeGroups.length ? selectedEpisodeNumber : undefined,
+          streamCacheScope,
         ),
         episode: episodeGroups.length ? selectedEpisodeNumber : undefined,
         movieId,
@@ -154,19 +161,14 @@ export function DetailWatchActions({
   }, [
     episodeGroups.length,
     movieId,
-    requiresAuth,
     router,
     selectedEpisodeNumber,
     selectedSeasonNumber,
+    streamCacheScope,
     watchPath,
   ]);
 
   function handleWatch() {
-    if (requiresAuth) {
-      window.location.href = authLoginUrl || "/login";
-      return;
-    }
-
     setIsOpening(true);
     router.push(watchPath);
   }
@@ -227,20 +229,12 @@ export function DetailWatchActions({
             data-haptic="medium"
             className="h-12 w-full bg-red-600 px-7 text-white hover:bg-red-500 sm:w-auto"
           >
-            {requiresAuth ? (
-              <LogIn className="size-4" />
-            ) : isOpening ? (
+            {isOpening ? (
               <RefreshCw className="size-4 animate-spin" />
             ) : (
               <Play className="size-4 fill-current" />
             )}
-            {requiresAuth
-              ? "Login / Daftar untuk menonton"
-              : isOpening
-                ? "Membuka..."
-                : episodeGroups.length
-                  ? `Tonton S${selectedSeasonNumber} E${selectedEpisodeNumber}`
-                  : "Tonton"}
+            {watchButtonLabel}
           </Button>
         </div>
         <MovieActionButtons

@@ -304,7 +304,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
     `/movie/${movie.id}?${authNextParams.toString()}`,
   )}`;
 
-  if (Boolean(user) && shouldOpenPlayer) {
+  if (shouldOpenPlayer) {
     redirect(`/watch/${movie.id}`);
   }
 
@@ -331,6 +331,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
               <div className="rounded-[24px] border border-white/10 bg-black/10 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur-[2px] sm:max-w-2xl sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-0">
               <DetailWatchActions
                 authLoginUrl={authLoginUrl}
+                guestPreview={!user}
                 initialSaved={Boolean(favorite)}
                 movieId={movie.id}
                 requiresAuth={!user}

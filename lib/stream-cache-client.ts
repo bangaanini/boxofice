@@ -17,6 +17,7 @@ export type CachedStreamSubtitle = {
 export type CachedStreamResponse = {
   accessToken?: string;
   accessTokenExpiresAt?: string;
+  authenticated?: boolean;
   episode?: number;
   format?: string;
   ownerPlaybackAccess?: boolean;
@@ -38,7 +39,7 @@ type StreamCacheEntry = {
 };
 
 const STREAM_CACHE_TTL_MS = 10 * 60 * 1000;
-const STREAM_CACHE_PREFIX = "boxofice:stream:v5:";
+const STREAM_CACHE_PREFIX = "boxofice:stream:v6:";
 const memoryCache = new Map<string, StreamCacheEntry>();
 
 type StreamLookup = {
@@ -103,12 +104,13 @@ export function getMovieStreamCacheKey(
   movieId: string,
   season?: number,
   episode?: number,
+  scope: "guest" | "user" = "user",
 ) {
   if (season && episode) {
-    return `movie:${movieId}:s${season}:e${episode}`;
+    return `movie:${scope}:${movieId}:s${season}:e${episode}`;
   }
 
-  return `movie:${movieId}`;
+  return `movie:${scope}:${movieId}`;
 }
 
 export function getSourceStreamCacheKey(
@@ -146,6 +148,10 @@ export function writeCachedStream(
   ttlMs = STREAM_CACHE_TTL_MS,
 ) {
   if (!value.sources.length) {
+    return;
+  }
+
+  if (value.authenticated === false) {
     return;
   }
 

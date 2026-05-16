@@ -23,9 +23,11 @@ type WatchPlayerProps = {
   initialProgressSeconds?: number;
   movieId?: string;
   onRequestClose?: () => void;
+  paywallRedirectUrl?: string;
   poster?: string | null;
   season?: number;
   sourceUrl?: string;
+  streamCacheScope?: "guest" | "user";
 };
 
 type SeekFeedback = {
@@ -188,17 +190,21 @@ export function WatchPlayer({
   initialProgressSeconds = 0,
   movieId,
   onRequestClose,
+  paywallRedirectUrl,
   poster,
   season = 0,
   sourceUrl,
+  streamCacheScope = "user",
 }: WatchPlayerProps) {
   const streamCacheKey = React.useMemo(() => {
     if (sourceUrl) {
       return getSourceStreamCacheKey(sourceUrl, season, episode);
     }
 
-    return movieId ? getMovieStreamCacheKey(movieId, season, episode) : null;
-  }, [episode, movieId, season, sourceUrl]);
+    return movieId
+      ? getMovieStreamCacheKey(movieId, season, episode, streamCacheScope)
+      : null;
+  }, [episode, movieId, season, sourceUrl, streamCacheScope]);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const hideChromeTimeoutRef = React.useRef<number | null>(null);
   const lastTapRef = React.useRef<{ time: number; x: number } | null>(null);
@@ -305,6 +311,9 @@ export function WatchPlayer({
   const sources = React.useMemo(() => stream?.sources ?? [], [stream]);
   const previewLimitSeconds = Math.max(0, stream?.previewLimitSeconds ?? 0);
   const isVipActive = Boolean(stream?.vipActive);
+  const isAuthenticated = stream?.authenticated ?? true;
+  const resolvedPaywallRedirectUrl =
+    paywallRedirectUrl ?? stream?.upgradeUrl ?? "/vip";
   const selectedSource =
     sources.find((source) => source.url === selectedSourceUrl) ??
     chooseDefaultSource(sources, defaultQuality) ??
@@ -604,7 +613,7 @@ export function WatchPlayer({
   React.useEffect(() => {
     const video = videoRef.current;
 
-    if (!video || !movieId) {
+    if (!video || !movieId || isAuthenticated === false) {
       return;
     }
 
@@ -674,7 +683,32 @@ export function WatchPlayer({
       currentVideo.removeEventListener("ended", handleEnded);
       window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [movieId, sources.length]);
+  }, [isAuthenticated, movieId, sources.length]);
+
+  React.useEffect(() => {
+    if (
+      !previewEnded ||
+      isVipActive ||
+      previewLimitSeconds <= 0 ||
+      isAuthenticated
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      window.location.assign(resolvedPaywallRedirectUrl);
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    isAuthenticated,
+    isVipActive,
+    previewEnded,
+    previewLimitSeconds,
+    resolvedPaywallRedirectUrl,
+  ]);
 
   React.useEffect(() => {
     if (selectedSourceUrl) {
@@ -1215,38 +1249,48 @@ export function WatchPlayer({
                 Preview selesai
               </p>
               <h3 className="mt-2 text-lg font-bold text-white">
-                {stream?.paywallTitle ?? "Lanjutkan dengan VIP"}
+                {isAuthenticated
+                  ? stream?.paywallTitle ?? "Lanjutkan dengan VIP"
+                  : "Login untuk lanjut VIP"}
               </h3>
               <p className="mt-1.5 text-[13px] leading-5 text-neutral-300">
-                {stream?.paywallDescription ??
-                  "Upgrade VIP untuk lanjut nonton tanpa batas dan buka semua katalog premium."}
+                {isAuthenticated
+                  ? stream?.paywallDescription ??
+                    "Upgrade VIP untuk lanjut nonton tanpa batas dan buka semua katalog premium."
+                  : "Kamu akan diarahkan ke halaman login/daftar, lalu lanjut ke halaman VIP."}
               </p>
               <p className="mt-1.5 text-[11px] leading-4 text-neutral-500">
                 Batas preview untuk akun gratis: {formatPreviewLimit(previewLimitSeconds)}
               </p>
-              <div className="mt-2.5 grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  data-haptic="light"
-                  onClick={closePlayer}
-                  className="h-9 border border-white/10 bg-white/10 px-2 text-[12px] text-white hover:bg-white/15"
-                >
-                  Kembali ke detail
-                </Button>
-                <Button
-                  asChild
-                  type="button"
-                  size="sm"
-                  data-haptic="medium"
-                  className="h-9 bg-red-600 px-2 text-[12px] text-white hover:bg-red-500"
-                >
-                  <a href={stream?.upgradeUrl ?? "/vip"}>
-                    {stream?.upgradeLabel ?? "Buka VIP"}
-                  </a>
-                </Button>
-              </div>
+              {isAuthenticated ? (
+                <div className="mt-2.5 grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    data-haptic="light"
+                    onClick={closePlayer}
+                    className="h-9 border border-white/10 bg-white/10 px-2 text-[12px] text-white hover:bg-white/15"
+                  >
+                    Kembali ke detail
+                  </Button>
+                  <Button
+                    asChild
+                    type="button"
+                    size="sm"
+                    data-haptic="medium"
+                    className="h-9 bg-red-600 px-2 text-[12px] text-white hover:bg-red-500"
+                  >
+                    <a href={stream?.upgradeUrl ?? "/vip"}>
+                      {stream?.upgradeLabel ?? "Buka VIP"}
+                    </a>
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full w-1/2 animate-pulse rounded-full bg-red-500" />
+                </div>
+              )}
             </div>
           </div>
         ) : null}

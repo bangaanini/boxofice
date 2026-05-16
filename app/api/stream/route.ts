@@ -120,10 +120,6 @@ export async function GET(request: NextRequest) {
     getVipProgramSettingsSafe(),
   ]);
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const lookup = await resolveStreamLookup(request);
 
   if (!lookup) {
@@ -138,10 +134,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const [ownerPlaybackAccess, vipStatus] = await Promise.all([
-      hasBotOwnerPlaybackAccess(user),
-      Promise.resolve(getVipStatus(user)),
+      user ? hasBotOwnerPlaybackAccess(user) : Promise.resolve(false),
+      Promise.resolve(user ? getVipStatus(user) : getVipStatus({})),
     ]);
-    const vipLikeAccess = vipStatus.active || ownerPlaybackAccess;
+    const vipLikeAccess = Boolean(
+      user && (vipStatus.active || ownerPlaybackAccess),
+    );
     const previewLimitSeconds = resolvePreviewLimitSeconds(
       vipSettingsResult.settings,
       vipLikeAccess,
@@ -149,7 +147,7 @@ export async function GET(request: NextRequest) {
     const accessToken = createPlaybackAccessToken({
       movieId: lookup.movieId,
       previewLimitSeconds,
-      userId: user.id,
+      userId: user?.id ?? `guest:${lookup.movieId}`,
       vipActive: vipLikeAccess,
     });
     const { se, ep } = resolveEpisode(lookup, request);
@@ -199,6 +197,7 @@ export async function GET(request: NextRequest) {
       {
         accessToken: accessToken.token,
         accessTokenExpiresAt: accessToken.expiresAt.toISOString(),
+        authenticated: Boolean(user),
         episode: playback.episode,
         format: playback.format,
         ownerPlaybackAccess,

@@ -13,7 +13,7 @@ import {
   resolveSeriesEpisode,
   type EpisodeGroup,
 } from "@/lib/season-utils";
-import { requireUserSession } from "@/lib/user-auth";
+import { getCurrentUserSession } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +60,10 @@ function buildEpisodeHref(movieId: string, season: number, episode: number) {
   });
 
   return `/watch/${movieId}?${params.toString()}`;
+}
+
+function buildGuestPreviewPaywallUrl() {
+  return `/login?next=${encodeURIComponent("/vip")}`;
 }
 
 function WatchEpisodeList({
@@ -137,10 +141,10 @@ export default async function WatchPage({
   params,
   searchParams,
 }: WatchPageProps) {
-  const [{ id }, query] = await Promise.all([
+  const [{ id }, query, user] = await Promise.all([
     params,
     searchParams,
-    requireUserSession(),
+    getCurrentUserSession(),
   ]);
   const data = await getWatchData(id);
 
@@ -202,9 +206,13 @@ export default async function WatchPage({
           <div className="space-y-4 sm:space-y-5">
             <WatchPlayer
               movieId={movie.id}
+              paywallRedirectUrl={
+                user ? undefined : buildGuestPreviewPaywallUrl()
+              }
               poster={movie.thumbnail}
               season={seasonNumber}
               episode={episodeNumber}
+              streamCacheScope={user ? "user" : "guest"}
             />
 
             <ImmersiveHidden>
