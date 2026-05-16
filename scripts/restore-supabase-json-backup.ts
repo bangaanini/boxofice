@@ -25,8 +25,6 @@ const restoreOrder = [
   "UserSession",
 ];
 
-const optionalMovieDependentTables = ["ChannelBroadcast"];
-
 const replaceTables = [
   "ChannelBroadcast",
   "AffiliateActivity",
@@ -164,9 +162,7 @@ async function main() {
   assertSafeTarget(databaseUrl, args.allowRemote);
 
   const { data, resolvedPath } = loadBackup(args.backupPath);
-  const tables = args.includeChannelBroadcasts
-    ? [...restoreOrder, ...optionalMovieDependentTables]
-    : restoreOrder;
+  const tables = restoreOrder;
   const counts = Object.fromEntries(
     tables.map((table) => [table, data[table]?.length ?? 0]),
   );
@@ -175,6 +171,12 @@ async function main() {
   console.log("Backup file:", resolvedPath);
   console.log("Mode:", args.replace ? "replace/truncate selected user data" : "upsert only");
   console.log("Tables:", counts);
+
+  if (args.includeChannelBroadcasts) {
+    console.log(
+      "Info: ChannelBroadcast dilewati. Tabel ini bergantung ke data Movie lokal dengan ID yang sama.",
+    );
+  }
 
   if (!args.yes) {
     console.log("\nDry run selesai. Tambahkan --yes untuk menjalankan restore.");
