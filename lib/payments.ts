@@ -91,6 +91,8 @@ export type PaymenkuPaymentMetadata = {
   channelCode?: string | null;
   channelName?: string | null;
   channelType?: "qris" | "va" | null;
+  checkoutSource?: string | null;
+  checkoutSourceLabel?: string | null;
   customerEmail?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;

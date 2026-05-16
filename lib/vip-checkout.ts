@@ -1,9 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { applyAffiliateCommissionForVipOrder } from "@/lib/affiliate";
-import { getBotContextFields, getValidActiveBotContext } from "@/lib/bot-access";
+import {
+  getActiveBotContext,
+  getBotContextFields,
+  getValidActiveBotContext,
+} from "@/lib/bot-access";
 import {
   getOrderPaymentMetadata,
   getPaymentGatewaySettingsSafe,
+  getPaymentProviderLabel,
   getPaymenkuChannels,
 } from "@/lib/payments";
 import { getTelegramBotSettingsSafe } from "@/lib/telegram-bot-settings";
@@ -81,6 +86,7 @@ type PakasirTransactionDetailResponse = {
 
 type OrderMetadataValue = string | number | boolean | null;
 type OrderMetadataRecord = Record<string, OrderMetadataValue>;
+type VipCheckoutSource = "web" | "bot_master" | "bot_partner";
 type VipCommissionResult = {
   commissionAmount: number;
   profile: {
@@ -179,6 +185,92 @@ function readOrderMetadataRecord(value: unknown): OrderMetadataRecord {
   return output;
 }
 
+function normalizeCheckoutSource(input: {
+  botKind?: string | null;
+  partnerBotId?: string | null;
+  value?: OrderMetadataValue;
+}): VipCheckoutSource {
+  const source =
+    typeof input.value === "string" ? input.value.trim().toLowerCase() : "";
+
+  if (source === "web") {
+    return "web";
+  }
+
+  if (source === "bot_partner" || source === "bot-partner") {
+    return "bot_partner";
+  }
+
+  if (
+    source === "bot_master" ||
+    source === "bot-master" ||
+    source === "master" ||
+    source === "default"
+  ) {
+    return "bot_master";
+  }
+
+  if (input.botKind === "partner" && input.partnerBotId) {
+    return "bot_partner";
+  }
+
+  if (input.botKind === "web") {
+    return "web";
+  }
+
+  return "bot_master";
+}
+
+function getCheckoutSourceLabel(source: VipCheckoutSource) {
+  if (source === "web") {
+    return "Web";
+  }
+
+  if (source === "bot_partner") {
+    return "Bot partner";
+  }
+
+  return "Bot master";
+}
+
+function getMasterNotificationTitle(source: VipCheckoutSource) {
+  if (source === "web") {
+    return "🧾 Transaksi VIP web baru";
+  }
+
+  if (source === "bot_partner") {
+    return "🧾 Transaksi VIP partner baru";
+  }
+
+  return "🧾 Transaksi VIP bot master baru";
+}
+
+async function resolveVipCheckoutContext() {
+  const activeBotContext = await getActiveBotContext().catch(() => null);
+
+  if (!activeBotContext) {
+    return {
+      botKind: "web",
+      checkoutSource: "web" as const,
+      checkoutSourceLabel: getCheckoutSourceLabel("web"),
+      partnerBotId: null,
+    };
+  }
+
+  const validBotContext = await getValidActiveBotContext().catch(
+    () => ({ kind: "default" }) as const,
+  );
+  const botContextFields = getBotContextFields(validBotContext);
+  const checkoutSource =
+    validBotContext.kind === "partner" ? "bot_partner" : "bot_master";
+
+  return {
+    ...botContextFields,
+    checkoutSource,
+    checkoutSourceLabel: getCheckoutSourceLabel(checkoutSource),
+  };
+}
+
 function mergeOrderMetadata(
   currentMetadata: unknown,
   nextMetadata: OrderMetadataRecord,
@@ -236,38 +328,43 @@ async function notifyAffiliateOwnerForVipJoin(input: {
   }).catch(() => false);
 }
 
-async function notifyMasterOwnerForPartnerVipOrder(input: {
+async function notifyMasterOwnerForVipOrder(input: {
   botKind?: string | null;
   buyerName: string;
   buyerUsername?: string | null;
+  checkoutSource?: string | null;
   commissionResult: VipCommissionResult;
+  durationDays: number;
+  expiresAt: Date;
   metadata: unknown;
   orderId: string;
   packageTitle: string;
   paidAt: Date;
+  paymentChannel?: string | null;
+  paymentProvider?: string | null;
   partnerBotId?: string | null;
+  totalPaymentAmount: number;
   transactionAmount: number;
 }) {
-  if (input.botKind !== "partner" || !input.partnerBotId) {
-    return false;
-  }
-
   const metadata = readOrderMetadataRecord(input.metadata);
 
   if (typeof metadata.masterNotificationSentAt === "string") {
     return false;
   }
 
+  const partnerBotPromise = input.partnerBotId
+    ? prisma.partnerBot.findUnique({
+        where: { id: input.partnerBotId },
+        select: {
+          botName: true,
+          botUsername: true,
+          label: true,
+        },
+      }).catch(() => null)
+    : Promise.resolve(null);
   const [telegram, partnerBot] = await Promise.all([
     getTelegramBotSettingsSafe(),
-    prisma.partnerBot.findUnique({
-      where: { id: input.partnerBotId },
-      select: {
-        botName: true,
-        botUsername: true,
-        label: true,
-      },
-    }).catch(() => null),
+    partnerBotPromise,
   ]);
   const ownerTelegramId = getMasterOwnerTelegramId(
     telegram.settings.ownerTelegramId,
@@ -278,20 +375,55 @@ async function notifyMasterOwnerForPartnerVipOrder(input: {
     return false;
   }
 
+  const checkoutSource = normalizeCheckoutSource({
+    botKind: input.botKind,
+    partnerBotId: input.partnerBotId,
+    value: input.checkoutSource ?? metadata.checkoutSource,
+  });
+  const isPartnerTransaction = checkoutSource === "bot_partner";
   const partnerBotLabel = partnerBot
     ? `${partnerBot.label?.trim() || partnerBot.botName} (@${partnerBot.botUsername})`
     : input.partnerBotId;
+  const masterBotUsername = telegram.runtime.botUsername
+    ?.trim()
+    .replace(/^@/, "");
+  const masterBotLabel = masterBotUsername
+    ? `@${masterBotUsername}`
+    : telegram.settings.brandName || "Bot utama";
+  const sourceLine =
+    checkoutSource === "bot_partner"
+      ? `Sumber: Bot partner - ${partnerBotLabel ?? input.partnerBotId ?? "-"}`
+      : checkoutSource === "bot_master"
+        ? `Sumber: Bot master (${masterBotLabel})`
+        : "Sumber: Web";
   const commissionLine = input.commissionResult
     ? `${formatCurrency(input.commissionResult.commissionAmount)} untuk ${input.commissionResult.profile.user.name} (${formatTelegramHandle(input.commissionResult.profile.user.telegramUsername)})`
     : "Tidak ada komisi baru";
+  const channelLine = input.paymentChannel?.trim() || "-";
+  const totalPaymentLine =
+    input.totalPaymentAmount > 0 &&
+    input.totalPaymentAmount !== input.transactionAmount
+      ? `Total dibayar: ${formatCurrency(input.totalPaymentAmount)}\n`
+      : "";
   const text =
-    "🧾 Transaksi partner baru\n\n" +
-    `Bot partner: ${partnerBotLabel}\n` +
+    `${getMasterNotificationTitle(checkoutSource)}\n\n` +
+    `${sourceLine}\n` +
     `Pembeli: ${input.buyerName} (${formatTelegramHandle(input.buyerUsername)})\n` +
     `Paket VIP: ${input.packageTitle}\n` +
+    `Durasi: ${input.durationDays} hari\n` +
+    `Gateway: ${getPaymentProviderLabel(input.paymentProvider)}\n` +
+    `Metode: ${channelLine}\n` +
     `Nilai transaksi: ${formatCurrency(input.transactionAmount)}\n` +
-    `Komisi: ${commissionLine}\n` +
+    totalPaymentLine +
+    `${isPartnerTransaction ? "Komisi partner" : "Komisi affiliate"}: ${commissionLine}\n` +
     `Order: ${input.orderId}\n` +
+    `VIP sampai: ${input.expiresAt.toLocaleString("id-ID", {
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      month: "long",
+      year: "numeric",
+    })}\n` +
     `Waktu: ${input.paidAt.toLocaleString("id-ID", {
       day: "numeric",
       hour: "2-digit",
@@ -480,6 +612,18 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
   const metadata = getOrderPaymentMetadata(order);
   const commissionBaseAmount =
     parseAmount(metadata?.amountReceived) || order.plan.priceAmount;
+  const checkoutSource = normalizeCheckoutSource({
+    botKind: order.botKind,
+    partnerBotId: order.partnerBotId,
+    value: metadata?.checkoutSource,
+  });
+  const paymentChannel =
+    metadata?.channelName ||
+    metadata?.paymentMethod ||
+    metadata?.channelCode ||
+    null;
+  const totalPaymentAmount =
+    parseAmount(metadata?.totalPayment) || order.amount || commissionBaseAmount;
   const sendAffiliateOwnerNotification = async (
     commissionResult: VipCommissionResult,
   ) => {
@@ -507,16 +651,22 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
       referredUserId: order.user.id,
     }).catch(() => null);
     await sendAffiliateOwnerNotification(commissionResult);
-    await notifyMasterOwnerForPartnerVipOrder({
+    await notifyMasterOwnerForVipOrder({
       botKind: order.botKind,
       buyerName: order.user.name,
       buyerUsername: order.user.telegramUsername,
+      checkoutSource,
       commissionResult,
+      durationDays: order.plan.durationDays,
+      expiresAt: nextExpiresAt,
       metadata: order.metadata,
       orderId: order.id,
       packageTitle: order.plan.title,
       paidAt: now,
+      paymentChannel,
+      paymentProvider: order.provider,
       partnerBotId: order.partnerBotId,
+      totalPaymentAmount,
       transactionAmount: commissionBaseAmount,
     }).catch(() => null);
 
@@ -559,16 +709,22 @@ async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
     referredUserId: order.user.id,
   }).catch(() => null);
   await sendAffiliateOwnerNotification(commissionResult);
-  await notifyMasterOwnerForPartnerVipOrder({
+  await notifyMasterOwnerForVipOrder({
     botKind: order.botKind,
     buyerName: order.user.name,
     buyerUsername: order.user.telegramUsername,
+    checkoutSource,
     commissionResult,
+    durationDays: order.plan.durationDays,
+    expiresAt: nextExpiresAt,
     metadata: order.metadata,
     orderId: order.id,
     packageTitle: order.plan.title,
     paidAt: now,
+    paymentChannel,
+    paymentProvider: order.provider,
     partnerBotId: order.partnerBotId,
+    totalPaymentAmount,
     transactionAmount: commissionBaseAmount,
   }).catch(() => null);
 
@@ -695,8 +851,11 @@ export async function createVipPaymentForUser(input: {
     throw new Error("Metode pembayaran yang dipilih belum tersedia.");
   }
 
-  const activeBotContext = await getValidActiveBotContext().catch(() => null);
-  const botContextFields = getBotContextFields(activeBotContext);
+  const checkoutContext = await resolveVipCheckoutContext();
+  const botContextFields = {
+    botKind: checkoutContext.botKind,
+    partnerBotId: checkoutContext.partnerBotId,
+  };
   const order = await prisma.vipPaymentOrder.create({
     data: {
       amount: plan.priceAmount,
@@ -707,6 +866,8 @@ export async function createVipPaymentForUser(input: {
         channelCode: selectedChannel.code,
         channelName: selectedChannel.name,
         channelType: selectedChannel.type,
+        checkoutSource: checkoutContext.checkoutSource,
+        checkoutSourceLabel: checkoutContext.checkoutSourceLabel,
         customerEmail: user.email,
         customerName: user.name,
         customerPhone: input.userPhone ?? null,
@@ -769,6 +930,8 @@ export async function createVipPaymentForUser(input: {
           channelCode: selectedChannel.code,
           channelName: selectedChannel.name,
           channelType,
+          checkoutSource: checkoutContext.checkoutSource,
+          checkoutSourceLabel: checkoutContext.checkoutSourceLabel,
           customerEmail: user.email,
           customerName: user.name,
           customerPhone: input.userPhone ?? null,
@@ -829,6 +992,8 @@ export async function createVipPaymentForUser(input: {
         channelCode: selectedChannel.code,
         channelName: selectedChannel.name,
         channelType: selectedChannel.type,
+        checkoutSource: checkoutContext.checkoutSource,
+        checkoutSourceLabel: checkoutContext.checkoutSourceLabel,
         customerEmail: user.email,
         customerName: user.name,
         customerPhone: input.userPhone ?? null,
