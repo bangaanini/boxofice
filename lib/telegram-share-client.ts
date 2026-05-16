@@ -1,4 +1,5 @@
 type TelegramWebApp = {
+  initData?: string;
   openLink?: (
     url: string,
     options?: {
@@ -24,7 +25,7 @@ function getTelegramWebApp() {
 }
 
 export function isTelegramMiniAppBrowser() {
-  return Boolean(getTelegramWebApp());
+  return Boolean(getTelegramWebApp()?.initData?.trim());
 }
 
 export function buildTelegramShareComposerUrl(input: {

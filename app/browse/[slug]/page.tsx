@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { MovieCardLink } from "@/components/movie/movie-card-link";
 import { Button } from "@/components/ui/button";
 import {
+  formatHomeSectionTitle,
   getMoviesByHomeSection,
   isHomeSectionSlug,
 } from "@/lib/movie-feeds";
@@ -17,14 +18,6 @@ type BrowsePageProps = {
   }>;
 };
 
-function slugToDisplay(slug: string) {
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 export default async function BrowsePage({ params }: BrowsePageProps) {
   const { slug } = await params;
   const exists = await isHomeSectionSlug(slug);
@@ -35,7 +28,7 @@ export default async function BrowsePage({ params }: BrowsePageProps) {
 
   const page = await getMoviesByHomeSection(slug, { limit: 30 });
   const featured = page.items[0] ?? null;
-  const title = slugToDisplay(slug);
+  const title = formatHomeSectionTitle(slug);
 
   return (
     <main className="min-h-screen bg-black text-white">

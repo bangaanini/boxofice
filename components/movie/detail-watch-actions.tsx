@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Play, RefreshCw } from "lucide-react";
+import { LogIn, Play, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { MovieActionButtons } from "@/components/movie/movie-action-buttons";
@@ -16,8 +16,7 @@ import {
 } from "@/lib/stream-cache-client";
 
 type DetailWatchActionsProps = {
-  authBotChatUrl?: string | null;
-  authMiniAppUrl?: string | null;
+  authLoginUrl?: string | null;
   initialSaved: boolean;
   movieId: string;
   requiresAuth?: boolean;
@@ -32,8 +31,7 @@ type DetailWatchActionsProps = {
 };
 
 export function DetailWatchActions({
-  authBotChatUrl,
-  authMiniAppUrl,
+  authLoginUrl,
   initialSaved,
   movieId,
   requiresAuth = false,
@@ -165,7 +163,7 @@ export function DetailWatchActions({
 
   function handleWatch() {
     if (requiresAuth) {
-      window.location.href = authMiniAppUrl || authBotChatUrl || "/admin/login";
+      window.location.href = authLoginUrl || "/login";
       return;
     }
 
@@ -229,13 +227,15 @@ export function DetailWatchActions({
             data-haptic="medium"
             className="h-12 w-full bg-red-600 px-7 text-white hover:bg-red-500 sm:w-auto"
           >
-            {isOpening ? (
+            {requiresAuth ? (
+              <LogIn className="size-4" />
+            ) : isOpening ? (
               <RefreshCw className="size-4 animate-spin" />
             ) : (
               <Play className="size-4 fill-current" />
             )}
             {requiresAuth
-              ? "Buka di Telegram"
+              ? "Login / Daftar untuk menonton"
               : isOpening
                 ? "Membuka..."
                 : episodeGroups.length
@@ -244,7 +244,7 @@ export function DetailWatchActions({
           </Button>
         </div>
         <MovieActionButtons
-          authUrl={authMiniAppUrl || authBotChatUrl}
+          authUrl={authLoginUrl || "/login"}
           initialSaved={initialSaved}
           movieId={movieId}
           requiresAuth={requiresAuth}

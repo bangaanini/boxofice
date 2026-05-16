@@ -22,7 +22,7 @@ export function HomeSectionRow({
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 sm:px-8 lg:px-10">
+    <section className="mx-auto w-full max-w-7xl px-4 [contain-intrinsic-size:300px] [content-visibility:auto] sm:px-8 lg:px-10">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-base font-bold text-white sm:text-lg">{title}</h2>
         <Link

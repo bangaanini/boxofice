@@ -8,11 +8,21 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
-    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",
         hostname: "static-jpg.lk21.party",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "pbcdnw.aoneroom.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "streamapi.web.id",
+        pathname: "/**",
       },
     ],
   },

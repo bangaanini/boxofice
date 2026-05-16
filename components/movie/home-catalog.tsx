@@ -248,7 +248,7 @@ export function HomeCatalog({
   }, []);
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 pb-28 pt-2 sm:px-8 sm:pb-10 sm:pt-4 lg:px-10">
+    <section className="mx-auto w-full max-w-7xl px-4 pb-28 pt-2 [contain-intrinsic-size:900px] [content-visibility:auto] sm:px-8 sm:pb-10 sm:pt-4 lg:px-10">
       {movies.length ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5 xl:grid-cols-6">
           {movies.map((movie, index) => (

@@ -317,6 +317,37 @@ export async function listRecentMovieSyncJobs(take = 6) {
   return rows.map(normalizeJob);
 }
 
+export async function listCompactMovieSyncJobs() {
+  const activeRows = await prisma.$queryRaw<MovieSyncJobRow[]>`
+    SELECT *
+    FROM "MovieSyncJob"
+    WHERE "status" NOT IN ('succeeded', 'partial', 'failed')
+    ORDER BY "createdAt" DESC
+    LIMIT 1
+  `;
+
+  if (activeRows.length > 0) {
+    const historyRows = await prisma.$queryRaw<MovieSyncJobRow[]>`
+      SELECT *
+      FROM "MovieSyncJob"
+      WHERE "status" IN ('succeeded', 'partial', 'failed')
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    `;
+
+    return [...activeRows, ...historyRows].map(normalizeJob);
+  }
+
+  const rows = await prisma.$queryRaw<MovieSyncJobRow[]>`
+    SELECT *
+    FROM "MovieSyncJob"
+    ORDER BY "createdAt" DESC
+    LIMIT 1
+  `;
+
+  return rows.map(normalizeJob);
+}
+
 export async function getMovieSyncJobRunner(jobId: string) {
   const rows = await prisma.$queryRaw<
     Array<{ id: string; runnerToken: string; status: string }>

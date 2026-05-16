@@ -24,8 +24,6 @@ import {
 import { getPreferredTelegramShareLinksForUser } from "@/lib/telegram-partner-bots";
 import {
   buildTelegramAppStartParam,
-  buildTelegramBotChatUrlForUsername,
-  buildTelegramMainMiniAppUrlForUsername,
   extractAffiliateCodeFromStartParam,
 } from "@/lib/telegram-miniapp";
 import { getCurrentUserSession } from "@/lib/user-auth";
@@ -233,7 +231,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
       query.tgWebAppStartParam ??
       null,
   );
-  const [favorite, relatedMovies, telegram] = await Promise.all([
+  const [favorite, relatedMovies] = await Promise.all([
     user
       ? prisma.userFavorite.findUnique({
           where: {
@@ -254,7 +252,6 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
       homeSections: movie.homeSections,
       limit: 14,
     }),
-    !user ? getTelegramBotSettingsSafe() : Promise.resolve(null),
   ]);
   const shouldOpenPlayer = query.play === "1" || query.play === "true";
   const vipStatus = getVipStatus(user ?? {});
@@ -297,19 +294,15 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
     telegramShareLinks?.miniAppUrl ||
     telegramShareLinks?.chatUrl ||
     null;
-  const authStartParam = buildTelegramAppStartParam({
-    movieId: movie.id,
-    referralCode: incomingReferralCode,
-  });
-  const authBotChatUrl = telegram
-    ? buildTelegramBotChatUrlForUsername(telegram.runtime.botUsername, authStartParam)
-    : null;
-  const authMiniAppUrl = telegram
-    ? buildTelegramMainMiniAppUrlForUsername(
-        telegram.runtime.botUsername,
-        authStartParam,
-      )
-    : null;
+  const authNextParams = new URLSearchParams({ play: "1" });
+
+  if (incomingReferralCode) {
+    authNextParams.set("ref", incomingReferralCode);
+  }
+
+  const authLoginUrl = `/login?next=${encodeURIComponent(
+    `/movie/${movie.id}?${authNextParams.toString()}`,
+  )}`;
 
   if (Boolean(user) && shouldOpenPlayer) {
     redirect(`/watch/${movie.id}`);
@@ -337,8 +330,7 @@ export default async function MoviePage({ params, searchParams }: MoviePageProps
             <div className="pt-4 sm:pt-6">
               <div className="rounded-[24px] border border-white/10 bg-black/10 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur-[2px] sm:max-w-2xl sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-0">
               <DetailWatchActions
-                authBotChatUrl={authBotChatUrl}
-                authMiniAppUrl={authMiniAppUrl}
+                authLoginUrl={authLoginUrl}
                 initialSaved={Boolean(favorite)}
                 movieId={movie.id}
                 requiresAuth={!user}

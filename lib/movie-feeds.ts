@@ -100,7 +100,7 @@ export type HomepageData = {
 const FEED_REVALIDATE_SECONDS = 60 * 5;
 const FILTER_REVALIDATE_SECONDS = 60 * 10;
 const MAX_HERO_BANNERS = 12;
-const MAX_SECTION_ITEMS = 18;
+const MAX_SECTION_ITEMS = 10;
 
 function normalizeFilterValue(value?: string | null) {
   const normalized = value?.trim();
@@ -222,12 +222,14 @@ export async function getHomepageBroadcastMovies(
   }
 }
 
-function slugToDisplay(slug: string) {
-  return slug
+export function formatHomeSectionTitle(slug: string) {
+  const title = slug
     .split("-")
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+
+  return title.replace(/\bmovie\s*box\b/gi, "Layarbox");
 }
 
 const getHomepageDataCached = unstable_cache(
@@ -292,7 +294,7 @@ const getHomepageDataCached = unstable_cache(
 
         sections.push({
           slug,
-          title: slugToDisplay(slug),
+          title: formatHomeSectionTitle(slug),
           movies,
         });
       }
@@ -304,7 +306,7 @@ const getHomepageDataCached = unstable_cache(
       totalMovies,
     };
   },
-  ["homepage-filmbox-data"],
+  ["homepage-layarbox-data-v2"],
   { revalidate: FEED_REVALIDATE_SECONDS },
 );
 

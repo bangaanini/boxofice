@@ -17,7 +17,7 @@ import {
 } from "@/lib/admin-dashboard";
 import {
   isActiveMovieSyncJob,
-  listRecentMovieSyncJobs,
+  listCompactMovieSyncJobs,
   type MovieSyncJob,
 } from "@/lib/movie-sync-jobs";
 
@@ -612,7 +612,7 @@ export default async function AdminSyncPage({
   const [params, overview, syncJobs, catalog] = await Promise.all([
     searchParams,
     getAdminOverviewData(),
-    listRecentMovieSyncJobs(),
+    listCompactMovieSyncJobs(),
     getAdminSyncCatalogTables(),
   ]);
 

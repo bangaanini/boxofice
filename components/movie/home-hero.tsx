@@ -31,6 +31,17 @@ export function HomeHero({ banners }: HomeHeroProps) {
     };
   }, [banners.length]);
 
+  const visibleSet = React.useMemo(() => {
+    if (banners.length <= 1) {
+      return new Set([0]);
+    }
+
+    const prevIndex = (activeIndex - 1 + banners.length) % banners.length;
+    const nextIndex = (activeIndex + 1) % banners.length;
+
+    return new Set([prevIndex, activeIndex, nextIndex]);
+  }, [activeIndex, banners.length]);
+
   if (banners.length === 0) {
     return null;
   }
@@ -43,16 +54,6 @@ export function HomeHero({ banners }: HomeHeroProps) {
     setActiveIndex((current) => (current + 1) % banners.length);
 
   const activeBanner = banners[activeIndex];
-  const visibleSet = React.useMemo(() => {
-    if (banners.length <= 1) {
-      return new Set([0]);
-    }
-
-    const prevIndex = (activeIndex - 1 + banners.length) % banners.length;
-    const nextIndex = (activeIndex + 1) % banners.length;
-
-    return new Set([prevIndex, activeIndex, nextIndex]);
-  }, [activeIndex, banners.length]);
 
   return (
     <section className="relative overflow-hidden">
@@ -75,10 +76,9 @@ export function HomeHero({ banners }: HomeHeroProps) {
                   src={banner.thumbnail}
                   alt={banner.title}
                   fill
-                  priority={index === 0}
-                  loading={index === 0 ? "eager" : "lazy"}
+                  preload={index === 0}
+                  loading={index === 0 ? undefined : "lazy"}
                   decoding="async"
-                  unoptimized
                   sizes="(min-width: 1280px) 1280px, 100vw"
                   className="object-cover"
                 />

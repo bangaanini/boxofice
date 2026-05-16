@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { MessageCircle } from "lucide-react";
 
-import { TelegramAwareUserAvatar } from "@/components/navigation/telegram-aware-user-avatar";
 import { HomeCatalog } from "@/components/movie/home-catalog";
 import { HomeHero } from "@/components/movie/home-hero";
 import { HomeSectionRow } from "@/components/movie/home-section-row";
 import { LazyMount } from "@/components/movie/lazy-mount";
+import { MobileHomeIdentity } from "@/components/navigation/mobile-home-identity";
 import { resolveChannelBroadcastStartParam } from "@/lib/channel-broadcasts";
 import { extractChannelBroadcastTokenFromStartParam } from "@/lib/channel-broadcast-tokens";
 import {
@@ -200,49 +199,16 @@ export default async function Home({ searchParams }: HomePageProps) {
     <main className="min-h-screen bg-black pb-24 text-white sm:pb-8">
       <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.96),rgba(10,10,10,0.88))] backdrop-blur-xl sm:hidden">
         <div className="mx-auto w-full max-w-7xl px-4 pb-2 pt-[calc(env(safe-area-inset-top)+8px)] sm:px-8 lg:px-10">
-          {user && displayName ? (
-            <div className="flex items-center gap-3">
-              <TelegramAwareUserAvatar
-                alt={displayName}
-                className="size-11"
-                fallbackChar={displayName.charAt(0).toUpperCase()}
-                photoUrl={user.telegramPhotoUrl}
-              />
-              <div className="min-w-0">
-                <p className="truncate text-base font-semibold text-white">
-                  {displayName}
-                </p>
-                <p className="truncate text-xs text-neutral-400">
-                  {usernameLabel}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-base font-semibold text-white">
-                  Box Office
-                </p>
-                <p className="text-xs text-neutral-400">
-                  Pratinjau katalog publik
-                </p>
-              </div>
-              <Link
-                href="/login-telegram"
-                prefetch={false}
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-red-400/30 bg-red-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-red-500"
-              >
-                <MessageCircle className="size-4" />
-                Buka via Telegram
-              </Link>
-            </div>
-          )}
+          <MobileHomeIdentity
+            displayName={displayName}
+            isAuthenticated={Boolean(user)}
+            photoUrl={user?.telegramPhotoUrl}
+            usernameLabel={usernameLabel}
+          />
 
           <div className="mt-3 space-y-2">
             <div>
-              <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-                Kategori
-              </div>
+
               <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
                 <FilterChip
                   active={!selectedGenre}
