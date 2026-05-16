@@ -3,6 +3,7 @@ import Link from "next/link";
 import { KeyRound, LogOut, MessageCircle, Sparkles, UserRound } from "lucide-react";
 
 import { logoutUserAction } from "@/app/user-auth/actions";
+import { ProfileBackButton } from "@/app/profile/back-button";
 import { AddToHomeScreenCard } from "@/components/pwa/add-to-home-screen-card";
 import { Button } from "@/components/ui/button";
 import { getCinematicBackdropMovies } from "@/lib/movie-feeds";
@@ -91,6 +92,10 @@ export default async function ProfilePage() {
         ) : null}
 
         <div className="mt-5 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,20,0.82),rgba(8,8,8,0.95))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+
+          <div className="flex justify-end">
+            <ProfileBackButton />
+          </div>
 
           <div className="mt-4 flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
