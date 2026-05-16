@@ -203,6 +203,7 @@ export function WatchPlayer({
   const hideChromeTimeoutRef = React.useRef<number | null>(null);
   const lastTapRef = React.useRef<{ time: number; x: number } | null>(null);
   const dismissedRotateSourceUrlRef = React.useRef<string | null>(null);
+  const seekFeedbackKeyRef = React.useRef(0);
   const resumeSnapshotRef = React.useRef<{
     time: number;
     shouldPlay: boolean;
@@ -249,10 +250,7 @@ export function WatchPlayer({
       if (cached) {
         setStream(cached);
         setSelectedSourceUrl(
-          (current) =>
-            current ??
-            chooseDefaultSource(cached.sources, defaultQuality)?.url ??
-            null,
+          chooseDefaultSource(cached.sources, defaultQuality)?.url ?? null,
         );
         return;
       }
@@ -294,7 +292,15 @@ export function WatchPlayer({
     return () => {
       controller.abort();
     };
-  }, [defaultQuality, movieId, retryCount, sourceUrl, streamCacheKey]);
+  }, [
+    defaultQuality,
+    episode,
+    movieId,
+    retryCount,
+    season,
+    sourceUrl,
+    streamCacheKey,
+  ]);
 
   const sources = React.useMemo(() => stream?.sources ?? [], [stream]);
   const previewLimitSeconds = Math.max(0, stream?.previewLimitSeconds ?? 0);
@@ -876,9 +882,10 @@ export function WatchPlayer({
     );
 
     video.currentTime = nextTime;
+    seekFeedbackKeyRef.current += 1;
     setSeekFeedback({
       direction: seconds < 0 ? "backward" : "forward",
-      key: Date.now(),
+      key: seekFeedbackKeyRef.current,
     });
   }
 
@@ -933,7 +940,7 @@ export function WatchPlayer({
       top: bounds.top,
       width: bounds.width,
     });
-    const now = Date.now();
+    const now = event.timeStamp;
     const lastTap = lastTapRef.current;
 
     if (

@@ -22,11 +22,13 @@ type NavItem = {
 
 const items: NavItem[] = [
   {
-    href: "/search",
-    icon: Search,
-    label: "Cari",
-    match: (pathname: string) => pathname.startsWith("/search"),
+    href: "/",
+    icon: Home,
+    label: "Home",
+    match: (pathname: string) =>
+      pathname === "/" || pathname.startsWith("/browse"),
   },
+  
   {
     href: "/library",
     icon: Clapperboard,
@@ -34,12 +36,12 @@ const items: NavItem[] = [
     match: (pathname: string) => pathname.startsWith("/library"),
   },
   {
-    href: "/",
-    icon: Home,
-    label: "HOME",
-    match: (pathname: string) =>
-      pathname === "/" || pathname.startsWith("/browse"),
+    href: "/search",
+    icon: Search,
+    label: "Cari",
+    match: (pathname: string) => pathname.startsWith("/search"),
   },
+  
   {
     href: "/affiliate",
     icon: Ticket,
