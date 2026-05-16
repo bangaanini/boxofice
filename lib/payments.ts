@@ -16,6 +16,7 @@ export type PaymentGatewayRuntimeSettings = {
   callbackToken: string;
   checkoutButtonLabel: string;
   enabled: boolean;
+  projectSlug: string;
   provider: string;
   publicAppUrl: string;
   webhookUrl: string;
@@ -94,10 +95,14 @@ export type PaymenkuPaymentMetadata = {
   customerName?: string | null;
   customerPhone?: string | null;
   expirationDate?: string | null;
+  pakasirAmount?: string | number | null;
+  pakasirProject?: string | null;
   payUrl?: string | null;
+  paymentMethod?: string | null;
   qrString?: string | null;
   qrUrl?: string | null;
   referenceId?: string | null;
+  totalPayment?: string | number | null;
   transactionId?: string | null;
   vaNumber?: string | null;
 };
@@ -173,6 +178,26 @@ function getPaymenkuWebhookUrl(publicAppUrl: string, callbackToken: string) {
   return url.toString();
 }
 
+function getPakasirWebhookUrl(publicAppUrl: string, callbackToken: string) {
+  const url = new URL("/api/webhooks/pakasir", publicAppUrl);
+
+  if (callbackToken) {
+    url.searchParams.set("token", callbackToken);
+  }
+
+  return url.toString();
+}
+
+function normalizePaymentProvider(value: string | null | undefined) {
+  return value?.trim().toLowerCase() === "pakasir" ? "pakasir" : "paymenku";
+}
+
+export function getPaymentProviderLabel(provider: string | null | undefined) {
+  return normalizePaymentProvider(provider) === "pakasir"
+    ? "Pakasir"
+    : "Paymenku";
+}
+
 function createDefaultPaymentGatewaySettings(): PaymentGatewaySettingsSnapshot {
   return {
     id: "default-payment-gateway-settings",
@@ -223,22 +248,44 @@ function isMissingPaymentSchemaError(error: unknown) {
 function mergeRuntimeSettings(
   settings: PaymentGatewaySettingsSnapshot,
 ): PaymentGatewayRuntimeSettings {
-  const envApiKey = getOptionalEnv("PAYMENKU_API_KEY");
+  const provider = normalizePaymentProvider(settings.provider);
+  const envApiKey =
+    provider === "pakasir"
+      ? getOptionalEnv("PAKASIR_API_KEY")
+      : getOptionalEnv("PAYMENKU_API_KEY");
+  const envProjectSlug = getOptionalEnv("PAKASIR_PROJECT_SLUG");
   const envCallbackToken =
-    getOptionalEnv("PAYMENKU_WEBHOOK_TOKEN") ||
-    getOptionalEnv("PAYMENKU_CALLBACK_TOKEN");
+    provider === "pakasir"
+      ? getOptionalEnv("PAKASIR_WEBHOOK_TOKEN") ||
+        getOptionalEnv("PAKASIR_CALLBACK_TOKEN")
+      : getOptionalEnv("PAYMENKU_WEBHOOK_TOKEN") ||
+        getOptionalEnv("PAYMENKU_CALLBACK_TOKEN");
   const publicAppUrl = getPublicAppUrl();
   const apiKey = settings.stripeSecretKey?.trim() || envApiKey;
+  const projectSlug =
+    provider === "pakasir"
+      ? settings.stripePublishableKey?.trim() || envProjectSlug
+      : "";
   const callbackToken = settings.stripeWebhookSecret?.trim() || envCallbackToken;
+  const hasDatabaseCredentials =
+    provider === "pakasir"
+      ? Boolean(settings.stripeSecretKey?.trim() || settings.stripePublishableKey?.trim())
+      : Boolean(settings.stripeSecretKey?.trim());
+  const credentialsReady =
+    provider === "pakasir" ? Boolean(apiKey && projectSlug) : Boolean(apiKey);
 
   return {
     apiKey,
     callbackToken,
     checkoutButtonLabel: settings.checkoutButtonLabel || "Aktifkan sekarang",
-    enabled: settings.stripeSecretKey?.trim() ? settings.enabled : Boolean(apiKey),
-    provider: settings.provider || "paymenku",
+    enabled: hasDatabaseCredentials ? settings.enabled && credentialsReady : credentialsReady,
+    projectSlug,
+    provider,
     publicAppUrl,
-    webhookUrl: getPaymenkuWebhookUrl(publicAppUrl, callbackToken),
+    webhookUrl:
+      provider === "pakasir"
+        ? getPakasirWebhookUrl(publicAppUrl, callbackToken)
+        : getPaymenkuWebhookUrl(publicAppUrl, callbackToken),
   };
 }
 
@@ -473,6 +520,30 @@ const DEFAULT_PAYMENKU_CHANNELS: PaymenkuChannelGroups = {
   ],
 };
 
+const DEFAULT_PAKASIR_CHANNELS: PaymenkuChannelGroups = {
+  qris: [
+    {
+      code: "qris",
+      description: "Scan dengan aplikasi bank atau e-wallet apa pun.",
+      feeDisplay: "QRIS",
+      icon: null,
+      name: "QRIS",
+      type: "qris",
+    },
+  ],
+  va: [
+    { code: "bni_va", description: "Virtual Account BNI", feeDisplay: "VA", icon: null, name: "Bank BNI", type: "va" },
+    { code: "bri_va", description: "Virtual Account BRI", feeDisplay: "VA", icon: null, name: "Bank BRI", type: "va" },
+    { code: "cimb_niaga_va", description: "Virtual Account CIMB Niaga", feeDisplay: "VA", icon: null, name: "Bank CIMB Niaga", type: "va" },
+    { code: "permata_va", description: "Virtual Account Permata", feeDisplay: "VA", icon: null, name: "Bank Permata", type: "va" },
+    { code: "maybank_va", description: "Virtual Account Maybank", feeDisplay: "VA", icon: null, name: "Bank Maybank", type: "va" },
+    { code: "sampoerna_va", description: "Virtual Account Bank Sampoerna", feeDisplay: "VA", icon: null, name: "Bank Sampoerna", type: "va" },
+    { code: "bnc_va", description: "Virtual Account Bank Neo Commerce", feeDisplay: "VA", icon: null, name: "Bank Neo Commerce", type: "va" },
+    { code: "atm_bersama_va", description: "Virtual Account ATM Bersama", feeDisplay: "VA", icon: null, name: "ATM Bersama", type: "va" },
+    { code: "artha_graha_va", description: "Virtual Account Artha Graha", feeDisplay: "VA", icon: null, name: "Bank Artha Graha", type: "va" },
+  ],
+};
+
 function normalizeChannelType(input: string | undefined | null) {
   if (input === "qris") {
     return "qris";
@@ -512,8 +583,16 @@ export async function getPaymenkuChannels(): Promise<{
   ready: boolean;
 }> {
   const settings = await getPaymentGatewaySettingsSafe();
+  const runtime = settings.runtime;
 
-  if (!settings.runtime.apiKey) {
+  if (runtime.provider === "pakasir") {
+    return {
+      groups: DEFAULT_PAKASIR_CHANNELS,
+      ready: Boolean(runtime.apiKey && runtime.projectSlug),
+    };
+  }
+
+  if (!runtime.apiKey) {
     return {
       groups: DEFAULT_PAYMENKU_CHANNELS,
       ready: false,
@@ -524,7 +603,7 @@ export async function getPaymenkuChannels(): Promise<{
     const response = await fetch("https://paymenku.com/api/v1/payment-channels", {
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${settings.runtime.apiKey}`,
+        Authorization: `Bearer ${runtime.apiKey}`,
       },
       next: {
         revalidate: 3600,

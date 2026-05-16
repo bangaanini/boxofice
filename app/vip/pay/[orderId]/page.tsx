@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { PaymentStatusSheet } from "@/components/vip/payment-status-sheet";
-import { formatCurrency, getOrderPaymentMetadata, getVipPaymentOrderForUser } from "@/lib/payments";
+import {
+  formatCurrency,
+  getOrderPaymentMetadata,
+  getPaymentProviderLabel,
+  getVipPaymentOrderForUser,
+} from "@/lib/payments";
 import { requireUserSession } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +41,7 @@ export default async function VipPaymentDetailPage({
         orderId={order.id}
         planDurationLabel={`${order.plan.durationDays} hari`}
         planTitle={order.plan.title}
+        providerLabel={getPaymentProviderLabel(order.provider)}
       />
     </main>
   );

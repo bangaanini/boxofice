@@ -42,11 +42,9 @@ function BrandIdentity() {
       </span>
       <span className="min-w-0">
         <span className="block truncate text-base font-semibold text-white">
-          LayarBox
+          Layar Box Office
         </span>
-        <span className="block truncate text-xs text-neutral-400">
-          Box Office
-        </span>
+
       </span>
     </Link>
   );

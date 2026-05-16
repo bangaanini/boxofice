@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
 import {
   Building2,
   CheckCircle2,
@@ -22,6 +23,7 @@ type PaymentMetadata = {
   channelType?: "qris" | "va" | null;
   expirationDate?: string | null;
   payUrl?: string | null;
+  qrString?: string | null;
   qrUrl?: string | null;
   referenceId?: string | null;
   vaNumber?: string | null;
@@ -36,6 +38,7 @@ type PaymentStatusSheetProps = {
   orderId: string;
   planDurationLabel: string;
   planTitle: string;
+  providerLabel: string;
 };
 
 function formatStatus(status: string) {
@@ -55,6 +58,49 @@ function formatStatus(status: string) {
   }
 }
 
+function QrStringImage({ value }: { value: string }) {
+  const [src, setSrc] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+
+    QRCode.toDataURL(value, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      scale: 8,
+    })
+      .then((nextSrc) => {
+        if (active) {
+          setSrc(nextSrc);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSrc(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [value]);
+
+  if (!src) {
+    return (
+      <div className="mx-auto flex aspect-square w-full max-w-[260px] items-center justify-center rounded-[18px] bg-white p-3 text-sm font-semibold text-neutral-500">
+        Menyiapkan QR
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[260px] overflow-hidden rounded-[18px] bg-white p-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="QRIS" className="h-auto w-full rounded-[12px]" />
+    </div>
+  );
+}
+
 export function PaymentStatusSheet({
   amountLabel,
   checkoutUrl,
@@ -64,6 +110,7 @@ export function PaymentStatusSheet({
   orderId,
   planDurationLabel,
   planTitle,
+  providerLabel,
 }: PaymentStatusSheetProps) {
   const router = useRouter();
   const [status, setStatus] = React.useState(initialStatus);
@@ -179,11 +226,18 @@ export function PaymentStatusSheet({
                     className="h-auto w-full rounded-[12px]"
                   />
                 </div>
+              ) : metadata?.qrString ? (
+                <QrStringImage value={metadata.qrString} />
               ) : (
                 <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-8 text-sm text-neutral-400">
                   QRIS belum tampil. Coba cek status beberapa detik lagi.
                 </div>
               )}
+              {metadata?.qrString ? (
+                <div className="flex justify-center">
+                  <CopyButton label="Salin QR string" value={metadata.qrString} />
+                </div>
+              ) : null}
               <p className="text-sm text-neutral-300">
                 Scan dengan aplikasi QRIS mana pun.
               </p>
@@ -276,7 +330,7 @@ export function PaymentStatusSheet({
               data-haptic="light"
               className="h-12 w-full border border-white/10 bg-white/10 text-white hover:bg-white/15"
             >
-              <a href={checkoutUrl}>Buka halaman Paymenku</a>
+              <a href={checkoutUrl}>Buka halaman {providerLabel}</a>
             </Button>
           ) : null}
 

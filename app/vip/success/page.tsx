@@ -59,7 +59,7 @@ export default async function VipSuccessPage({
           </p>
 
           <h1 className="mt-4 text-3xl font-black text-white">
-            Selamat datang di Box Office VIP
+            Selamat datang di LayarBoxOffice VIP
           </h1>
           <p className="mt-3 text-sm leading-6 text-neutral-300">
             Pembayaran kamu sudah masuk. Sekarang semua preview terkunci sudah

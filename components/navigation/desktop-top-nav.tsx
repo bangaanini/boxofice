@@ -117,9 +117,9 @@ export function DesktopTopNav({
           className="flex items-center gap-2 text-base font-black tracking-tight text-white"
         >
           <span className="rounded-md bg-red-600 px-2 py-1 text-xs font-bold uppercase">
-            Box
+            Layar Box Office
           </span>
-          Office
+          
         </Link>
 
         <nav className="flex flex-1 items-center gap-1">

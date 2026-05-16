@@ -55,6 +55,30 @@ type PaymenkuCheckStatusResponse = {
   status?: string;
 };
 
+type PakasirCreateTransactionResponse = {
+  payment?: {
+    amount?: number | string;
+    expired_at?: string | null;
+    fee?: number | string;
+    order_id?: string | null;
+    payment_method?: string | null;
+    payment_number?: string | null;
+    project?: string | null;
+    total_payment?: number | string;
+  };
+};
+
+type PakasirTransactionDetailResponse = {
+  transaction?: {
+    amount?: number | string;
+    completed_at?: string | null;
+    order_id?: string | null;
+    payment_method?: string | null;
+    project?: string | null;
+    status?: string | null;
+  };
+};
+
 type OrderMetadataValue = string | number | boolean | null;
 type OrderMetadataRecord = Record<string, OrderMetadataValue>;
 type VipCommissionResult = {
@@ -96,6 +120,10 @@ function normalizePaymentStatus(status: string | null | undefined) {
 
   if (!value) {
     return "pending";
+  }
+
+  if (["completed", "success", "settled"].includes(value)) {
+    return "paid";
   }
 
   if (["paid", "pending", "expired", "failed", "cancelled"].includes(value)) {
@@ -345,6 +373,62 @@ async function fetchPaymenkuJson<T>(input: {
   return payload;
 }
 
+async function fetchPakasirJson<T>(input: {
+  body?: unknown;
+  method?: "GET" | "POST";
+  path: string;
+  query?: Record<string, string | number | undefined>;
+}) {
+  const url = new URL(`https://app.pakasir.com/api${input.path}`);
+
+  for (const [key, value] of Object.entries(input.query ?? {})) {
+    if (value === undefined || value === "") {
+      continue;
+    }
+
+    url.searchParams.set(key, String(value));
+  }
+
+  const response = await fetch(url, {
+    body: input.body ? JSON.stringify(input.body) : undefined,
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: input.method ?? "GET",
+  });
+  const payload = (await response.json().catch(() => null)) as T | null;
+
+  if (!response.ok || !payload) {
+    throw new Error(`Pakasir request gagal (${response.status}).`);
+  }
+
+  return payload;
+}
+
+function buildPakasirCheckoutUrl(input: {
+  amount: number;
+  orderId: string;
+  projectSlug: string;
+  qrisOnly: boolean;
+  redirectUrl: string;
+}) {
+  const url = new URL(
+    `/pay/${encodeURIComponent(input.projectSlug)}/${input.amount}`,
+    "https://app.pakasir.com",
+  );
+
+  url.searchParams.set("order_id", input.orderId);
+  url.searchParams.set("redirect", input.redirectUrl);
+
+  if (input.qrisOnly) {
+    url.searchParams.set("qris_only", "1");
+  }
+
+  return url.toString();
+}
+
 async function activateVipFromOrder(orderId: string, paidAt: Date | null) {
   const order = await prisma.vipPaymentOrder.findUnique({
     where: { id: orderId },
@@ -563,12 +647,16 @@ export async function createVipPaymentForUser(input: {
     throw new Error("Payment gateway belum diaktifkan di dashboard admin.");
   }
 
-  if (runtime.provider !== "paymenku") {
-    throw new Error("Provider pembayaran saat ini belum disetel ke Paymenku.");
+  if (runtime.provider !== "paymenku" && runtime.provider !== "pakasir") {
+    throw new Error("Provider pembayaran saat ini belum didukung.");
   }
 
   if (!runtime.apiKey) {
-    throw new Error("API key Paymenku belum terpasang.");
+    throw new Error("API key payment gateway belum terpasang.");
+  }
+
+  if (runtime.provider === "pakasir" && !runtime.projectSlug) {
+    throw new Error("Project slug Pakasir belum terpasang.");
   }
 
   const [user, plan, channels] = await Promise.all([
@@ -633,6 +721,77 @@ export async function createVipPaymentForUser(input: {
   });
 
   const returnUrl = `${runtime.publicAppUrl}/vip/pay/${order.id}`;
+
+  if (runtime.provider === "pakasir") {
+    const payload = await fetchPakasirJson<PakasirCreateTransactionResponse>({
+      body: {
+        amount: plan.priceAmount,
+        api_key: runtime.apiKey,
+        order_id: order.id,
+        project: runtime.projectSlug,
+      },
+      method: "POST",
+      path: `/transactioncreate/${encodeURIComponent(selectedChannel.code)}`,
+    });
+    const payment = payload.payment;
+
+    if (!payment?.order_id || !payment.payment_number) {
+      throw new Error("Pakasir belum bisa membuat transaksi.");
+    }
+
+    const expirationDate = payment.expired_at
+      ? new Date(payment.expired_at)
+      : null;
+    const baseAmount = parseAmount(payment.amount) || plan.priceAmount;
+    const totalPayment = parseAmount(payment.total_payment) || baseAmount;
+    const channelType = selectedChannel.type;
+    const checkoutUrl = buildPakasirCheckoutUrl({
+      amount: baseAmount,
+      orderId: order.id,
+      projectSlug: runtime.projectSlug,
+      qrisOnly: channelType === "qris",
+      redirectUrl: returnUrl,
+    });
+
+    await prisma.vipPaymentOrder.update({
+      where: { id: order.id },
+      data: {
+        amount: totalPayment,
+        checkoutUrl,
+        expiresAt: expirationDate,
+        externalCheckoutId: payment.order_id,
+        externalPaymentId: payment.order_id,
+        metadata: {
+          amountFee: String(parseAmount(payment.fee) || 0),
+          amountReceived: String(baseAmount),
+          bank: channelType === "va" ? selectedChannel.name : null,
+          botKind: botContextFields.botKind,
+          channelCode: selectedChannel.code,
+          channelName: selectedChannel.name,
+          channelType,
+          customerEmail: user.email,
+          customerName: user.name,
+          customerPhone: input.userPhone ?? null,
+          expirationDate: payment.expired_at ?? null,
+          pakasirAmount: baseAmount,
+          pakasirProject: payment.project ?? runtime.projectSlug,
+          partnerBotId: botContextFields.partnerBotId,
+          payUrl: checkoutUrl,
+          paymentMethod: payment.payment_method ?? selectedChannel.code,
+          qrString: channelType === "qris" ? payment.payment_number : null,
+          qrUrl: null,
+          referenceId: payment.order_id ?? order.id,
+          totalPayment,
+          transactionId: payment.order_id ?? order.id,
+          vaNumber: channelType === "va" ? payment.payment_number : null,
+        },
+        status: "pending",
+      },
+    });
+
+    return order.id;
+  }
+
   const payload = await fetchPaymenkuJson<PaymenkuCreateTransactionResponse>({
     apiKey: runtime.apiKey,
     body: {
@@ -699,7 +858,7 @@ export async function syncVipOrderFromPaymenkuStatus(input: {
   ensurePaymentSchemaReady(settingsResult.schemaReady, settingsResult.schemaIssue);
 
   if (!runtime.apiKey) {
-    throw new Error("API key Paymenku belum terpasang.");
+    throw new Error("API key payment gateway belum terpasang.");
   }
 
   const order = await prisma.vipPaymentOrder.findFirst({
@@ -708,9 +867,11 @@ export async function syncVipOrderFromPaymenkuStatus(input: {
       ...(input.userId ? { userId: input.userId } : {}),
     },
     select: {
+      amount: true,
       externalCheckoutId: true,
       id: true,
       metadata: true,
+      provider: true,
       status: true,
     },
   });
@@ -720,6 +881,68 @@ export async function syncVipOrderFromPaymenkuStatus(input: {
   }
 
   const orderMeta = getOrderPaymentMetadata(order);
+
+  if (order.provider === "pakasir") {
+    if (runtime.provider !== "pakasir" || !runtime.projectSlug) {
+      throw new Error("Project slug Pakasir belum terpasang.");
+    }
+
+    const pakasirAmount =
+      parseAmount(orderMeta?.pakasirAmount) ||
+      parseAmount(orderMeta?.amountReceived) ||
+      order.amount;
+    const payload = await fetchPakasirJson<PakasirTransactionDetailResponse>({
+      path: "/transactiondetail",
+      query: {
+        amount: pakasirAmount,
+        api_key: runtime.apiKey,
+        order_id: orderMeta?.referenceId ?? order.id,
+        project: runtime.projectSlug,
+      },
+    });
+    const transaction = payload.transaction;
+
+    if (!transaction) {
+      throw new Error("Status transaksi Pakasir belum bisa dicek.");
+    }
+
+    const nextStatus = normalizePaymentStatus(transaction.status);
+    const paidAt = transaction.completed_at
+      ? new Date(transaction.completed_at)
+      : null;
+    const paymentMethod =
+      transaction.payment_method ?? orderMeta?.paymentMethod ?? null;
+    const channelType = normalizeChannelType(paymentMethod);
+
+    await prisma.vipPaymentOrder.update({
+      where: { id: order.id },
+      data: {
+        metadata: {
+          ...readOrderMetadataRecord(order.metadata),
+          amountReceived: String(parseAmount(transaction.amount) || pakasirAmount),
+          channelCode: paymentMethod ?? orderMeta?.channelCode ?? null,
+          channelName: paymentMethod ?? orderMeta?.channelName ?? null,
+          channelType,
+          pakasirAmount,
+          pakasirProject: transaction.project ?? runtime.projectSlug,
+          paymentMethod,
+          referenceId: transaction.order_id ?? orderMeta?.referenceId ?? order.id,
+        },
+        paidAt,
+        status: nextStatus,
+      },
+    });
+
+    if (nextStatus === "paid") {
+      await activateVipFromOrder(order.id, paidAt);
+    }
+
+    return {
+      orderId: order.id,
+      status: nextStatus,
+    };
+  }
+
   const statusId =
     order.externalCheckoutId || orderMeta?.referenceId || order.id;
 
@@ -838,6 +1061,106 @@ export async function handlePaymenkuWebhook(input: {
         referenceId: input.referenceId ?? meta?.referenceId ?? order.id,
         transactionId: meta?.transactionId ?? null,
         vaNumber: meta?.vaNumber ?? null,
+      },
+      paidAt,
+      status: nextStatus,
+    },
+  });
+
+  if (nextStatus === "paid") {
+    await activateVipFromOrder(order.id, paidAt);
+  }
+
+  return {
+    orderId: order.id,
+    status: nextStatus,
+  };
+}
+
+export async function handlePakasirWebhook(input: {
+  amount?: number | string | null;
+  completedAt?: string | null;
+  orderId?: string | null;
+  paymentMethod?: string | null;
+  project?: string | null;
+  status?: string | null;
+}) {
+  const orderId = input.orderId?.trim();
+
+  if (!orderId) {
+    return null;
+  }
+
+  const settingsResult = await getPaymentGatewaySettingsSafe();
+  const runtime = settingsResult.runtime;
+
+  ensurePaymentSchemaReady(settingsResult.schemaReady, settingsResult.schemaIssue);
+
+  if (runtime.provider !== "pakasir" || !runtime.apiKey || !runtime.projectSlug) {
+    throw new Error("Konfigurasi Pakasir belum lengkap.");
+  }
+
+  if (input.project && input.project !== runtime.projectSlug) {
+    throw new Error("Project Pakasir tidak cocok.");
+  }
+
+  const order = await prisma.vipPaymentOrder.findFirst({
+    where: {
+      id: orderId,
+      provider: "pakasir",
+    },
+    select: {
+      amount: true,
+      id: true,
+      metadata: true,
+    },
+  });
+
+  if (!order) {
+    return null;
+  }
+
+  const meta = getOrderPaymentMetadata(order);
+  const pakasirAmount =
+    parseAmount(input.amount) ||
+    parseAmount(meta?.pakasirAmount) ||
+    parseAmount(meta?.amountReceived) ||
+    order.amount;
+  const verification = await fetchPakasirJson<PakasirTransactionDetailResponse>({
+    path: "/transactiondetail",
+    query: {
+      amount: pakasirAmount,
+      api_key: runtime.apiKey,
+      order_id: order.id,
+      project: runtime.projectSlug,
+    },
+  });
+  const transaction = verification.transaction;
+
+  if (!transaction) {
+    throw new Error("Status transaksi Pakasir belum bisa diverifikasi.");
+  }
+
+  const nextStatus = normalizePaymentStatus(transaction.status ?? input.status);
+  const completedAt = transaction.completed_at ?? input.completedAt ?? null;
+  const paidAt = completedAt ? new Date(completedAt) : null;
+  const paymentMethod =
+    transaction.payment_method ?? input.paymentMethod ?? meta?.paymentMethod ?? null;
+  const channelType = normalizeChannelType(paymentMethod);
+
+  await prisma.vipPaymentOrder.update({
+    where: { id: order.id },
+    data: {
+      metadata: {
+        ...readOrderMetadataRecord(order.metadata),
+        amountReceived: String(parseAmount(transaction.amount) || pakasirAmount),
+        channelCode: paymentMethod ?? meta?.channelCode ?? null,
+        channelName: paymentMethod ?? meta?.channelName ?? null,
+        channelType,
+        pakasirAmount,
+        pakasirProject: transaction.project ?? runtime.projectSlug,
+        paymentMethod,
+        referenceId: transaction.order_id ?? order.id,
       },
       paidAt,
       status: nextStatus,

@@ -1026,10 +1026,17 @@ export async function updatePaymentGatewaySettings(formData: FormData) {
   const provider = readTextField(formData, "provider") || "paymenku";
   const checkoutButtonLabel =
     readTextField(formData, "checkoutButtonLabel") || "Aktifkan sekarang";
+  const apiKey =
+    readNullableTextField(formData, "paymentApiKey") ??
+    readNullableTextField(formData, "paymenkuApiKey");
+  const projectSlug = readNullableTextField(formData, "paymentProjectSlug");
+  const webhookToken =
+    readNullableTextField(formData, "paymentWebhookToken") ??
+    readNullableTextField(formData, "paymenkuWebhookToken");
 
-  if (provider !== "paymenku") {
+  if (provider !== "paymenku" && provider !== "pakasir") {
     redirect(
-      `${redirectBasePath}?payment=error&message=${encodeURIComponent("Untuk tahap ini provider yang didukung baru Paymenku.")}`,
+      `${redirectBasePath}?payment=error&message=${encodeURIComponent("Provider payment belum didukung.")}`,
     );
   }
 
@@ -1039,9 +1046,9 @@ export async function updatePaymentGatewaySettings(formData: FormData) {
       checkoutButtonLabel,
       enabled: formData.get("enabled") === "on",
       provider,
-      stripePublishableKey: null,
-      stripeSecretKey: readNullableTextField(formData, "paymenkuApiKey"),
-      stripeWebhookSecret: readNullableTextField(formData, "paymenkuWebhookToken"),
+      stripePublishableKey: provider === "pakasir" ? projectSlug : null,
+      stripeSecretKey: apiKey,
+      stripeWebhookSecret: webhookToken,
     },
   });
 

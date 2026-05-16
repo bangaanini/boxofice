@@ -2,10 +2,10 @@ import {
   AdminMetricCard,
   AdminSurface,
 } from "@/components/admin/admin-surface";
+import { PaymentGatewaySettingsForm } from "@/components/admin/payment-gateway-settings-form";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import {
   createOrUpdateVipPlan,
-  updatePaymentGatewaySettings,
 } from "@/app/admin/actions";
 import {
   formatCurrency,
@@ -59,6 +59,10 @@ export default async function AdminPaymentsPage({
   const runtime = paymentData.settingsResult.runtime;
   const settings = paymentData.settingsResult.settings;
   const recentOrders = paymentData.recentOrders;
+  const provider =
+    runtime.provider === "pakasir" || settings.provider === "pakasir"
+      ? "pakasir"
+      : "paymenku";
 
   return (
     <div className="space-y-6">
@@ -67,12 +71,12 @@ export default async function AdminPaymentsPage({
           Payment
         </p>
         <h1 className="mt-4 text-4xl font-black text-white">
-          Paymenku & paket VIP
+          Payment gateway & paket VIP
         </h1>
         <p className="mt-3 max-w-4xl text-sm leading-7 text-neutral-400">
-          Atur integrasi Paymenku untuk QRIS dan Virtual Account, siapkan paket
-          VIP, lalu pantau order yang masuk dari Mini App dengan alur yang lebih
-          rapi.
+          Atur integrasi Paymenku atau Pakasir untuk QRIS dan Virtual Account,
+          siapkan paket VIP, lalu pantau order yang masuk dari Mini App dengan
+          alur yang sama.
         </p>
 
         <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -133,9 +137,11 @@ export default async function AdminPaymentsPage({
       ) : null}
 
       <AdminSurface>
-        <p className="text-sm font-semibold text-orange-200">Gateway Paymenku</p>
+        <p className="text-sm font-semibold text-orange-200">
+          Gateway payment
+        </p>
         <h2 className="mt-2 text-2xl font-bold text-white">
-          Atur API key dan callback
+          Atur provider, API key, dan callback
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-400">
           Database jadi sumber utama. Kalau field kosong, aplikasi akan fallback
@@ -143,110 +149,15 @@ export default async function AdminPaymentsPage({
           file server setiap saat.
         </p>
 
-        <form
-          action={updatePaymentGatewaySettings}
-          className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"
-        >
-          <input type="hidden" name="redirectTo" value="/admin/payments" />
-          <input type="hidden" name="provider" value="paymenku" />
-
-          <div className="space-y-5">
-            <label className="flex items-start gap-3 rounded-[18px] border border-white/10 bg-black/20 p-4">
-              <input
-                name="enabled"
-                type="checkbox"
-                defaultChecked={settings.enabled || (!settings.stripeSecretKey && Boolean(runtime.apiKey))}
-                className="mt-1 size-4 rounded border-white/20 bg-black"
-              />
-              <span>
-                <span className="block text-sm font-semibold text-white">
-                  Aktifkan pembayaran VIP via Paymenku
-                </span>
-                <span className="mt-1 block text-sm leading-6 text-neutral-400">
-                  Jalur yang dipakai hanya QRIS dan Virtual Account agar ringan
-                  dan cocok untuk Mini App.
-                </span>
-              </span>
-            </label>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="block text-sm font-medium text-neutral-300">
-                  Provider
-                </label>
-                <div className="mt-2 flex h-12 items-center rounded-[18px] border border-white/10 bg-black/25 px-4 text-sm font-semibold text-white">
-                  Paymenku
-                </div>
-              </div>
-              <Field
-                defaultValue={settings.checkoutButtonLabel}
-                label="Label tombol checkout"
-                name="checkoutButtonLabel"
-              />
-            </div>
-
-            <div className="grid gap-4">
-              <Field
-                defaultValue={settings.stripeSecretKey ?? ""}
-                label="Paymenku API key"
-                name="paymenkuApiKey"
-                placeholder={runtime.apiKey ? "Fallback aktif dari env server" : "sk_test_..."}
-              />
-              <Field
-                defaultValue={settings.stripeWebhookSecret ?? ""}
-                label="Token callback internal"
-                name="paymenkuWebhookToken"
-                placeholder={
-                  runtime.callbackToken
-                    ? "Fallback aktif dari env server"
-                    : "token-rahasia-untuk-url-webhook"
-                }
-              />
-            </div>
-
-            <PendingSubmitButton
-              pendingLabel="Menyimpan..."
-              className="h-11 bg-red-600 text-white hover:bg-red-500"
-            >
-              Simpan pengaturan payment
-            </PendingSubmitButton>
-          </div>
-
-          <div className="space-y-4 rounded-[22px] border border-white/10 bg-black/20 p-5">
-            <p className="text-sm font-semibold text-white">
-              Petunjuk setup Paymenku
-            </p>
-            <ol className="space-y-2 text-sm leading-6 text-neutral-300">
-              <li>1. Isi API key Paymenku dan token callback internal.</li>
-              <li>2. Simpan pengaturan payment di halaman ini.</li>
-              <li>3. Deploy versi terbaru aplikasi.</li>
-              <li>4. Daftarkan callback URL di dashboard Paymenku.</li>
-              <li>5. Tes satu paket dengan QRIS atau salah satu VA.</li>
-            </ol>
-
-            <div className="rounded-[18px] border border-white/10 bg-black/30 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500">
-                Callback URL
-              </p>
-              <p className="mt-2 break-all text-sm text-white">
-                {runtime.webhookUrl}
-              </p>
-            </div>
-
-            <div className="rounded-[18px] border border-white/10 bg-black/30 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500">
-                Alur yang dipakai app
-              </p>
-              <div className="mt-3 space-y-2 text-sm leading-6 text-neutral-300">
-                <p>1. User pilih paket VIP.</p>
-                <p>2. User pilih QRIS atau salah satu bank VA.</p>
-                <p>3. Aplikasi buat transaksi ke Paymenku.</p>
-                <p>4. Halaman detail pembayaran menampilkan QR atau nomor VA.</p>
-                <p>5. Status dibaca dari webhook Paymenku atau tombol cek manual.</p>
-              </div>
-            </div>
-          </div>
-        </form>
+        <PaymentGatewaySettingsForm
+          defaultApiKey={settings.stripeSecretKey ?? ""}
+          defaultCheckoutButtonLabel={settings.checkoutButtonLabel}
+          defaultEnabled={runtime.enabled || settings.enabled}
+          defaultProjectSlug={settings.stripePublishableKey ?? ""}
+          defaultWebhookToken={settings.stripeWebhookSecret ?? ""}
+          initialProvider={provider}
+          publicAppUrl={runtime.publicAppUrl}
+        />
       </AdminSurface>
 
       <AdminSurface>
@@ -255,8 +166,8 @@ export default async function AdminPaymentsPage({
           Kelola paket yang dijual
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-400">
-          Paket ini dipakai halaman VIP dan langsung dikirim ke Paymenku saat
-          user membuat transaksi.
+          Paket ini dipakai halaman VIP dan langsung dikirim ke provider
+          payment aktif saat user membuat transaksi.
         </p>
 
         <div className="mt-6 space-y-4">
@@ -474,8 +385,8 @@ export default async function AdminPaymentsPage({
             ))
           ) : (
             <div className="px-5 py-6 text-sm leading-6 text-neutral-400">
-              Belum ada order VIP yang masuk. Begitu Paymenku dipakai, riwayat
-              pembayaran akan muncul di sini.
+              Belum ada order VIP yang masuk. Begitu payment gateway dipakai,
+              riwayat pembayaran akan muncul di sini.
             </div>
           )}
         </div>

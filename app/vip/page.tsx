@@ -7,6 +7,7 @@ import { PaymentSubmitButton } from "@/components/vip/payment-submit-button";
 import {
   formatCurrency,
   getPaymentGatewaySettingsSafe,
+  getPaymentProviderLabel,
   getPaymenkuChannels,
   getVipPlansSafe,
 } from "@/lib/payments";
@@ -91,10 +92,12 @@ export default async function VipPage({ searchParams }: VipPageProps) {
   const vipSettings = vipSettingsResult.settings;
   const supportUrl = telegramSettingsResult.settings.supportUrl;
   const paymentRuntime = paymentSettingsResult.runtime;
-  const paymentReady =
-    paymentRuntime.enabled &&
-    paymentRuntime.provider === "paymenku" &&
-    Boolean(paymentRuntime.apiKey);
+  const gatewayLabel = getPaymentProviderLabel(paymentRuntime.provider);
+  const paymentReady = paymentRuntime.enabled;
+  const bankMethodLabel = channelResult.groups.va
+    .map((channel) => channel.name.replace(/^Bank\s+/i, ""))
+    .slice(0, 6)
+    .join(", ");
   const selectedPlan =
     plansResult.plans.find(
       (plan) => plan.id === params.plan || plan.slug === params.plan,
@@ -245,7 +248,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                         <div>
                           <p className="font-semibold text-white">Transfer Bank</p>
                           <p className="text-sm text-neutral-400">
-                            BNI, BRI, Mandiri, BCA, BSI, CIMB, Permata
+                            {bankMethodLabel || "Virtual Account bank"}
                           </p>
                         </div>
                       </div>
@@ -355,8 +358,8 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                 </form>
               ) : (
                 <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-neutral-300">
-                  Gateway Paymenku belum aktif. Untuk sementara aktivasi VIP
-                  masih diarahkan ke admin.
+                  Gateway {gatewayLabel} belum aktif. Untuk sementara aktivasi
+                  VIP masih diarahkan ke admin.
                   <div className="mt-4">
                     <Button
                       asChild
