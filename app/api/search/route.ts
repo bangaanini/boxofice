@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { fetchSearch, MovieApiError } from "@/lib/movie-api";
 import { prisma } from "@/lib/prisma";
-import { isBlockedMovieCandidate } from "@/lib/movie-visibility";
+import { excludeBlockedMoviesWhere } from "@/lib/movie-visibility";
+import type { Prisma } from "@/app/generated/prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 18;
 
 function clampPage(value: string | null) {
   const parsed = Number(value ?? "1");
@@ -47,58 +49,65 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await fetchSearch(query, page, 18, subjectType);
-    const safeMovies = result.movies.filter(
-      (movie) => !isBlockedMovieCandidate(movie),
-    );
-    const sourceUrls = Array.from(
-      new Set(
-        safeMovies
-          .map((movie) => movie.sourceUrl)
-          .filter((value): value is string => Boolean(value)),
-      ),
-    );
-    const existingMovies = sourceUrls.length
-      ? await prisma.movie
-          .findMany({
-            where: {
-              sourceUrl: {
-                in: sourceUrls,
-              },
-            },
-            select: {
-              description: true,
-              id: true,
-              sourceUrl: true,
-              thumbnail: true,
-              title: true,
-            },
-          })
-          .catch(() => [])
-      : [];
-    const unsafeSourceUrls = new Set(
-      existingMovies
-        .filter((movie) => isBlockedMovieCandidate(movie))
-        .map((movie) => movie.sourceUrl),
-    );
-    const movieIdBySource = new Map(
-      existingMovies
-        .filter((movie) => !unsafeSourceUrls.has(movie.sourceUrl))
-        .map((movie) => [movie.sourceUrl, movie.id]),
-    );
-    const visibleMovies = safeMovies.filter(
-      (movie) => !unsafeSourceUrls.has(movie.sourceUrl),
-    );
+    const where: Prisma.MovieWhereInput = excludeBlockedMoviesWhere({
+      ...(subjectType ? { subjectType } : {}),
+      OR: [
+        { title: { contains: query, mode: "insensitive" } },
+        { description: { contains: query, mode: "insensitive" } },
+      ],
+    });
+
+    const skip = (page - 1) * PAGE_SIZE;
+
+    const [totalCount, rows] = await Promise.all([
+      prisma.movie.count({ where }),
+      prisma.movie.findMany({
+        where,
+        orderBy: [
+          { inHero: "desc" },
+          { updatedAt: "desc" },
+          { id: "desc" },
+        ],
+        skip,
+        take: PAGE_SIZE,
+        select: {
+          id: true,
+          sourceUrl: true,
+          detailPath: true,
+          subjectId: true,
+          subjectType: true,
+          title: true,
+          thumbnail: true,
+          rating: true,
+          quality: true,
+          year: true,
+          description: true,
+        },
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+    const movies = rows.map((row) => ({
+      sourceUrl: row.sourceUrl,
+      detailPath: row.detailPath ?? row.sourceUrl,
+      subjectId: row.subjectId ?? "",
+      subjectType: row.subjectType,
+      title: row.title,
+      thumbnail: row.thumbnail ?? undefined,
+      description: row.description ?? undefined,
+      rating: row.rating ?? undefined,
+      quality: row.quality ?? undefined,
+      year: row.year ?? undefined,
+      movieId: row.id,
+    }));
 
     return NextResponse.json(
       {
-        fetched: result.fetched,
-        movies: visibleMovies.map((movie) => ({
-          ...movie,
-          movieId: movieIdBySource.get(movie.sourceUrl) ?? null,
-        })),
-        page: result.page ?? page,
-        totalPages: result.totalPages,
+        fetched: rows.length,
+        movies,
+        page,
+        totalPages,
+        totalCount,
       },
       {
         headers: {
@@ -107,9 +116,6 @@ export async function GET(request: NextRequest) {
       },
     );
   } catch (error) {
-    const status =
-      error instanceof MovieApiError && error.status === 404 ? 404 : 502;
-
     return NextResponse.json(
       {
         error:
@@ -117,7 +123,7 @@ export async function GET(request: NextRequest) {
             ? error.message
             : "Pencarian sedang tidak bisa digunakan.",
       },
-      { status },
+      { status: 500 },
     );
   }
 }
